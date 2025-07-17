@@ -1,0 +1,6 @@
+[package]
+org = "wso2"
+name = "bi_icp_agent"
+version = "0.1.0"
+license = ["Apache-2.0"]
+description = "ICP Agent for Ballerina"    
