@@ -35,7 +35,7 @@ public client class DatabaseConnectionManager {
     private final sql:Client dbClient;
     private final string dbType;
 
-    public function init(string dbType) returns error? {
+    public function init(string dbType, string host, int port, string database, string user, string password, string? schema = ()) returns error? {
         self.dbType = dbType;
         sql:ConnectionPool pool = {
             maxOpenConnections: maxOpenConnections,
@@ -43,24 +43,31 @@ public client class DatabaseConnectionManager {
             maxConnectionLifeTime: maxConnectionLifeTime
         };
 
+        string label = schema is string ? string `${schema} (${dbType})` : dbType;
+
         if dbType == MYSQL {
-            log:printInfo("Initializing MySQL Database...");
-            self.dbClient = check new mysql:Client(dbHost, dbUser, dbPassword, dbName, dbPort, connectionPool = pool);
-            log:printInfo("MySQL Database initialized successfully.");
+            log:printInfo(string `Initializing ${label} Database...`);
+            self.dbClient = check new mysql:Client(host, user, password, database, port, connectionPool = pool);
+            log:printInfo(string `${label} Database initialized successfully.`);
         } else if dbType == MSSQL {
-            log:printInfo("Initializing MSSQL Database...");
-            log:printInfo(string `Connecting to MSSQL: ${dbHost}:${dbPort}/${dbName}`);
-            self.dbClient = check new mssql:Client(host = dbHost, user = dbUser, password = dbPassword, database = dbName, port = dbPort, connectionPool = pool);
-            log:printInfo("MSSQL Database initialized successfully.");
+            log:printInfo(string `Initializing ${label} Database...`);
+            log:printInfo(string `Connecting to MSSQL: ${host}:${port}/${database}`);
+            self.dbClient = check new mssql:Client(host = host, user = user, password = password, database = database, port = port, connectionPool = pool);
+            log:printInfo(string `${label} Database initialized successfully.`);
         } else if dbType == POSTGRESQL {
-            log:printInfo("Initializing PostgreSQL Database...");
-            log:printInfo(string `Connecting to PostgreSQL: ${dbHost}:${dbPort}/${dbName}`);
-            self.dbClient = check new postgresql:Client(host = dbHost, username = dbUser, password = dbPassword, database = dbName, port = dbPort, connectionPool = pool);
-            log:printInfo("PostgreSQL Database initialized successfully.");
+            log:printInfo(string `Initializing ${label} Database...`);
+            log:printInfo(string `Connecting to PostgreSQL: ${host}:${port}/${database}`);
+            postgresql:Options? pgOptions = schema is string
+                ? {currentSchema: schema}
+                : ();
+            self.dbClient = check new postgresql:Client(host = host, username = user, password = password, database = database, port = port, connectionPool = pool, options = pgOptions);
+            log:printInfo(string `${label} Database initialized successfully.`);
         } else {
-            log:printInfo("Initializing H2 Database...");
-            self.dbClient = check new jdbc:Client("jdbc:h2:file:./database/icpdb;MODE=MySQL;AUTO_SERVER=TRUE", "sa", "");
-            log:printInfo("H2 Database initialized successfully.");
+            string h2File = schema is string ? string `./database/${schema}` : "./database/icpdb";
+            log:printInfo(string `Initializing ${label} Database...`);
+            log:printDebug(string `H2 database file location: ${h2File}`);
+            self.dbClient = check new jdbc:Client(string `jdbc:h2:file:${h2File};MODE=MySQL;AUTO_SERVER=TRUE`, user, password);
+            log:printInfo(string `${label} Database initialized successfully.`);
         }
     }
 
