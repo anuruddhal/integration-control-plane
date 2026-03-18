@@ -41,14 +41,6 @@ if [ -f "$CONFIG_FILE" ]; then
     fi
 fi
 
-WWW_CONFIG_FILE="$PARENT_DIR/www/public/choreo.env.config.js"
-if [ -f "$WWW_CONFIG_FILE" ]; then
-    sed -i.bak -E "s/\"SSO_ENABLED\": '(true|false)'/\"SSO_ENABLED\": '$SSO_ENABLED'/" "$WWW_CONFIG_FILE"
-    rm -f "$WWW_CONFIG_FILE.bak"  # Remove backup file
-    echo "SSO Configuration: Updated frontend config with SSO_ENABLED=$SSO_ENABLED"
-else
-    echo "Warning: Frontend config file not found at $WWW_CONFIG_FILE"
-fi
 
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Warning: Configuration file not found at $CONFIG_FILE"

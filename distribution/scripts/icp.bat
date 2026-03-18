@@ -41,14 +41,6 @@ if exist "!CONFIG_FILE!" (
     )
 )
 
-set WWW_CONFIG_FILE=!PARENT_DIR!\www\public\choreo.env.config.js
-if exist "!WWW_CONFIG_FILE!" (
-    powershell -Command "(Get-Content '!WWW_CONFIG_FILE!') -replace '\"SSO_ENABLED\": ''(true|false)''', '\"SSO_ENABLED\": ''!SSO_ENABLED!''' | Set-Content '!WWW_CONFIG_FILE!'"
-    echo SSO Configuration: Updated frontend config with SSO_ENABLED=!SSO_ENABLED!
-) else (
-    echo Warning: Frontend config file not found at !WWW_CONFIG_FILE!
-)
-
 if not exist "!CONFIG_FILE!" (
     echo Warning: Configuration file not found at !CONFIG_FILE!
     echo Starting ICP Server without custom configuration...
