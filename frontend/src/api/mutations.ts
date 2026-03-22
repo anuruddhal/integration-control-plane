@@ -267,6 +267,34 @@ export function useUpdateLogLevel() {
   });
 }
 
+// ── Org-level Secrets ──
+
+const CREATE_ORG_SECRET = `
+  mutation CreateOrgSecret($environmentId: String!) {
+    createOrgSecret(environmentId: $environmentId)
+  }`;
+
+const REVOKE_ORG_SECRET = `
+  mutation RevokeOrgSecret($keyId: String!) {
+    revokeOrgSecret(keyId: $keyId)
+  }`;
+
+export function useCreateOrgSecret() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (environmentId: string) => gql<{ createOrgSecret: string }>(CREATE_ORG_SECRET, { environmentId }).then((d) => d.createOrgSecret),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['orgSecrets'] }),
+  });
+}
+
+export function useRevokeOrgSecret() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (keyId: string) => gql<{ revokeOrgSecret: boolean }>(REVOKE_ORG_SECRET, { keyId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['orgSecrets'] }),
+  });
+}
+
 // ── Component-Environment JWT Secrets ──
 
 const GET_OR_GENERATE_COMPONENT_ENV_JWT_SECRET = `

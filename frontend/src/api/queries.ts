@@ -237,7 +237,42 @@ export function useProjectRuntimes(envId: string, projectId: string) {
   });
 }
 
-export { RUNTIMES_QUERY, PROJECT_RUNTIMES_QUERY };
+const ORG_RUNTIMES_QUERY = `
+  query GetOrgRuntimes($environmentId: String!) {
+    runtimes(environmentId: $environmentId) {
+      runtimeId, runtimeType, status, version,
+      platformName, platformVersion, platformHome,
+      osName, osVersion, registrationTime, lastHeartbeat,
+      component { displayName }
+    }
+  }`;
+
+export { RUNTIMES_QUERY, PROJECT_RUNTIMES_QUERY, ORG_RUNTIMES_QUERY };
+
+// ── Org Secrets ──
+
+export interface GqlOrgSecret {
+  keyId: string;
+  environmentId: string;
+  environmentName: string;
+  bound: boolean;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+const ORG_SECRETS_QUERY = `
+  query GetOrgSecrets($environmentId: String) {
+    orgSecrets(environmentId: $environmentId) {
+      keyId, environmentId, environmentName, bound, createdAt, createdBy
+    }
+  }`;
+
+export function useOrgSecrets(environmentId?: string) {
+  return useQuery({
+    queryKey: ['orgSecrets', environmentId],
+    queryFn: () => gql<{ orgSecrets: GqlOrgSecret[] }>(ORG_SECRETS_QUERY, environmentId ? { environmentId } : {}).then((d) => d.orgSecrets),
+  });
+}
 
 export interface GqlArtifactType {
   artifactType: string;

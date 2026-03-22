@@ -24,6 +24,7 @@ import Metrics from '../pages/Metrics';
 import Environments from '../pages/Environments';
 import CreateEnvironment from '../pages/CreateEnvironment';
 import Runtime from '../pages/Runtime';
+import OrgRuntimes from '../pages/OrgRuntimes';
 import { OrgAccessControl, ProjectAccessControl, ComponentAccessControl } from '../pages/AccessControl';
 import RoleDetail from '../pages/RoleDetail';
 import ProjectRoleDetail from '../pages/ProjectRoleDetail';
@@ -45,7 +46,7 @@ const MATRIX: Matrix = {
   logs: { segment: 'logs', pages: { projects: RuntimeLogs, components: RuntimeLogs } },
   loggers: { segment: loggersSegment, pages: { components: ManageLoggers } },
   metrics: { segment: 'metrics', pages: { projects: Metrics, components: Metrics } },
-  runtimes: { segment: 'runtimes', pages: { projects: Runtime, components: Runtime } },
+  runtimes: { segment: 'runtimes', pages: { organizations: OrgRuntimes, projects: Runtime, components: Runtime } },
   environments: { segment: 'environments', pages: { organizations: Environments, projects: Environments } },
   'access-control': { segment: 'settings/access-control/:tab', pages: { organizations: OrgAccessControl, projects: ProjectAccessControl, components: ComponentAccessControl } },
 };

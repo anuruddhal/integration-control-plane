@@ -14,6 +14,9 @@ type Query {
   services(runtimeId: String!): [Service!]!
   listeners(runtimeId: String!): [Listener!]!
 
+  # Org Secret Queries
+  orgSecrets(environmentId: String): [OrgSecretListEntry!]!
+
   # Environment Queries
   environments(
     orgUuid: String
@@ -202,6 +205,10 @@ type Mutation {
   # MI Runtime User Management Mutations
   addMIUser(componentId: String!, runtimeId: String!, username: String!, password: String!, isAdmin: Boolean): MIUserOperationResponse!
   deleteMIUser(componentId: String!, runtimeId: String!, username: String!): MIUserOperationResponse!
+
+  # Org-level Secret Mutations
+  createOrgSecret(environmentId: String!): String!
+  revokeOrgSecret(keyId: String!): Boolean!
 }
 
 # ============================================
@@ -713,6 +720,18 @@ type Environment {
   createdAt: String
   updatedAt: String
   updatedBy: String
+  createdBy: String
+}
+
+# ============================================
+# Org Secret List Entry - Truncated secret view
+# ============================================
+type OrgSecretListEntry {
+  keyId: String!
+  environmentId: String!
+  environmentName: String!
+  bound: Boolean!
+  createdAt: String!
   createdBy: String
 }
 

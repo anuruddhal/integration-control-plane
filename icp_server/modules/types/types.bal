@@ -1687,6 +1687,38 @@ public type EnvironmentInput record {
     string createdBy?;
 };
 
+public type OrgSecret record {
+    @sql:Column {name: "key_id"}
+    string keyId;
+    @sql:Column {name: "environment_id"}
+    string environmentId;
+    @sql:Column {name: "key_material"}
+    string keyMaterial;
+    @sql:Column {name: "project_id"}
+    string? projectId;
+    @sql:Column {name: "component_id"}
+    string? componentId;
+    @sql:Column {name: "project_handler"}
+    string? projectHandler;
+    @sql:Column {name: "component_name"}
+    string? componentName;
+    @sql:Column {name: "bound_at"}
+    string? boundAt;
+    @sql:Column {name: "created_at"}
+    string createdAt?;
+    @sql:Column {name: "created_by"}
+    string? createdBy;
+};
+
+public type OrgSecretListEntry record {|
+    string keyId;
+    string environmentId;
+    string environmentName;
+    boolean bound;
+    string createdAt;
+    string? createdBy;
+|};
+
 public type ComponentInDB record {
     string component_id;
     string project_id;

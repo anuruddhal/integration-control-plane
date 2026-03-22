@@ -558,6 +558,7 @@ CREATE TABLE runtimes (
     last_heartbeat TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    key_id VARCHAR(16) NULL,
     CONSTRAINT fk_runtime_project FOREIGN KEY (project_id) REFERENCES projects (project_id) ON DELETE CASCADE,
     CONSTRAINT fk_runtime_component FOREIGN KEY (component_id) REFERENCES components (component_id) ON DELETE CASCADE,
     CONSTRAINT fk_runtime_env FOREIGN KEY (environment_id) REFERENCES environments (environment_id) ON DELETE CASCADE
@@ -590,6 +591,30 @@ CREATE TABLE component_environment_secrets (
 
 CREATE TRIGGER update_component_environment_secrets_updated_at BEFORE UPDATE ON component_environment_secrets
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Org-level secrets with key_id for JWT HMAC authentication.
+-- Lazily bound to a project+component on first heartbeat (M2).
+CREATE TABLE org_secrets (
+    key_id         VARCHAR(16)  NOT NULL,
+    environment_id CHAR(36)     NOT NULL,
+    key_material   VARCHAR(256) NOT NULL,
+    project_id     CHAR(36)     NULL,
+    component_id   CHAR(36)     NULL,
+    project_handler VARCHAR(255) NULL,
+    component_name  VARCHAR(255) NULL,
+    bound_at       TIMESTAMP    NULL,
+    created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by     CHAR(36)     NULL,
+    PRIMARY KEY (key_id),
+    CONSTRAINT fk_org_secrets_project     FOREIGN KEY (project_id)     REFERENCES projects (project_id)          ON DELETE CASCADE,
+    CONSTRAINT fk_org_secrets_component   FOREIGN KEY (component_id)   REFERENCES components (component_id)      ON DELETE CASCADE,
+    CONSTRAINT fk_org_secrets_environment FOREIGN KEY (environment_id) REFERENCES environments (environment_id)   ON DELETE CASCADE,
+    CONSTRAINT fk_org_secrets_created_by  FOREIGN KEY (created_by)     REFERENCES users (user_id)                ON DELETE SET NULL
+);
+
+CREATE INDEX idx_org_secrets_environment ON org_secrets(environment_id);
+
+ALTER TABLE runtimes ADD CONSTRAINT fk_runtime_key_id FOREIGN KEY (key_id) REFERENCES org_secrets(key_id) ON DELETE SET NULL;
 
 -- Services deployed on a runtime
 CREATE TABLE bi_service_artifacts (
