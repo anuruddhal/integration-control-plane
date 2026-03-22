@@ -56,10 +56,20 @@ service /icp on httpListener {
                 return <http:Unauthorized>{body: "Missing or malformed Authorization header"};
             }
 
-            string kid = check extractKidFromJwt(jwtToken);
+            string|error kidResult = extractKidFromJwt(jwtToken);
+            if kidResult is error {
+                log:printWarn(string `Heartbeat rejected — bad JWT kid for runtime: ${heartbeat.runtime}: ${kidResult.message()}`);
+                return <http:Unauthorized>{body: string `Invalid JWT: ${kidResult.message()}`};
+            }
+            string kid = kidResult;
             log:printDebug(string `Heartbeat from runtime=${heartbeat.runtime}, kid=${kid}`);
 
-            types:OrgSecret orgSecret = check storage:lookupOrgSecretByKeyId(kid);
+            types:OrgSecret|error orgSecretResult = storage:lookupOrgSecretByKeyId(kid);
+            if orgSecretResult is error {
+                log:printWarn(string `Heartbeat rejected — unknown kid=${kid} for runtime: ${heartbeat.runtime}`);
+                return <http:BadRequest>{body: string `Unknown key ID '${kid}'`};
+            }
+            types:OrgSecret orgSecret = orgSecretResult;
             http:Unauthorized? authResult = validateRuntimeJwtWithSecret(jwtToken, orgSecret.keyMaterial);
             if authResult is http:Unauthorized {
                 log:printWarn(string `Heartbeat rejected — invalid JWT for runtime: ${heartbeat.runtime}, kid=${kid}`);
@@ -135,7 +145,7 @@ service /icp on httpListener {
 
     // Process delta heartbeat from runtime (M3: kid-based JWT validation)
     isolated resource function post deltaHeartbeat(http:Request request, @http:Payload types:DeltaHeartbeat deltaHeartbeat)
-            returns types:HeartbeatResponse|http:Unauthorized|http:Conflict|error? {
+            returns types:HeartbeatResponse|http:Unauthorized|http:BadRequest|http:Conflict|error? {
         do {
             string|error jwtToken = extractBearerToken(request);
             if jwtToken is error {
@@ -143,10 +153,20 @@ service /icp on httpListener {
                 return <http:Unauthorized>{body: "Missing or malformed Authorization header"};
             }
 
-            string kid = check extractKidFromJwt(jwtToken);
+            string|error kidResult = extractKidFromJwt(jwtToken);
+            if kidResult is error {
+                log:printWarn(string `Delta heartbeat rejected — bad JWT kid for runtime: ${deltaHeartbeat.runtime}: ${kidResult.message()}`);
+                return <http:Unauthorized>{body: string `Invalid JWT: ${kidResult.message()}`};
+            }
+            string kid = kidResult;
             log:printDebug(string `Delta heartbeat from runtime=${deltaHeartbeat.runtime}, kid=${kid}`);
 
-            types:OrgSecret orgSecret = check storage:lookupOrgSecretByKeyId(kid);
+            types:OrgSecret|error orgSecretResult = storage:lookupOrgSecretByKeyId(kid);
+            if orgSecretResult is error {
+                log:printWarn(string `Delta heartbeat rejected — unknown kid=${kid} for runtime: ${deltaHeartbeat.runtime}`);
+                return <http:BadRequest>{body: string `Unknown key ID '${kid}'`};
+            }
+            types:OrgSecret orgSecret = orgSecretResult;
             http:Unauthorized? authResult = validateRuntimeJwtWithSecret(jwtToken, orgSecret.keyMaterial);
             if authResult is http:Unauthorized {
                 log:printWarn(string `Delta heartbeat rejected — invalid JWT for runtime: ${deltaHeartbeat.runtime}, kid=${kid}`);
