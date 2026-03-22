@@ -28,8 +28,10 @@ SELECT CONCAT('Found ', @old_user_count, ' user(s) in old database') AS status;
 
 -- ============================================================================
 -- BEGIN TRANSACTION
--- All DML below is atomic. If the script fails at any point, connect to the
--- database and run ROLLBACK to undo any partial changes before re-running.
+-- All DML below (Steps 1–3b) is atomic. If the script fails during these
+-- steps, connect to the database and run ROLLBACK to undo partial changes
+-- before re-running. Step 3c (DDL) runs after COMMIT because MySQL DDL
+-- causes an implicit commit and cannot be rolled back.
 -- ============================================================================
 
 SET autocommit = 0;
@@ -272,10 +274,46 @@ DEALLOCATE PREPARE stmt;
 SELECT CONCAT(ROW_COUNT(), ' user(s) assigned to Developers') AS status;
 
 -- ============================================================================
--- STEP 3c — Create org_secrets table and add key_id column to runtimes
+-- STEP 4 — Summary report
 -- ============================================================================
 
-SELECT 'STEP 3c: Creating org_secrets table ...' AS status;
+SELECT 'STEP 4: Migration summary' AS status;
+
+SET @sql = CONCAT('
+    SELECT
+        COUNT(*)                                      AS total_users_in_old_db,
+        SUM(is_super_admin)                           AS super_admins,
+        (SELECT COUNT(*) FROM `', @new_main_db, '`.group_user_mapping gum
+         JOIN `', @new_main_db, '`.user_groups ug ON gum.group_id = ug.group_id
+         WHERE ug.group_name = ''Super Admins'')       AS in_super_admins_group,
+        (SELECT COUNT(*) FROM `', @new_main_db, '`.group_user_mapping gum
+         JOIN `', @new_main_db, '`.user_groups ug ON gum.group_id = ug.group_id
+         WHERE ug.group_name = ''Developers'')         AS in_developers_group,
+        SUM(require_password_change)                  AS require_password_change
+    FROM `', @new_main_db, '`.users
+    WHERE username IN (
+        SELECT UM_USER_NAME FROM `', @old_db, '`.UM_USER WHERE UM_TENANT_ID = -1234
+    )
+');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- ============================================================================
+-- COMMIT
+-- ============================================================================
+
+COMMIT;
+SET autocommit = 1;
+
+-- ============================================================================
+-- STEP 5 — Create org_secrets table and add key_id column to runtimes
+-- DDL runs outside the transaction because MySQL DDL causes an implicit
+-- commit. If this step fails, the DML migration (Steps 1–3b) is already
+-- committed — re-run only this step after fixing the issue.
+-- ============================================================================
+
+SELECT 'STEP 5: Creating org_secrets table ...' AS status;
 
 SET @sql = CONCAT('
     CREATE TABLE `', @new_main_db, '`.org_secrets (
@@ -313,39 +351,6 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 SELECT 'org_secrets table and runtimes.key_id created.' AS status;
-
--- ============================================================================
--- STEP 4 — Summary report
--- ============================================================================
-
-SELECT 'STEP 4: Migration summary' AS status;
-
-SET @sql = CONCAT('
-    SELECT
-        COUNT(*)                                      AS total_users_in_old_db,
-        SUM(is_super_admin)                           AS super_admins,
-        (SELECT COUNT(*) FROM `', @new_main_db, '`.group_user_mapping gum
-         JOIN `', @new_main_db, '`.user_groups ug ON gum.group_id = ug.group_id
-         WHERE ug.group_name = ''Super Admins'')       AS in_super_admins_group,
-        (SELECT COUNT(*) FROM `', @new_main_db, '`.group_user_mapping gum
-         JOIN `', @new_main_db, '`.user_groups ug ON gum.group_id = ug.group_id
-         WHERE ug.group_name = ''Developers'')         AS in_developers_group,
-        SUM(require_password_change)                  AS require_password_change
-    FROM `', @new_main_db, '`.users
-    WHERE username IN (
-        SELECT UM_USER_NAME FROM `', @old_db, '`.UM_USER WHERE UM_TENANT_ID = -1234
-    )
-');
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
--- ============================================================================
--- COMMIT
--- ============================================================================
-
-COMMIT;
-SET autocommit = 1;
 
 -- ============================================================================
 -- DONE
