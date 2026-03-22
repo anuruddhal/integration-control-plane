@@ -315,58 +315,6 @@ public isolated function deleteEnvironment(string environmentId) returns error? 
     return ();
 }
 
-
-// Generate (or rotate) the JWT HMAC secret for a component+environment pair.
-// Two UUIDs are concatenated to produce a 72-character secret — well above
-// the 32-character minimum required for HS256 signing.
-// Each call always produces and persists a new secret, overwriting any existing
-// one — callers should consider whether rotation is intended.
-// Uses a database-agnostic INSERT-then-UPDATE pattern compatible with
-// PostgreSQL, MySQL, MSSQL, and H2.
-public isolated function generateComponentEnvironmentSecret(string componentId, string environmentId) returns string|error {
-    string jwtHmacSecret = uuid:createRandomUuid() + uuid:createRandomUuid();
-
-    sql:ExecutionResult|sql:Error insertResult = dbClient->execute(`
-        INSERT INTO component_environment_secrets (component_id, environment_id, jwt_hmac_secret)
-        VALUES (${componentId}, ${environmentId}, ${jwtHmacSecret})
-    `);
-
-    if insertResult is sql:ExecutionResult {
-        log:printInfo(string `Generated new JWT HMAC secret for component: ${componentId}, environment: ${environmentId}`);
-        return jwtHmacSecret;
-    }
-
-    // Row already exists — rotate the secret with an UPDATE
-    if classifySqlError(insertResult) == DUPLICATE_KEY {
-        sql:ExecutionResult|sql:Error updateResult = dbClient->execute(`
-            UPDATE component_environment_secrets
-            SET jwt_hmac_secret = ${jwtHmacSecret}, updated_at = CURRENT_TIMESTAMP
-            WHERE component_id = ${componentId}
-              AND environment_id = ${environmentId}
-        `);
-
-        if updateResult is sql:Error {
-            log:printError(string `Failed to rotate JWT secret for component ${componentId} + environment ${environmentId}`, 'error = updateResult);
-            return error("An unexpected error occurred while rotating the component-environment JWT secret.", updateResult);
-        }
-
-        if updateResult.affectedRowCount == 0 {
-            // The UPDATE matched no rows — the row was deleted between our failed
-            // INSERT and this UPDATE (extremely unlikely but possible under concurrent
-            // deletes).  Return an error so the caller never receives an unpersisted
-            // secret value.
-            log:printError(string `JWT secret rotation UPDATE affected 0 rows for component ${componentId} + environment ${environmentId}`);
-            return error("Failed to rotate the component-environment JWT secret: the target row was not found during update.");
-        }
-
-        log:printInfo(string `Rotated JWT HMAC secret for component: ${componentId}, environment: ${environmentId}`);
-        return jwtHmacSecret;
-    }
-
-    log:printError(string `Failed to generate JWT secret for component ${componentId} + environment ${environmentId}`, 'error = insertResult);
-    return error("An unexpected error occurred while generating the component-environment JWT secret.", insertResult);
-}
-
 // Get all environment IDs where a component has runtimes
 public isolated function getEnvironmentIdsWithRuntimes(string componentId) returns string[]|error {
     log:printDebug(string `Fetching environment IDs where component ${componentId} has runtimes`);

@@ -948,34 +948,6 @@ BEGIN
 END;
 GO
 
--- Per-component-per-environment JWT HMAC secret
--- Generated when a component is first deployed to an environment; used to
--- validate incoming heartbeat JWTs from that specific component+environment pair.
-CREATE TABLE component_environment_secrets (
-    component_id CHAR(36) NOT NULL,
-    environment_id CHAR(36) NOT NULL,
-    jwt_hmac_secret NVARCHAR (256) NOT NULL,
-    created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
-    updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
-    PRIMARY KEY (component_id, environment_id),
-    CONSTRAINT fk_ces_component FOREIGN KEY (component_id) REFERENCES components (component_id) ON DELETE CASCADE,
-    CONSTRAINT fk_ces_environment FOREIGN KEY (environment_id) REFERENCES environments (environment_id) ON DELETE NO ACTION
-);
-GO
-
-CREATE TRIGGER trg_component_environment_secrets_updated_at
-ON component_environment_secrets
-AFTER UPDATE
-AS
-BEGIN
-    SET NOCOUNT ON;
-    UPDATE component_environment_secrets
-    SET updated_at = GETDATE()
-    FROM component_environment_secrets ces
-    INNER JOIN inserted i ON ces.component_id = i.component_id AND ces.environment_id = i.environment_id;
-END;
-GO
-
 -- Org-level secrets with key_id for JWT HMAC authentication.
 -- Lazily bound to a project+component on first heartbeat (M2).
 CREATE TABLE org_secrets (

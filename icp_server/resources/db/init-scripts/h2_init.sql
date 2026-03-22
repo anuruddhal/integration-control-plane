@@ -702,20 +702,6 @@ CREATE INDEX idx_runtimes_last_heartbeat ON runtimes (last_heartbeat);
 
 CREATE INDEX idx_runtimes_registration_time ON runtimes (registration_time);
 
--- Per-component-per-environment JWT HMAC secret
--- Generated when a component is first deployed to an environment; used to
--- validate incoming heartbeat JWTs from that specific component+environment pair.
-CREATE TABLE component_environment_secrets (
-    component_id CHAR(36) NOT NULL,
-    environment_id CHAR(36) NOT NULL,
-    jwt_hmac_secret VARCHAR(256) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (component_id, environment_id),
-    CONSTRAINT fk_ces_component FOREIGN KEY (component_id) REFERENCES components (component_id) ON DELETE CASCADE,
-    CONSTRAINT fk_ces_environment FOREIGN KEY (environment_id) REFERENCES environments (environment_id) ON DELETE CASCADE
-);
-
 -- Org-level secrets with key_id for JWT HMAC authentication.
 -- Lazily bound to a project+component on first heartbeat (M2).
 CREATE TABLE org_secrets (

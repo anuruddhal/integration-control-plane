@@ -45,12 +45,12 @@ import {
   Tooltip,
   Typography,
 } from '@wso2/oxygen-ui';
-import { RefreshCw, ListFilter, LayoutGrid, Settings, Copy, Check, Play, ShieldAlert, Plus, X, Trash2, UserPlus } from '@wso2/oxygen-ui-icons-react';
+import { RefreshCw, ListFilter, LayoutGrid, Settings, Play, X, Trash2, UserPlus } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useArtifacts, useRefreshEnvironmentArtifacts, useRuntimes, useComponentRuntimes, type GqlArtifact, type GqlEnvironment } from '../api/queries';
 import { useUpdateArtifactTracingStatus, useUpdateArtifactStatisticsStatus } from '../api/artifactToggleMutations';
-import { useUpdateArtifactStatus, useUpdateListenerState, useTriggerTask, useGenerateComponentEnvironmentJwtSecret, useRotateComponentEnvironmentJwtSecret } from '../api/mutations';
+import { useUpdateArtifactStatus, useUpdateListenerState, useTriggerTask } from '../api/mutations';
 import { useListMiUsers, useCreateMiUser, useDeleteMiUser } from '../api/miUsers';
 import { ArtifactApiDefinition, ServiceResources, AutomationExecutions, ProxyApiReference } from './ArtifactTabs';
 import { ArtifactTypeSelector } from './ArtifactDetail';
@@ -526,8 +526,6 @@ export default function Environment({
   componentId,
   projectId,
   componentType,
-  componentHandler,
-  projectHandler,
   onSelectArtifact,
   onOpenDrawerForTab,
 }: {
@@ -535,19 +533,13 @@ export default function Environment({
   componentId: string;
   projectId: string;
   componentType: string;
-  componentHandler: string;
-  projectHandler: string;
   onSelectArtifact: (a: GqlArtifact, type: string, envId: string) => void;
   onOpenDrawerForTab: (a: GqlArtifact, type: string, envId: string, tab: string) => void;
 }) {
   const refreshEnvironmentArtifacts = useRefreshEnvironmentArtifacts();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'entryPoints' | 'allArtifacts'>('entryPoints');
-  const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
-  const [copySuccess, setCopySuccess] = useState(false);
-<<<<<<< HEAD
-  const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
 
   // MI users state
   const [selectedRuntimeId, setSelectedRuntimeId] = useState('');
@@ -559,9 +551,6 @@ export default function Environment({
   const [createUserError, setCreateUserError] = useState<string | null>(null);
   const [deleteUserError, setDeleteUserError] = useState<string | null>(null);
 
-  const generateSecretMutation = useGenerateComponentEnvironmentJwtSecret();
-  const rotateSecretMutation = useRotateComponentEnvironmentJwtSecret();
-
   const { data: runtimes = [], error: runtimesError, isLoading: runtimesLoading } = useComponentRuntimes(env.id, projectId, componentId, componentType === 'MI' && settingsPanelOpen && !!env.id && !!projectId && !!componentId);
   const validatedRuntimeId = runtimes.some((r) => r.runtimeId === selectedRuntimeId) ? selectedRuntimeId : '';
   const activeRuntimeId = validatedRuntimeId || (runtimes.length === 1 ? runtimes[0].runtimeId : '');
@@ -569,55 +558,12 @@ export default function Environment({
   const deleteMiUser = useDeleteMiUser();
   const { data: miUsers = [], error: miUsersError, isLoading: miUsersLoading } = useListMiUsers(componentId, activeRuntimeId, componentType === 'MI' && settingsPanelOpen && !!activeRuntimeId);
 
-  // The currently displayed secret — updated by both generate and rotate.
-  const activeSecret = rotateSecretMutation.data ?? generateSecretMutation.data ?? '';
-  const secretLoading = generateSecretMutation.isPending || rotateSecretMutation.isPending;
-  const secretError = generateSecretMutation.error?.message ?? rotateSecretMutation.error?.message ?? null;
-
-  const handleOpenConfigDialog = () => {
-    setConfigDialogOpen(true);
-  };
-
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
       await refreshEnvironmentArtifacts(env.id, componentId);
     } finally {
       setTimeout(() => setIsRefreshing(false), 500);
-    }
-  };
-
-  const secretPlaceholder = '<paste org secret from Settings → Secrets>';
-
-  const generateTomlConfig = () => {
-    const runtimeId = '<Runtime ID>';
-
-    if (componentType === 'BI') {
-      return `[wso2.icp.runtime.bridge]
-runtime="${runtimeId}"
-integration="${componentHandler}"
-project="${projectHandler}"
-environment="${env.name}"
-heartbeatInterval=10
-secret="${secretPlaceholder}"\n# serverUrl="https://localhost:9445"`;
-    } else {
-      return `[icp_config]
-enabled = true
-runtime = "${runtimeId}"
-environment = "${env.name}"
-project = "${projectHandler}"
-integration = "${componentHandler}"
-secret = "${secretPlaceholder}"\n# icp_url = "https://icp-server:9443"`;
-    }
-  };
-
-  const handleCopyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(generateTomlConfig());
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
     }
   };
 
@@ -646,11 +592,6 @@ secret = "${secretPlaceholder}"\n# icp_url = "https://icp-server:9443"`;
                 }}
               />
             </IconButton>
-            <Authorized permissions={Permissions.INTEGRATION_MANAGE}>
-              <Button variant="contained" startIcon={<Plus size={16} />} onClick={handleOpenConfigDialog}>
-                Add Runtime
-              </Button>
-            </Authorized>
             <Authorized permissions={[Permissions.INTEGRATION_EDIT, Permissions.INTEGRATION_MANAGE]}>
               <Tooltip title="Settings">
                 <IconButton size="small" onClick={() => setSettingsPanelOpen(true)} aria-label="Settings">
@@ -660,55 +601,7 @@ secret = "${secretPlaceholder}"\n# icp_url = "https://icp-server:9443"`;
             </Authorized>
           </Stack>
         </Stack>
-        <Dialog open={configDialogOpen} onClose={() => setConfigDialogOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>Add Runtime - {env.name}</DialogTitle>
-          <DialogContent>
-            <DialogContentText sx={{ mb: 2 }}>
-              Add the following configuration to your runtime's {componentType === 'BI' ? 'Config.toml' : 'deployment.toml'} file.
-              Generate or copy a secret from <strong>Settings &rarr; Secrets</strong> for this environment.
-            </DialogContentText>
-            <Box
-              component="pre"
-              sx={{
-                bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100'),
-                color: (theme) => theme.palette.text.primary,
-                p: 2,
-                borderRadius: 1,
-                overflow: 'auto',
-                fontFamily: 'monospace',
-                fontSize: 13,
-                border: '1px solid',
-                borderColor: 'divider',
-              }}>
-              {generateTomlConfig()}
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setConfigDialogOpen(false)}>Close</Button>
-            <Button variant="contained" startIcon={copySuccess ? <Check size={16} /> : <Copy size={16} />} onClick={handleCopyToClipboard}>
-              {copySuccess ? 'Copied!' : 'Copy to Clipboard'}
-            </Button>
-          </DialogActions>
-        </Dialog>
-<<<<<<< HEAD
 
-        {/* Rotate-secret confirmation dialog */}
-        <Dialog open={rotateConfirmOpen} onClose={() => setRotateConfirmOpen(false)} maxWidth="xs" fullWidth>
-          <DialogTitle>Rotate JWT Secret?</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              This will generate a new HMAC secret for <strong>{env.name}</strong>. Any running runtimes will stop authenticating until they are restarted with the new <code>secret</code> value.
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setRotateConfirmOpen(false)}>Cancel</Button>
-            <Authorized permissions={Permissions.INTEGRATION_MANAGE}>
-              <Button variant="contained" color="error" startIcon={<ShieldAlert size={16} />} onClick={handleRotateSecret} disabled={rotateSecretMutation.isPending}>
-                {rotateSecretMutation.isPending ? 'Rotating…' : 'Rotate'}
-              </Button>
-            </Authorized>
-          </DialogActions>
-        </Dialog>
         {/* Settings side panel */}
         <Drawer anchor="right" open={settingsPanelOpen} onClose={() => setSettingsPanelOpen(false)} sx={{ '& .MuiDrawer-paper': { width: 400, p: 3, boxSizing: 'border-box' } }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
@@ -719,23 +612,6 @@ secret = "${secretPlaceholder}"\n# icp_url = "https://icp-server:9443"`;
               <X size={16} />
             </IconButton>
           </Stack>
-
-          {/* JWT Secret section */}
-          <Authorized permissions={Permissions.INTEGRATION_MANAGE}>
-            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-              JWT Secret
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Rotate the HMAC secret used by runtimes to authenticate with this environment. Existing runtimes must be restarted with the new value.
-            </Typography>
-            <Tooltip title="Generate a new secret. Existing runtimes must be restarted with the new value.">
-              <span>
-                <Button fullWidth size="small" color="error" variant="outlined" startIcon={<ShieldAlert size={14} />} onClick={() => setRotateConfirmOpen(true)}>
-                  Rotate Secret
-                </Button>
-              </span>
-            </Tooltip>
-          </Authorized>
 
           {/* MI Users section */}
           {componentType === 'MI' && (
