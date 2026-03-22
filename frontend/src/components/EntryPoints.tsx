@@ -546,6 +546,7 @@ export default function Environment({
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+<<<<<<< HEAD
   const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
 
   // MI users state
@@ -575,13 +576,6 @@ export default function Environment({
 
   const handleOpenConfigDialog = () => {
     setConfigDialogOpen(true);
-    // Fetch existing secret (or provision one if this is the first time).
-    generateSecretMutation.mutate({ componentId, environmentId: env.id });
-  };
-
-  const handleRotateSecret = () => {
-    setRotateConfirmOpen(false);
-    rotateSecretMutation.mutate({ componentId, environmentId: env.id });
   };
 
   const handleRefresh = async () => {
@@ -593,8 +587,9 @@ export default function Environment({
     }
   };
 
-  const generateTomlConfig = (secret: string) => {
-    // Runtime ID is not yet known until the runtime first registers.
+  const secretPlaceholder = '<paste org secret from Settings → Secrets>';
+
+  const generateTomlConfig = () => {
     const runtimeId = '<Runtime ID>';
 
     if (componentType === 'BI') {
@@ -604,22 +599,21 @@ integration="${componentHandler}"
 project="${projectHandler}"
 environment="${env.name}"
 heartbeatInterval=10
-secret="${secret || '<generating…>'}"\n# serverUrl="https://localhost:9445"`;
+secret="${secretPlaceholder}"\n# serverUrl="https://localhost:9445"`;
     } else {
-      // MI
       return `[icp_config]
 enabled = true
 runtime = "${runtimeId}"
 environment = "${env.name}"
 project = "${projectHandler}"
 integration = "${componentHandler}"
-secret = "${secret || '<generating…>'}"\n# icp_url = "https://icp-server:9443"`;
+secret = "${secretPlaceholder}"\n# icp_url = "https://icp-server:9443"`;
     }
   };
 
   const handleCopyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(generateTomlConfig(activeSecret));
+      await navigator.clipboard.writeText(generateTomlConfig());
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 2000);
     } catch (err) {
@@ -669,12 +663,10 @@ secret = "${secret || '<generating…>'}"\n# icp_url = "https://icp-server:9443"
         <Dialog open={configDialogOpen} onClose={() => setConfigDialogOpen(false)} maxWidth="sm" fullWidth>
           <DialogTitle>Add Runtime - {env.name}</DialogTitle>
           <DialogContent>
-            <DialogContentText sx={{ mb: 2 }}>Add the following configuration to your runtime's {componentType === 'BI' ? 'Config.toml' : 'deployment.toml'} file:</DialogContentText>
-            {secretError && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {secretError}
-              </Alert>
-            )}
+            <DialogContentText sx={{ mb: 2 }}>
+              Add the following configuration to your runtime's {componentType === 'BI' ? 'Config.toml' : 'deployment.toml'} file.
+              Generate or copy a secret from <strong>Settings &rarr; Secrets</strong> for this environment.
+            </DialogContentText>
             <Box
               component="pre"
               sx={{
@@ -687,19 +679,18 @@ secret = "${secret || '<generating…>'}"\n# icp_url = "https://icp-server:9443"
                 fontSize: 13,
                 border: '1px solid',
                 borderColor: 'divider',
-                opacity: secretLoading ? 0.5 : 1,
-                transition: 'opacity 0.2s',
               }}>
-              {secretLoading ? 'Loading configuration…' : generateTomlConfig(activeSecret)}
+              {generateTomlConfig()}
             </Box>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setConfigDialogOpen(false)}>Close</Button>
-            <Button variant="contained" startIcon={copySuccess ? <Check size={16} /> : <Copy size={16} />} onClick={handleCopyToClipboard} disabled={secretLoading || !activeSecret}>
+            <Button variant="contained" startIcon={copySuccess ? <Check size={16} /> : <Copy size={16} />} onClick={handleCopyToClipboard}>
               {copySuccess ? 'Copied!' : 'Copy to Clipboard'}
             </Button>
           </DialogActions>
         </Dialog>
+<<<<<<< HEAD
 
         {/* Rotate-secret confirmation dialog */}
         <Dialog open={rotateConfirmOpen} onClose={() => setRotateConfirmOpen(false)} maxWidth="xs" fullWidth>

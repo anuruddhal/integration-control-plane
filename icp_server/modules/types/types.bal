@@ -1702,6 +1702,8 @@ public type OrgSecret record {
     string? projectHandler;
     @sql:Column {name: "component_name"}
     string? componentName;
+    @sql:Column {name: "runtime_type"}
+    string? runtimeType;
     @sql:Column {name: "bound_at"}
     string? boundAt;
     @sql:Column {name: "created_at"}

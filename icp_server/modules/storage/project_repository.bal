@@ -275,6 +275,21 @@ public isolated function getProjectIdByHandler(string projectHandler, int orgId)
     return projectRecords[0].project_id;
 }
 
+// Get project handler by project ID
+public isolated function getProjectHandlerById(string projectId) returns string|error {
+    stream<record {|string handler;|}, sql:Error?> projectStream = dbClient->query(`
+        SELECT handler FROM projects WHERE project_id = ${projectId}
+    `);
+
+    record {|string handler;|}[] projectRecords = check from record {|string handler;|} project in projectStream
+        select project;
+
+    if projectRecords.length() == 0 {
+        return error(string `Project with ID ${projectId} not found`);
+    }
+    return projectRecords[0].handler;
+}
+
 // Update project with ProjectUpdateInput
 public isolated function updateProjectWithInput(types:ProjectUpdateInput project) returns error? {
     sql:ParameterizedQuery whereClause = ` WHERE project_id = ${project.id} `;

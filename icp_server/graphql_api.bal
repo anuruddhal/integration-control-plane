@@ -2622,42 +2622,6 @@ service /graphql on graphqlListener {
         };
     }
 
-    // Get (or provision on first call) the JWT HMAC secret for a component+environment pair.
-    // Safe to call every time the "Configure Runtime" dialog opens — returns the existing
-    // secret when already provisioned, generates a new one only when none exists yet.
-    isolated remote function generateComponentEnvironmentJwtSecret(
-            graphql:Context context, string componentId, string environmentId
-    ) returns string|error {
-        types:UserContextV2 userContext = check extractUserContext(context);
-
-        string projectId = check storage:getProjectIdByComponentId(componentId);
-        types:AccessScope scope = auth:buildScopeFromContext(projectId, integrationId = componentId, envId = environmentId);
-
-        if !check auth:hasPermission(userContext.userId, auth:PERMISSION_INTEGRATION_MANAGE, scope) {
-            return error("Insufficient permissions to view or provision this component's JWT secret");
-        }
-
-        return check storage:getOrGenerateComponentEnvironmentSecret(componentId, environmentId);
-    }
-
-    // Rotate (replace) the JWT HMAC secret for a component+environment pair.
-    // All runtimes for this component+environment must be reconfigured with the new secret.
-    isolated remote function rotateComponentEnvironmentJwtSecret(
-            graphql:Context context, string componentId, string environmentId
-    ) returns string|error {
-        types:UserContextV2 userContext = check extractUserContext(context);
-
-        string projectId = check storage:getProjectIdByComponentId(componentId);
-        types:AccessScope scope = auth:buildScopeFromContext(projectId, integrationId = componentId, envId = environmentId);
-
-        if !check auth:hasPermission(userContext.userId, auth:PERMISSION_INTEGRATION_MANAGE, scope) {
-            return error("Insufficient permissions to rotate this component's JWT secret");
-        }
-
-        log:printInfo(string `JWT secret rotation requested for component: ${componentId}, environment: ${environmentId}`, userId = userContext.userId);
-        return check storage:generateComponentEnvironmentSecret(componentId, environmentId);
-    }
-
     // ----------- Org-level Secrets (M1)
 
     isolated resource function get orgSecrets(graphql:Context context, string? environmentId) returns types:OrgSecretListEntry[]|error {

@@ -726,6 +726,7 @@ CREATE TABLE org_secrets (
     component_id   CHAR(36)     NULL,
     project_handler VARCHAR(255) NULL,
     component_name  VARCHAR(255) NULL,
+    runtime_type    VARCHAR(8)   NULL CHECK (runtime_type IN ('MI', 'BI')),
     bound_at       TIMESTAMP    NULL,
     created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by     CHAR(36)     NULL,

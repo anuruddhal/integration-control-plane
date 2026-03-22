@@ -25,9 +25,13 @@ import ballerina/uuid;
 // Runtime hash cache for delta heartbeat optimization
 final cache:Cache hashCache = new (capacity = 1000, evictionFactor = 0.2);
 
-// Process full heartbeat
-public isolated function processHeartbeat(types:Heartbeat heartbeat) returns types:HeartbeatResponse|error {
-    check validateHeartbeatData(heartbeat);
+// Process full heartbeat.
+// When preResolved=true, heartbeat.environment/.project/.component are already UUIDs
+// (set by the kid-based heartbeat endpoint) — skip name-to-ID validation.
+public isolated function processHeartbeat(types:Heartbeat heartbeat, boolean preResolved = false) returns types:HeartbeatResponse|error {
+    if !preResolved {
+        check validateHeartbeatData(heartbeat);
+    }
 
     boolean isNewRegistration = false;
     boolean fullHeartbeatRequired = false;

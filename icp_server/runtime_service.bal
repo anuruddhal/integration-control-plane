@@ -45,41 +45,93 @@ service /icp on httpListener {
         log:printInfo("Runtime service started at " + serverHost + ":" + serverPort.toString());
     }
 
-    // Process heartbeat from runtime
+    // Process heartbeat from runtime (M2: kid-based JWT validation + lazy binding)
     isolated resource function post heartbeat(http:Request request, @http:Payload json heartbeatJson)
-            returns types:HeartbeatResponse|http:Unauthorized|error? {
+            returns types:HeartbeatResponse|http:Unauthorized|http:BadRequest|http:Conflict|error? {
         do {
             types:Heartbeat heartbeat = check heartbeatJson.cloneWithType(types:Heartbeat);
 
-            // heartbeat.component and heartbeat.environment carry handler/name strings
-            // as written in the runtime's Config.toml (integration = "<handler>",
-            // environment = "<name>").  component_environment_secrets is keyed by UUID,
-            // so resolve both names to their canonical IDs before the secret lookup.
-            string componentId = check storage:getComponentIdByName(heartbeat.component);
-            string environmentId = check storage:getEnvironmentIdByName(heartbeat.environment);
+            // --- Extract kid and validate JWT ---
+            string|error jwtToken = extractBearerToken(request);
+            if jwtToken is error {
+                log:printWarn(string `Heartbeat rejected — missing bearer token for runtime: ${heartbeat.runtime}`);
+                return <http:Unauthorized>{body: "Missing or malformed Authorization header"};
+            }
 
-            // Resolve the HMAC secret for this component+environment pair and validate the bearer JWT.
-            string jwtSecret = check storage:resolveComponentEnvJwtSecret(componentId, environmentId);
-            http:Unauthorized? authResult = validateRuntimeJwt(request, jwtSecret);
+            string kid = check extractKidFromJwt(jwtToken);
+            log:printDebug(string `Heartbeat from runtime=${heartbeat.runtime}, kid=${kid}`);
+
+            types:OrgSecret orgSecret = check storage:lookupOrgSecretByKeyId(kid);
+            http:Unauthorized? authResult = validateRuntimeJwtWithSecret(jwtToken, orgSecret.keyMaterial);
             if authResult is http:Unauthorized {
-                log:printWarn(string `Heartbeat rejected — invalid JWT for component: ${heartbeat.component}, environment: ${heartbeat.environment}`);
+                log:printWarn(string `Heartbeat rejected — invalid JWT for runtime: ${heartbeat.runtime}, kid=${kid}`);
                 return authResult;
             }
 
-            // Process heartbeat using the repository (handles both registration and updates)
-            types:HeartbeatResponse heartbeatResponse = check storage:processHeartbeat(heartbeat);
-            log:printInfo(string `Heartbeat processed successfully for ${heartbeat.runtime}`);
+            // --- Resolve environment and verify it matches the key's environment ---
+            string environmentId = check storage:getEnvironmentIdByName(heartbeat.environment);
+            if environmentId != orgSecret.environmentId {
+                log:printWarn(string `Heartbeat rejected — environment mismatch for kid=${kid}: heartbeat=${environmentId}, key=${orgSecret.environmentId}`);
+                return <http:Conflict>{body: string `Environment mismatch: key ID '${kid}' is bound to a different environment`};
+            }
+
+            // --- Bind or verify project+component ---
+            string projectId;
+            string componentId;
+
+            if orgSecret.componentId is () {
+                // Unbound key — resolve/auto-create project and component, then bind
+                string? rawCreatedBy = orgSecret.createdBy;
+                if rawCreatedBy is () || rawCreatedBy.trim().length() == 0 {
+                    log:printWarn(string `Heartbeat rejected — cannot auto-provision for kid=${kid}: orgSecret has no createdBy`);
+                    return <http:BadRequest>{body: string `Key '${kid}' has no creator on record; cannot auto-provision project/component`};
+                }
+                string createdBy = rawCreatedBy;
+                projectId = check storage:resolveOrCreateProject(heartbeat.project, createdBy);
+                componentId = check storage:resolveOrCreateComponent(projectId, heartbeat.component, heartbeat.runtimeType, createdBy);
+                check storage:bindOrgSecret(kid, projectId, componentId, heartbeat.project, heartbeat.component, heartbeat.runtimeType);
+                log:printInfo(string `Bound kid=${kid} to project=${projectId}, component=${componentId}, runtimeType=${heartbeat.runtimeType}`);
+            } else {
+                // Bound key — use stored IDs, enforce runtime type, log-only name mismatch
+                if orgSecret.runtimeType is string && orgSecret.runtimeType != heartbeat.runtimeType {
+                    log:printWarn(string `Heartbeat rejected — runtime type mismatch for kid=${kid}: bound=${orgSecret.runtimeType ?: "?"}, got=${heartbeat.runtimeType}`);
+                    return <http:Conflict>{body: string `Runtime type mismatch: key ID '${kid}' is bound to ${orgSecret.runtimeType ?: "?"}, not ${heartbeat.runtimeType}`};
+                }
+
+                projectId = <string>orgSecret.projectId;
+                componentId = <string>orgSecret.componentId;
+
+                if orgSecret.projectHandler != heartbeat.project || orgSecret.componentName != heartbeat.component {
+                    log:printError(string `Binding name mismatch for kid=${kid}: ` +
+                        string `bound project=${orgSecret.projectHandler ?: "?"}/component=${orgSecret.componentName ?: "?"}, ` +
+                        string `got project=${heartbeat.project}/component=${heartbeat.component}. ` +
+                        string `Proceeding with bound IDs project=${projectId}, component=${componentId}`);
+                }
+            }
+
+            // --- Prepare heartbeat fields as UUIDs for downstream processing ---
+            heartbeat.environment = environmentId;
+            heartbeat.project = projectId;
+            heartbeat.component = componentId;
+
+            types:HeartbeatResponse heartbeatResponse = check storage:processHeartbeat(heartbeat, preResolved = true);
+
+            // Record this key ID on the runtime row (after upsert ensures the row exists).
+            // Failure here is non-fatal — the heartbeat was already processed successfully.
+            error? keyIdErr = storage:updateRuntimeKeyId(heartbeat.runtime, kid);
+            if keyIdErr is error {
+                log:printError(string `Failed to record keyId=${kid} on runtime=${heartbeat.runtime}`, 'error = keyIdErr);
+            }
+            log:printInfo(string `Heartbeat processed for runtime=${heartbeat.runtime}, kid=${kid}`);
             return heartbeatResponse;
 
         } on fail error e {
-            // Return error response
             log:printError("Failed to process heartbeat", e);
-            types:HeartbeatResponse errorResponse = {
+            return <types:HeartbeatResponse>{
                 acknowledged: false,
                 commands: [],
                 errors: [e.message()]
             };
-            return errorResponse;
         }
     }
 
@@ -116,20 +168,33 @@ service /icp on httpListener {
 }
 
 // ---------------------------------------------------------------------------
-// Custom per-environment JWT validator
+// JWT helpers
 // ---------------------------------------------------------------------------
-// Extracts the bearer token from the Authorization header and validates it
-// against the provided HMAC secret. Returns http:Unauthorized when the token
-// is missing, malformed, expired or signed with the wrong key; returns ()
-// (nil) on success.
-isolated function validateRuntimeJwt(http:Request request, string hmacSecret) returns http:Unauthorized? {
-    string|error authHeader = request.getHeader("Authorization");
-    if authHeader is error || !authHeader.startsWith("Bearer ") {
-        return <http:Unauthorized>{body: "Missing or malformed Authorization header"};
+
+isolated function extractBearerToken(http:Request request) returns string|error {
+    string authHeader = check request.getHeader("Authorization");
+    if !authHeader.startsWith("Bearer ") {
+        return error("Malformed Authorization header");
     }
+    return authHeader.substring(7);
+}
 
-    string jwtToken = authHeader.substring(7);
+isolated function extractKidFromJwt(string jwtToken) returns string|error {
+    [jwt:Header, jwt:Payload]|jwt:Error decoded = jwt:decode(jwtToken);
+    if decoded is jwt:Error {
+        log:printDebug(string `JWT decode failed: ${decoded.message()}`);
+        return error("Malformed JWT — cannot decode header", decoded);
+    }
+    jwt:Header jwtHeader = decoded[0];
+    string? kid = jwtHeader.kid;
+    if kid is () {
+        return error("JWT header missing 'kid' claim");
+    }
+    log:printDebug(string `Extracted kid=${kid} from JWT header`);
+    return kid;
+}
 
+isolated function validateRuntimeJwtWithSecret(string jwtToken, string hmacSecret) returns http:Unauthorized? {
     jwt:ValidatorConfig validatorConfig = {
         issuer: jwtIssuer,
         audience: jwtAudience,
@@ -143,12 +208,20 @@ isolated function validateRuntimeJwt(http:Request request, string hmacSecret) re
         return <http:Unauthorized>{body: "Invalid or expired token"};
     }
 
-    // Enforce the runtime_agent scope
     anydata scope = validatedPayload["scope"];
     if !(scope is string && scope == "runtime_agent") {
         return <http:Unauthorized>{body: "Insufficient scope — 'runtime_agent' required"};
     }
 
-    return (); // authentication and authorisation passed
+    return ();
+}
+
+// Legacy validator used by delta heartbeat (extracts token from request + validates)
+isolated function validateRuntimeJwt(http:Request request, string hmacSecret) returns http:Unauthorized? {
+    string|error token = extractBearerToken(request);
+    if token is error {
+        return <http:Unauthorized>{body: "Missing or malformed Authorization header"};
+    }
+    return validateRuntimeJwtWithSecret(token, hmacSecret);
 }
 

@@ -243,6 +243,21 @@ public isolated function getComponentIdByName(string componentName) returns stri
     return componentRecords[0].component_id;
 }
 
+// Get component name by component ID
+public isolated function getComponentNameById(string componentId) returns string|error {
+    stream<record {|string name;|}, sql:Error?> componentStream = dbClient->query(`
+        SELECT name FROM components WHERE component_id = ${componentId}
+    `);
+
+    record {|string name;|}[] componentRecords = check from record {|string name;|} component in componentStream
+        select component;
+
+    if componentRecords.length() == 0 {
+        return error(string `Component with ID ${componentId} not found`);
+    }
+    return componentRecords[0].name;
+}
+
 // Get a component by project ID and handler (component name)
 public isolated function getComponentByProjectAndHandler(string projectId, string handler) returns types:Component?|error {
     stream<types:ComponentInDB, sql:Error?> componentStream =
@@ -322,6 +337,14 @@ public isolated function updateComponent(string componentId, string? name, strin
         }
     }
     log:printInfo(string `Successfully updated component ${componentId}`);
+
+    if name is string {
+        error? cascadeErr = updateOrgSecretsComponentName(componentId, name);
+        if cascadeErr is error {
+            log:printError(string `Failed to cascade component name change to org_secrets for ${componentId}`, 'error = cascadeErr);
+        }
+    }
+
     return ();
 }
 
