@@ -57,6 +57,23 @@ isolated function extractUserContext(graphql:Context context) returns types:User
     return check auth:extractUserContextV2(authHeader);
 }
 
+isolated function authorizeEnvironmentAccess(string userId, string environmentId, string action) returns error? {
+    types:Environment env = check storage:getEnvironmentById(environmentId);
+    types:AccessScope scope = {orgUuid: storage:DEFAULT_ORG_ID};
+    log:printDebug(string `authorizeEnvironmentAccess: userId=${userId}, envId=${environmentId}, critical=${env.critical}, action=${action}`);
+
+    if env.critical {
+        if !check auth:hasPermission(userId, auth:PERMISSION_ENVIRONMENT_MANAGE, scope) {
+            return error(string `Access denied: insufficient permissions to ${action} for production environment`);
+        }
+        return;
+    }
+    if !check auth:hasAnyPermission(userId,
+            [auth:PERMISSION_ENVIRONMENT_MANAGE, auth:PERMISSION_ENVIRONMENT_MANAGE_NONPROD], scope) {
+        return error(string `Access denied: insufficient permissions to ${action}`);
+    }
+}
+
 // Helper function to fetch MI loggers from management API
 isolated function fetchMILoggersByRuntime(string runtimeId, types:Runtime runtime) returns types:Logger[]|error {
     // Build management API base URL
@@ -2643,10 +2660,14 @@ service /graphql on graphqlListener {
         types:UserContextV2 userContext = check extractUserContext(context);
         log:printDebug(string `orgSecrets query by user=${userContext.userId}, environmentId=${environmentId ?: "all"}`);
 
-        types:AccessScope scope = {orgUuid: storage:DEFAULT_ORG_ID};
-        if !check auth:hasAnyPermission(userContext.userId,
-                [auth:PERMISSION_ENVIRONMENT_MANAGE, auth:PERMISSION_ENVIRONMENT_MANAGE_NONPROD], scope) {
-            return error("Access denied: insufficient permissions to view org secrets");
+        if environmentId is string {
+            check authorizeEnvironmentAccess(userContext.userId, environmentId, "view org secrets");
+        } else {
+            types:AccessScope scope = {orgUuid: storage:DEFAULT_ORG_ID};
+            if !check auth:hasAnyPermission(userContext.userId,
+                    [auth:PERMISSION_ENVIRONMENT_MANAGE, auth:PERMISSION_ENVIRONMENT_MANAGE_NONPROD], scope) {
+                return error("Access denied: insufficient permissions to view org secrets");
+            }
         }
 
         return check storage:listOrgSecrets(environmentId);
@@ -2673,11 +2694,7 @@ service /graphql on graphqlListener {
         types:UserContextV2 userContext = check extractUserContext(context);
         log:printDebug(string `createOrgSecret by user=${userContext.userId}, environment=${environmentId}`);
 
-        types:AccessScope scope = {orgUuid: storage:DEFAULT_ORG_ID};
-        if !check auth:hasAnyPermission(userContext.userId,
-                [auth:PERMISSION_ENVIRONMENT_MANAGE, auth:PERMISSION_ENVIRONMENT_MANAGE_NONPROD], scope) {
-            return error("Access denied: insufficient permissions to create org secrets");
-        }
+        check authorizeEnvironmentAccess(userContext.userId, environmentId, "create org secrets");
 
         string secret = check storage:createOrgSecret(environmentId, userContext.userId);
         log:printInfo(string `Org secret created for environment=${environmentId}`, userId = userContext.userId);
@@ -2688,11 +2705,8 @@ service /graphql on graphqlListener {
         types:UserContextV2 userContext = check extractUserContext(context);
         log:printDebug(string `revokeOrgSecret by user=${userContext.userId}, keyId=${keyId}`);
 
-        types:AccessScope scope = {orgUuid: storage:DEFAULT_ORG_ID};
-        if !check auth:hasAnyPermission(userContext.userId,
-                [auth:PERMISSION_ENVIRONMENT_MANAGE, auth:PERMISSION_ENVIRONMENT_MANAGE_NONPROD], scope) {
-            return error("Access denied: insufficient permissions to revoke org secrets");
-        }
+        types:OrgSecret secret = check storage:lookupOrgSecretByKeyId(keyId);
+        check authorizeEnvironmentAccess(userContext.userId, secret.environmentId, "revoke org secrets");
 
         check storage:revokeOrgSecret(keyId);
         log:printInfo(string `Org secret revoked keyId=${keyId}`, userId = userContext.userId);
