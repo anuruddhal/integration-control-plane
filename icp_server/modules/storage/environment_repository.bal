@@ -316,54 +316,6 @@ public isolated function deleteEnvironment(string environmentId) returns error? 
 }
 
 
-// Resolve the JWT HMAC secret for a given runtime ID.
-// First tries the M2 path: runtimes.key_id -> org_secrets.key_material.
-// Falls back to the legacy path: runtimes -> component_environment_secrets.
-public isolated function resolveRuntimeJwtSecretByRuntimeId(string runtimeId) returns string|error {
-    log:printDebug(string `resolveRuntimeJwtSecretByRuntimeId: runtimeId=${runtimeId}`);
-
-    // M2 path: look up via org_secrets using the runtime's key_id
-    stream<record {|string? key_material;|}, sql:Error?> orgStream =
-        dbClient->query(`
-            SELECT os.key_material
-            FROM org_secrets os
-            JOIN runtimes r ON os.key_id = r.key_id
-            WHERE r.runtime_id = ${runtimeId}
-        `);
-    record {|string? key_material;|}[] orgRows = check from record {|string? key_material;|} r in orgStream select r;
-
-    if orgRows.length() > 0 {
-        string? material = orgRows[0].key_material;
-        if material is string && material.length() > 0 {
-            log:printDebug(string `resolveRuntimeJwtSecretByRuntimeId: using org_secret for runtime=${runtimeId}`);
-            return material;
-        }
-    }
-
-    // Legacy path: component_environment_secrets
-    stream<record {|string? jwt_hmac_secret;|}, sql:Error?> secretStream =
-        dbClient->query(`
-            SELECT ces.jwt_hmac_secret
-            FROM component_environment_secrets ces
-            JOIN runtimes r ON ces.component_id = r.component_id
-                           AND ces.environment_id = r.environment_id
-            WHERE r.runtime_id = ${runtimeId}
-        `);
-    record {|string? jwt_hmac_secret;|}[] records = check from record {|string? jwt_hmac_secret;|} r in secretStream
-        select r;
-
-    if records.length() > 0 {
-        string? secret = records[0].jwt_hmac_secret;
-        if secret is string && secret.length() > 0 {
-            log:printDebug(string `resolveRuntimeJwtSecretByRuntimeId: using component_environment_secret for runtime=${runtimeId}`);
-            return secret;
-        }
-    }
-
-    return error(string `No JWT secret provisioned for runtime '${runtimeId}'`);
-}
-
-
 // Generate (or rotate) the JWT HMAC secret for a component+environment pair.
 // Two UUIDs are concatenated to produce a 72-character secret — well above
 // the 32-character minimum required for HS256 signing.

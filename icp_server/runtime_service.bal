@@ -35,10 +35,8 @@ listener http:Listener httpListener = new (serverPort,
 );
 
 // Runtime management service
-// Per-environment JWT validation: the @http:ServiceConfig auth block is intentionally
-// removed so that each heartbeat request can be validated against its own environment's
-// HMAC secret (stored in the database). validateRuntimeJwt() is called explicitly at
-// the start of every resource function.
+// No @http:ServiceConfig auth block — each request is validated via kid-based
+// JWT lookup (extractKidFromJwt → lookupOrgSecretByKeyId → validateRuntimeJwtWithSecret).
 service /icp on httpListener {
 
     function init() {
@@ -135,33 +133,52 @@ service /icp on httpListener {
         }
     }
 
-    // Process delta heartbeat from runtime
+    // Process delta heartbeat from runtime (M3: kid-based JWT validation)
     isolated resource function post deltaHeartbeat(http:Request request, @http:Payload types:DeltaHeartbeat deltaHeartbeat)
-            returns types:HeartbeatResponse|http:Unauthorized|error? {
+            returns types:HeartbeatResponse|http:Unauthorized|http:Conflict|error? {
         do {
-            // Resolve the HMAC secret via runtime ID (environment is not in the delta payload)
-            // and validate the bearer JWT before processing.
-            string jwtSecret = check storage:resolveRuntimeJwtSecretByRuntimeId(deltaHeartbeat.runtime);
-            http:Unauthorized? authResult = validateRuntimeJwt(request, jwtSecret);
+            string|error jwtToken = extractBearerToken(request);
+            if jwtToken is error {
+                log:printWarn(string `Delta heartbeat rejected — missing bearer token for runtime: ${deltaHeartbeat.runtime}`);
+                return <http:Unauthorized>{body: "Missing or malformed Authorization header"};
+            }
+
+            string kid = check extractKidFromJwt(jwtToken);
+            log:printDebug(string `Delta heartbeat from runtime=${deltaHeartbeat.runtime}, kid=${kid}`);
+
+            types:OrgSecret orgSecret = check storage:lookupOrgSecretByKeyId(kid);
+            http:Unauthorized? authResult = validateRuntimeJwtWithSecret(jwtToken, orgSecret.keyMaterial);
             if authResult is http:Unauthorized {
-                log:printWarn(string `Delta heartbeat rejected — invalid JWT for runtime: ${deltaHeartbeat.runtime}`);
+                log:printWarn(string `Delta heartbeat rejected — invalid JWT for runtime: ${deltaHeartbeat.runtime}, kid=${kid}`);
                 return authResult;
             }
 
-            // Process delta heartbeat using the repository
+            // Unbound key — delta has no component/environment info to bind with
+            if orgSecret.componentId is () {
+                log:printInfo(string `Delta heartbeat: kid=${kid} is unbound, requesting full heartbeat from runtime=${deltaHeartbeat.runtime}`);
+                return <types:HeartbeatResponse>{acknowledged: false, fullHeartbeatRequired: true, commands: []};
+            }
+
+            // Bound key — verify runtime's component+environment matches the key's binding
+            types:RuntimeTypeRecord? runtimeInfo = check storage:getRuntimeTypeById(deltaHeartbeat.runtime);
+            if runtimeInfo is () {
+                log:printWarn(string `Delta heartbeat rejected — runtime=${deltaHeartbeat.runtime} not found`);
+                return <types:HeartbeatResponse>{acknowledged: false, fullHeartbeatRequired: true, commands: []};
+            }
+            if runtimeInfo.componentId != orgSecret.componentId || runtimeInfo.environmentId != orgSecret.environmentId {
+                log:printWarn(string `Delta heartbeat rejected — binding mismatch for kid=${kid}: ` +
+                    string `runtime component=${runtimeInfo.componentId}/env=${runtimeInfo.environmentId}, ` +
+                    string `key component=${orgSecret.componentId ?: "?"}/env=${orgSecret.environmentId}`);
+                return <http:Conflict>{body: string `Binding mismatch: key ID '${kid}' does not match this runtime's component/environment`};
+            }
+
             types:HeartbeatResponse heartbeatResponse = check storage:processDeltaHeartbeat(deltaHeartbeat);
-            log:printInfo(string `Delta heartbeat processed successfully for ${deltaHeartbeat.runtime}`);
+            log:printInfo(string `Delta heartbeat processed for runtime=${deltaHeartbeat.runtime}, kid=${kid}`);
             return heartbeatResponse;
 
         } on fail error e {
-            // Return error response
-            log:printError("Failed to process delta heartbeat", e);
-            types:HeartbeatResponse errorResponse = {
-                acknowledged: false,
-                fullHeartbeatRequired: true,
-                commands: []
-            };
-            return errorResponse;
+            log:printError("Failed to process delta heartbeat", 'error = e);
+            return <types:HeartbeatResponse>{acknowledged: false, fullHeartbeatRequired: true, commands: []};
         }
     }
 
@@ -215,13 +232,3 @@ isolated function validateRuntimeJwtWithSecret(string jwtToken, string hmacSecre
 
     return ();
 }
-
-// Legacy validator used by delta heartbeat (extracts token from request + validates)
-isolated function validateRuntimeJwt(http:Request request, string hmacSecret) returns http:Unauthorized? {
-    string|error token = extractBearerToken(request);
-    if token is error {
-        return <http:Unauthorized>{body: "Missing or malformed Authorization header"};
-    }
-    return validateRuntimeJwtWithSecret(token, hmacSecret);
-}
-

@@ -1279,11 +1279,10 @@ public isolated function sendArtifactTracingChange(types:Runtime runtime, string
     return;
 }
 
-// Helper: generate HMAC JWT used to call a specific runtime's management API.
-// Resolves the per-component-per-environment secret stored in component_environment_secrets
-// via resolveRuntimeJwtSecretByRuntimeId so each runtime is authenticated with its own key.
+// Issue an HMAC JWT for calling a runtime's management API.
+// Resolves the signing secret via runtimes.key_id → org_secrets.key_material.
 public isolated function issueRuntimeHmacToken(string runtimeId) returns string|error {
-    string hmacSecret = check resolveRuntimeJwtSecretByRuntimeId(runtimeId);
+    string hmacSecret = check resolveKeyMaterialByRuntimeId(runtimeId);
     jwt:IssuerConfig issConfig = {
         username: "icp-artifact-fetcher",
         issuer: jwtIssuer,

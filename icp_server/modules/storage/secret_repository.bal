@@ -316,6 +316,40 @@ public isolated function updateOrgSecretsComponentName(string componentId, strin
     log:printInfo(string `updateOrgSecretsComponentName: updated ${result.affectedRowCount ?: 0} rows for componentId=${componentId}`);
 }
 
+// Resolve the HMAC key material for a runtime via runtimes.key_id → org_secrets.key_material.
+// Returns error if the runtime has no key_id (hasn't sent a full heartbeat yet).
+public isolated function resolveKeyMaterialByRuntimeId(string runtimeId) returns string|error {
+    log:printDebug(string `resolveKeyMaterialByRuntimeId: runtimeId=${runtimeId}`);
+
+    stream<record {|string? key_id; string? key_material;|}, sql:Error?> s =
+        dbClient->query(`
+            SELECT r.key_id, os.key_material
+            FROM runtimes r
+            LEFT JOIN org_secrets os ON os.key_id = r.key_id
+            WHERE r.runtime_id = ${runtimeId}
+        `);
+    record {|string? key_id; string? key_material;|}[] rows = check from var r in s select r;
+
+    if rows.length() == 0 {
+        return error(string `Runtime '${runtimeId}' not found`);
+    }
+
+    string? keyId = rows[0].key_id;
+    if keyId is () {
+        log:printDebug(string `resolveKeyMaterialByRuntimeId: runtime=${runtimeId} has no key_id yet`);
+        return error(string `Runtime '${runtimeId}' has no key ID — full heartbeat required first`);
+    }
+
+    string? material = rows[0].key_material;
+    if material is () || material.length() == 0 {
+        log:printWarn(string `resolveKeyMaterialByRuntimeId: key_id=${keyId} found but no key_material for runtime=${runtimeId}`);
+        return error(string `Key material missing for key ID '${keyId}'`);
+    }
+
+    log:printDebug(string `resolveKeyMaterialByRuntimeId: resolved key_id=${keyId} for runtime=${runtimeId}`);
+    return material;
+}
+
 public isolated function updateOrgSecretsProjectHandler(string projectId, string newHandler) returns error? {
     log:printDebug(string `updateOrgSecretsProjectHandler: projectId=${projectId}, newHandler=${newHandler}`);
 
