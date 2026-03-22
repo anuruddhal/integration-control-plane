@@ -120,24 +120,51 @@ public isolated function listOrgSecrets(string? environmentId = ()) returns type
 }
 
 // Revoke (delete) an org secret by key ID.
+// This is the ONLY correct way to delete an org_secrets row. MSSQL uses
+// ON DELETE NO ACTION for runtimes.key_id (multiple cascade path restriction),
+// so the app layer must detach runtimes before deleting the secret.
+// All code paths that remove secrets — including component deletion — must
+// go through this function or revokeAllSecretsForComponent().
 public isolated function revokeOrgSecret(string keyId) returns error? {
     log:printDebug(string `revokeOrgSecret: keyId=${keyId}`);
 
-    sql:ExecutionResult|sql:Error result = dbClient->execute(
-        `DELETE FROM org_secrets WHERE key_id = ${keyId}`
-    );
+    transaction {
+        _ = check dbClient->execute(
+            `UPDATE runtimes SET key_id = NULL WHERE key_id = ${keyId}`
+        );
 
-    if result is sql:Error {
-        log:printError(string `revokeOrgSecret: delete failed for keyId=${keyId}`, 'error = result);
-        return error("Failed to revoke org secret", result);
-    }
+        sql:ExecutionResult result = check dbClient->execute(
+            `DELETE FROM org_secrets WHERE key_id = ${keyId}`
+        );
 
-    if result is sql:ExecutionResult && result.affectedRowCount == 0 {
-        log:printWarn(string `revokeOrgSecret: keyId=${keyId} not found`);
-        return error(string `Secret with key ID '${keyId}' not found`);
+        if result.affectedRowCount == 0 {
+            log:printWarn(string `revokeOrgSecret: keyId=${keyId} not found`);
+            fail error(string `Secret with key ID '${keyId}' not found`);
+        }
+
+        check commit;
+    } on fail error e {
+        log:printError(string `revokeOrgSecret: failed for keyId=${keyId}`, 'error = e);
+        return e;
     }
 
     log:printInfo(string `revokeOrgSecret: revoked keyId=${keyId}`);
+}
+
+// Revoke all org secrets bound to a component. Used by deleteComponent()
+// to clean up before the component row is removed.
+public isolated function revokeAllSecretsForComponent(string componentId) returns error? {
+    log:printDebug(string `revokeAllSecretsForComponent: componentId=${componentId}`);
+
+    stream<record {|string key_id;|}, sql:Error?> s =
+        dbClient->query(`SELECT key_id FROM org_secrets WHERE component_id = ${componentId}`);
+    string[] keyIds = check from var r in s select r.key_id;
+
+    foreach string kid in keyIds {
+        check revokeOrgSecret(kid);
+    }
+
+    log:printInfo(string `revokeAllSecretsForComponent: revoked ${keyIds.length()} secrets for componentId=${componentId}`);
 }
 
 // ---------------------------------------------------------------------------

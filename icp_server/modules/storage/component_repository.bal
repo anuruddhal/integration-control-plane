@@ -288,7 +288,10 @@ public isolated function getComponentByProjectAndHandler(string projectId, strin
 
 // Delete a component by ID
 public isolated function deleteComponent(string componentId) returns error? {
-    // Explicitly delete dependent mi_runtime_control_commands rows first.
+    // Revoke all org secrets bound to this component (detaches runtimes + deletes secrets).
+    check revokeAllSecretsForComponent(componentId);
+
+    // Explicitly delete dependent mi_runtime_control_commands rows.
     // Required for MSSQL where ON DELETE CASCADE is not used (multiple cascade path restriction);
     // safe to do unconditionally for all other dialects as well.
     sql:ParameterizedQuery deleteCmdQuery = `DELETE FROM mi_runtime_control_commands WHERE component_id = ${componentId}`;

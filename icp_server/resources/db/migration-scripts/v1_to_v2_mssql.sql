@@ -283,12 +283,14 @@ SET @sql = N'
         created_by      CHAR(36)      NULL,
         PRIMARY KEY (key_id),
         CONSTRAINT fk_org_secrets_project     FOREIGN KEY (project_id)     REFERENCES [' + @new_main_db + N'].[dbo].[projects]      (project_id)      ON DELETE CASCADE,
+        -- CASCADE/SET NULL blocked: MSSQL multiple-cascade-path. App layer handles cleanup.
         CONSTRAINT fk_org_secrets_component   FOREIGN KEY (component_id)   REFERENCES [' + @new_main_db + N'].[dbo].[components]    (component_id)    ON DELETE NO ACTION,
-        CONSTRAINT fk_org_secrets_environment FOREIGN KEY (environment_id) REFERENCES [' + @new_main_db + N'].[dbo].[environments]  (environment_id)  ON DELETE NO ACTION,
-        CONSTRAINT fk_org_secrets_created_by  FOREIGN KEY (created_by)     REFERENCES [' + @new_main_db + N'].[dbo].[users]          (user_id)         ON DELETE NO ACTION
+        CONSTRAINT fk_org_secrets_environment FOREIGN KEY (environment_id) REFERENCES [' + @new_main_db + N'].[dbo].[environments]  (environment_id)  ON DELETE CASCADE,
+        CONSTRAINT fk_org_secrets_created_by  FOREIGN KEY (created_by)     REFERENCES [' + @new_main_db + N'].[dbo].[users]          (user_id)         ON DELETE SET NULL
     );
     CREATE INDEX idx_org_secrets_environment ON [' + @new_main_db + N'].[dbo].[org_secrets] (environment_id);
     ALTER TABLE [' + @new_main_db + N'].[dbo].[runtimes] ADD key_id VARCHAR(16) NULL;
+    -- SET NULL blocked: MSSQL multiple-cascade-path. App layer handles cleanup.
     ALTER TABLE [' + @new_main_db + N'].[dbo].[runtimes]
         ADD CONSTRAINT fk_runtime_key_id FOREIGN KEY (key_id)
             REFERENCES [' + @new_main_db + N'].[dbo].[org_secrets] (key_id) ON DELETE NO ACTION;
