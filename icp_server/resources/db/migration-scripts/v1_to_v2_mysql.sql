@@ -272,29 +272,47 @@ DEALLOCATE PREPARE stmt;
 SELECT CONCAT(ROW_COUNT(), ' user(s) assigned to Developers') AS status;
 
 -- ============================================================================
--- STEP 3c — Ensure component_environment_secrets table exists
--- This table was introduced in ICP v2; upgraded databases may not have it yet.
+-- STEP 3c — Create org_secrets table and add key_id column to runtimes
 -- ============================================================================
 
-SELECT 'STEP 3c: Ensuring component_environment_secrets table ...' AS status;
+SELECT 'STEP 3c: Creating org_secrets table ...' AS status;
 
 SET @sql = CONCAT('
-    CREATE TABLE IF NOT EXISTS `', @new_main_db, '`.component_environment_secrets (
-        component_id   CHAR(36)     NOT NULL,
-        environment_id CHAR(36)     NOT NULL,
-        jwt_hmac_secret VARCHAR(256) NOT NULL,
-        created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (component_id, environment_id),
-        CONSTRAINT fk_ces_component   FOREIGN KEY (component_id)   REFERENCES `', @new_main_db, '`.components   (component_id)   ON DELETE CASCADE,
-        CONSTRAINT fk_ces_environment FOREIGN KEY (environment_id) REFERENCES `', @new_main_db, '`.environments (environment_id) ON DELETE CASCADE
+    CREATE TABLE `', @new_main_db, '`.org_secrets (
+        key_id          VARCHAR(16)  NOT NULL,
+        environment_id  CHAR(36)     NOT NULL,
+        key_material    VARCHAR(256) NOT NULL,
+        project_id      CHAR(36)     NULL,
+        component_id    CHAR(36)     NULL,
+        project_handler VARCHAR(255) NULL,
+        component_name  VARCHAR(255) NULL,
+        runtime_type    VARCHAR(8)   NULL,
+        bound_at        TIMESTAMP    NULL,
+        created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_by      CHAR(36)     NULL,
+        PRIMARY KEY (key_id),
+        CONSTRAINT fk_org_secrets_project     FOREIGN KEY (project_id)     REFERENCES `', @new_main_db, '`.projects      (project_id)      ON DELETE CASCADE,
+        CONSTRAINT fk_org_secrets_component   FOREIGN KEY (component_id)   REFERENCES `', @new_main_db, '`.components    (component_id)    ON DELETE CASCADE,
+        CONSTRAINT fk_org_secrets_environment FOREIGN KEY (environment_id) REFERENCES `', @new_main_db, '`.environments  (environment_id)  ON DELETE CASCADE,
+        CONSTRAINT fk_org_secrets_created_by  FOREIGN KEY (created_by)     REFERENCES `', @new_main_db, '`.users          (user_id)         ON DELETE SET NULL,
+        INDEX idx_org_secrets_environment (environment_id)
     ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci
 ');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-SELECT 'component_environment_secrets table ensured.' AS status;
+SET @sql = CONCAT('
+    ALTER TABLE `', @new_main_db, '`.runtimes
+        ADD COLUMN key_id VARCHAR(16) NULL,
+        ADD CONSTRAINT fk_runtime_key_id FOREIGN KEY (key_id)
+            REFERENCES `', @new_main_db, '`.org_secrets (key_id) ON DELETE SET NULL
+');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SELECT 'org_secrets table and runtimes.key_id created.' AS status;
 
 -- ============================================================================
 -- STEP 4 — Summary report

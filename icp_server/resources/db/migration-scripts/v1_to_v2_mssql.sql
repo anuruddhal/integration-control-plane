@@ -263,64 +263,38 @@ EXEC sp_executesql @sql;
 PRINT 'Assigned to Developers: ' + CAST(@@ROWCOUNT AS NVARCHAR);
 
 -- ============================================================================
--- STEP 3c — Ensure component_environment_secrets table exists
--- This table was introduced in ICP v2; upgraded databases may not have it yet.
+-- STEP 3c — Create org_secrets table and add key_id column to runtimes
 -- ============================================================================
 
-PRINT 'STEP 3c: Ensuring component_environment_secrets table ...';
+PRINT 'STEP 3c: Creating org_secrets table ...';
 
 SET @sql = N'
-    IF NOT EXISTS (
-        SELECT 1 FROM [' + @new_main_db + N'].[sys].[objects]
-        WHERE name = N''component_environment_secrets'' AND type = ''U''
-    )
-    BEGIN
-        CREATE TABLE [' + @new_main_db + N'].[dbo].[component_environment_secrets] (
-            component_id    CHAR(36)      NOT NULL,
-            environment_id  CHAR(36)      NOT NULL,
-            jwt_hmac_secret NVARCHAR(256) NOT NULL,
-            created_at      DATETIME2     NOT NULL DEFAULT GETDATE(),
-            updated_at      DATETIME2     NOT NULL DEFAULT GETDATE(),
-            PRIMARY KEY (component_id, environment_id),
-            CONSTRAINT fk_ces_component   FOREIGN KEY (component_id)
-                REFERENCES [' + @new_main_db + N'].[dbo].[components]   (component_id)   ON DELETE CASCADE,
-            CONSTRAINT fk_ces_environment FOREIGN KEY (environment_id)
-                REFERENCES [' + @new_main_db + N'].[dbo].[environments] (environment_id) ON DELETE NO ACTION
-        )
-    END
+    CREATE TABLE [' + @new_main_db + N'].[dbo].[org_secrets] (
+        key_id          VARCHAR(16)   NOT NULL,
+        environment_id  CHAR(36)      NOT NULL,
+        key_material    NVARCHAR(256) NOT NULL,
+        project_id      CHAR(36)      NULL,
+        component_id    CHAR(36)      NULL,
+        project_handler NVARCHAR(255) NULL,
+        component_name  NVARCHAR(255) NULL,
+        runtime_type    NVARCHAR(8)   NULL CHECK (runtime_type IN (''MI'', ''BI'')),
+        bound_at        DATETIME2     NULL,
+        created_at      DATETIME2     NOT NULL DEFAULT GETDATE(),
+        created_by      CHAR(36)      NULL,
+        PRIMARY KEY (key_id),
+        CONSTRAINT fk_org_secrets_project     FOREIGN KEY (project_id)     REFERENCES [' + @new_main_db + N'].[dbo].[projects]      (project_id)      ON DELETE CASCADE,
+        CONSTRAINT fk_org_secrets_component   FOREIGN KEY (component_id)   REFERENCES [' + @new_main_db + N'].[dbo].[components]    (component_id)    ON DELETE NO ACTION,
+        CONSTRAINT fk_org_secrets_environment FOREIGN KEY (environment_id) REFERENCES [' + @new_main_db + N'].[dbo].[environments]  (environment_id)  ON DELETE NO ACTION,
+        CONSTRAINT fk_org_secrets_created_by  FOREIGN KEY (created_by)     REFERENCES [' + @new_main_db + N'].[dbo].[users]          (user_id)         ON DELETE NO ACTION
+    );
+    CREATE INDEX idx_org_secrets_environment ON [' + @new_main_db + N'].[dbo].[org_secrets] (environment_id);
+    ALTER TABLE [' + @new_main_db + N'].[dbo].[runtimes] ADD key_id VARCHAR(16) NULL;
+    ALTER TABLE [' + @new_main_db + N'].[dbo].[runtimes]
+        ADD CONSTRAINT fk_runtime_key_id FOREIGN KEY (key_id)
+            REFERENCES [' + @new_main_db + N'].[dbo].[org_secrets] (key_id) ON DELETE NO ACTION;
 ';
 EXEC sp_executesql @sql;
-PRINT 'component_environment_secrets table ensured.';
-
--- Create the updated_at trigger in the target database context.
--- MSSQL has no ON UPDATE equivalent; a trigger is required.
--- EXEC [db].sys.sp_executesql runs the batch inside the target database so
--- CREATE TRIGGER resolves to the correct schema without a USE statement.
-SET @sql = N'
-    IF NOT EXISTS (
-        SELECT 1 FROM [' + @new_main_db + N'].[sys].[triggers]
-        WHERE name = N''trg_component_environment_secrets_updated_at''
-    )
-    BEGIN
-        EXEC [' + @new_main_db + N'].sys.sp_executesql N''
-            CREATE TRIGGER trg_component_environment_secrets_updated_at
-            ON dbo.component_environment_secrets
-            AFTER UPDATE
-            AS
-            BEGIN
-                SET NOCOUNT ON;
-                UPDATE ces
-                SET updated_at = GETDATE()
-                FROM dbo.component_environment_secrets ces
-                INNER JOIN inserted i
-                    ON ces.component_id = i.component_id
-                   AND ces.environment_id = i.environment_id;
-            END
-        ''
-    END
-';
-EXEC sp_executesql @sql;
-PRINT 'trg_component_environment_secrets_updated_at trigger ensured.';
+PRINT 'org_secrets table and runtimes.key_id created.';
 
 -- ============================================================================
 -- STEP 4 — Summary report
