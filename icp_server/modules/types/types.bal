@@ -1721,6 +1721,23 @@ public type OrgSecretListEntry record {|
     string? createdBy;
 |};
 
+public type BoundSecretRuntime record {|
+    string runtimeId;
+    string status;
+|};
+
+public type BoundSecretEntry record {|
+    string keyId;
+    string createdAt;
+    BoundSecretRuntime[] runtimes;
+|};
+
+public type DeleteRuntimeResult record {|
+    boolean deleted;
+    string? orphanedKeyId;
+    boolean secretRevoked;
+|};
+
 public type ComponentInDB record {
     string component_id;
     string project_id;

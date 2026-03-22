@@ -415,7 +415,7 @@ export default function OrgRuntimes(_scope: OrgScope): JSX.Element {
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setDeleting(null)}>Cancel</Button>
-            <Button variant="contained" color="error" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(deleting.runtimeId, { onSuccess: () => setDeleting(null) })}>
+            <Button variant="contained" color="error" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate({ runtimeId: deleting.runtimeId }, { onSuccess: () => setDeleting(null) })}>
               Delete
             </Button>
           </DialogActions>

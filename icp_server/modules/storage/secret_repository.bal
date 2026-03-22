@@ -350,6 +350,69 @@ public isolated function resolveKeyMaterialByRuntimeId(string runtimeId) returns
     return material;
 }
 
+// List bound secrets for a component+environment, with associated runtimes.
+// Single JOIN query to avoid N+1.
+public isolated function listBoundSecrets(string componentId, string environmentId) returns types:BoundSecretEntry[]|error {
+    log:printDebug(string `listBoundSecrets: componentId=${componentId}, environmentId=${environmentId}`);
+
+    stream<record {|string key_id; string created_at; string? runtime_id; string? status;|}, sql:Error?> s =
+        dbClient->query(`
+            SELECT os.key_id, os.created_at, r.runtime_id, r.status
+            FROM org_secrets os
+            LEFT JOIN runtimes r ON r.key_id = os.key_id
+            WHERE os.component_id = ${componentId} AND os.environment_id = ${environmentId}
+            ORDER BY os.created_at DESC, r.runtime_id
+        `);
+    record {|string key_id; string created_at; string? runtime_id; string? status;|}[] rows =
+        check from var r in s select r;
+
+    log:printDebug(string `listBoundSecrets: fetched ${rows.length()} joined rows`);
+
+    // Group rows by key_id, preserving insertion order.
+    map<types:BoundSecretEntry> byKey = {};
+    string[] keyOrder = [];
+    foreach var row in rows {
+        if !byKey.hasKey(row.key_id) {
+            byKey[row.key_id] = {keyId: row.key_id, createdAt: row.created_at, runtimes: []};
+            keyOrder.push(row.key_id);
+        }
+        if row.runtime_id is string {
+            byKey.get(row.key_id).runtimes.push({runtimeId: <string>row.runtime_id, status: <string>row.status});
+        }
+    }
+
+    types:BoundSecretEntry[] entries = from var k in keyOrder select byKey.get(k);
+    log:printDebug(string `listBoundSecrets: returning ${entries.length()} entries`);
+    return entries;
+}
+
+// Get the key_id for a runtime (null if none bound yet).
+public isolated function getKeyIdByRuntimeId(string runtimeId) returns string?|error {
+    log:printDebug(string `getKeyIdByRuntimeId: runtimeId=${runtimeId}`);
+
+    stream<record {|string? key_id;|}, sql:Error?> s =
+        dbClient->query(`SELECT key_id FROM runtimes WHERE runtime_id = ${runtimeId}`);
+    record {|string? key_id;|}[] rows = check from var r in s select r;
+
+    if rows.length() == 0 {
+        return error(string `Runtime '${runtimeId}' not found`);
+    }
+    return rows[0].key_id;
+}
+
+// Count how many runtimes reference a given key_id.
+public isolated function countRuntimesByKeyId(string keyId) returns int|error {
+    log:printDebug(string `countRuntimesByKeyId: keyId=${keyId}`);
+
+    stream<record {|int cnt;|}, sql:Error?> s =
+        dbClient->query(`SELECT COUNT(*) AS cnt FROM runtimes WHERE key_id = ${keyId}`);
+    record {|int cnt;|}[] rows = check from var r in s select r;
+    int count = rows[0].cnt;
+
+    log:printDebug(string `countRuntimesByKeyId: keyId=${keyId}, count=${count}`);
+    return count;
+}
+
 public isolated function updateOrgSecretsProjectHandler(string projectId, string newHandler) returns error? {
     log:printDebug(string `updateOrgSecretsProjectHandler: projectId=${projectId}, newHandler=${newHandler}`);
 

@@ -16,6 +16,7 @@ type Query {
 
   # Org Secret Queries
   orgSecrets(environmentId: String): [OrgSecretListEntry!]!
+  componentSecrets(componentId: String!, environmentId: String!): [BoundSecretEntry!]!
 
   # Environment Queries
   environments(
@@ -148,7 +149,7 @@ type Query {
 # ============================================
 type Mutation {
   # Runtime Mutations
-  deleteRuntime(runtimeId: String!): Boolean!
+  deleteRuntime(runtimeId: String!, revokeSecret: Boolean): DeleteRuntimeResult!
 
   # Environment Mutations
   createEnvironment(environment: EnvironmentInput!): Environment
@@ -733,6 +734,23 @@ type OrgSecretListEntry {
   bound: Boolean!
   createdAt: String!
   createdBy: String
+}
+
+type BoundSecretRuntime {
+  runtimeId: String!
+  status: String!
+}
+
+type BoundSecretEntry {
+  keyId: String!
+  createdAt: String!
+  runtimes: [BoundSecretRuntime!]!
+}
+
+type DeleteRuntimeResult {
+  deleted: Boolean!
+  orphanedKeyId: String
+  secretRevoked: Boolean!
 }
 
 # ============================================

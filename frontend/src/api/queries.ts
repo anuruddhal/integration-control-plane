@@ -249,6 +249,34 @@ const ORG_RUNTIMES_QUERY = `
 
 export { RUNTIMES_QUERY, PROJECT_RUNTIMES_QUERY, ORG_RUNTIMES_QUERY };
 
+// ── Component-level Bound Secrets ──
+
+export interface GqlBoundSecretRuntime {
+  runtimeId: string;
+  status: string;
+}
+
+export interface GqlBoundSecret {
+  keyId: string;
+  createdAt: string;
+  runtimes: GqlBoundSecretRuntime[];
+}
+
+export const COMPONENT_SECRETS_QUERY = `
+  query GetComponentSecrets($componentId: String!, $environmentId: String!) {
+    componentSecrets(componentId: $componentId, environmentId: $environmentId) {
+      keyId, createdAt, runtimes { runtimeId, status }
+    }
+  }`;
+
+export function useComponentSecrets(componentId: string, environmentId: string) {
+  return useQuery({
+    queryKey: ['componentSecrets', componentId, environmentId],
+    queryFn: () => gql<{ componentSecrets: GqlBoundSecret[] }>(COMPONENT_SECRETS_QUERY, { componentId, environmentId }).then((d) => d.componentSecrets),
+    enabled: !!componentId && !!environmentId,
+  });
+}
+
 // ── Org Secrets ──
 
 export interface GqlOrgSecret {

@@ -1494,30 +1494,45 @@ service /graphql on graphqlListener {
     }
 
     // Delete a runtime by ID
-    isolated remote function deleteRuntime(graphql:Context context, string runtimeId) returns boolean|error {
+    isolated remote function deleteRuntime(graphql:Context context, string runtimeId, boolean? revokeSecret = ()) returns types:DeleteRuntimeResult|error {
         types:UserContextV2 userContext = check extractUserContext(context);
+        log:printDebug(string `deleteRuntime: runtimeId=${runtimeId}, revokeSecret=${revokeSecret ?: false}, user=${userContext.userId}`);
 
-        // Fetch the runtime to get its context
         types:Runtime? runtime = check storage:getRuntimeById(runtimeId);
-
         if runtime is () {
             return error("Runtime not found");
         }
 
-        // Build scope from runtime's context
         types:AccessScope scope = auth:buildScopeFromContext(
                 runtime.component.projectId,
                 runtime.component.id,
                 runtime.environment.id
         );
-
-        // Check permission to delete this integration's runtime (mutation = explicit error)
         if !check auth:hasPermission(userContext.userId, auth:PERMISSION_INTEGRATION_MANAGE, scope) {
             return error("Access denied: insufficient permissions to delete runtime");
         }
 
+        // Check if this runtime's secret becomes orphaned after deletion.
+        string? keyId = check storage:getKeyIdByRuntimeId(runtimeId);
+        string? orphanedKeyId = ();
+        if keyId is string {
+            int count = check storage:countRuntimesByKeyId(keyId);
+            if count <= 1 {
+                orphanedKeyId = keyId;
+            }
+        }
+
         check storage:deleteRuntime(runtimeId);
-        return true;
+        log:printInfo(string `deleteRuntime: deleted runtimeId=${runtimeId}`, userId = userContext.userId);
+
+        boolean secretRevoked = false;
+        if revokeSecret == true && orphanedKeyId is string {
+            check storage:revokeOrgSecret(orphanedKeyId);
+            secretRevoked = true;
+            log:printInfo(string `deleteRuntime: also revoked orphaned secret keyId=${orphanedKeyId}`, userId = userContext.userId);
+        }
+
+        return {deleted: true, orphanedKeyId: orphanedKeyId, secretRevoked: secretRevoked};
     }
 
     // Update listener state (enable/disable) by issuing control commands
@@ -2635,6 +2650,23 @@ service /graphql on graphqlListener {
         }
 
         return check storage:listOrgSecrets(environmentId);
+    }
+
+    isolated resource function get componentSecrets(graphql:Context context, string componentId, string environmentId) returns types:BoundSecretEntry[]|error {
+        types:UserContextV2 userContext = check extractUserContext(context);
+        log:printDebug(string `componentSecrets query by user=${userContext.userId}, componentId=${componentId}, environmentId=${environmentId}`);
+
+        types:Component? component = check storage:getComponentById(componentId);
+        if component is () {
+            return error("Integration not found");
+        }
+
+        types:AccessScope scope = auth:buildScopeFromContext(component.projectId, integrationId = componentId, envId = environmentId);
+        if !check auth:hasPermission(userContext.userId, auth:PERMISSION_INTEGRATION_MANAGE, scope) {
+            return error("Access denied: insufficient permissions to view component secrets");
+        }
+
+        return check storage:listBoundSecrets(componentId, environmentId);
     }
 
     isolated remote function createOrgSecret(graphql:Context context, string environmentId) returns string|error {

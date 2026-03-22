@@ -91,16 +91,28 @@ export function useDeleteEnvironment() {
   });
 }
 
+interface DeleteRuntimeResult {
+  deleted: boolean;
+  orphanedKeyId: string | null;
+  secretRevoked: boolean;
+}
+
 const DELETE_RUNTIME = `
-  mutation DeleteRuntime($runtimeId: String!) {
-    deleteRuntime(runtimeId: $runtimeId)
+  mutation DeleteRuntime($runtimeId: String!, $revokeSecret: Boolean) {
+    deleteRuntime(runtimeId: $runtimeId, revokeSecret: $revokeSecret) {
+      deleted, orphanedKeyId, secretRevoked
+    }
   }`;
 
 export function useDeleteRuntime() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (runtimeId: string) => gql<{ deleteRuntime: string }>(DELETE_RUNTIME, { runtimeId }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['runtimes'] }),
+    mutationFn: ({ runtimeId, revokeSecret }: { runtimeId: string; revokeSecret?: boolean }) => gql<{ deleteRuntime: DeleteRuntimeResult }>(DELETE_RUNTIME, { runtimeId, revokeSecret }).then((d) => d.deleteRuntime),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['runtimes'] });
+      qc.invalidateQueries({ queryKey: ['componentSecrets'] });
+      qc.invalidateQueries({ queryKey: ['orgSecrets'] });
+    },
   });
 }
 
@@ -291,7 +303,10 @@ export function useRevokeOrgSecret() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (keyId: string) => gql<{ revokeOrgSecret: boolean }>(REVOKE_ORG_SECRET, { keyId }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['orgSecrets'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orgSecrets'] });
+      qc.invalidateQueries({ queryKey: ['componentSecrets'] });
+    },
   });
 }
 
