@@ -26,6 +26,7 @@ import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
 import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
 import org.wso2.dashboard.security.user.core.common.LoginAuthorizationException;
 import org.wso2.ei.dashboard.core.commons.Constants;
+import org.wso2.ei.dashboard.core.commons.audit.AuditLogger;
 import org.wso2.ei.dashboard.core.commons.auth.JwtUtil;
 import org.wso2.ei.dashboard.core.commons.auth.TokenCache;
 
@@ -47,9 +48,11 @@ public class LoginDelegate {
             if (!UserStoreManagerUtils.isLoginAllowed(resolvedUsername)) {
                 logger.warn(String.format(
                         "User %s denied dashboard access: no allowed login role.", resolvedUsername));
+                AuditLogger.logLogin(resolvedUsername, false);
                 throw new LoginAuthorizationException(Constants.LOGIN_NOT_AUTHORIZED);
             }
             logger.info(String.format("User %s logged in successfully", resolvedUsername));
+            AuditLogger.logLogin(resolvedUsername, true);
             String scope = UserStoreManagerUtils.isAdminUser(resolvedUsername) ? "admin" : "default";
             String accessToken = JwtUtil.generateToken(resolvedUsername, scope);
             storeTokenInCache(accessToken);
@@ -58,6 +61,7 @@ public class LoginDelegate {
         } catch (LoginAuthorizationException e) {
             return Response.status(Status.FORBIDDEN.getStatusCode(), Constants.LOGIN_NOT_AUTHORIZED).build();
         } catch (DashboardUserStoreException e) {
+            AuditLogger.logLogin(username, false);
             return Response.status(Status.UNAUTHORIZED.getStatusCode(), Constants.LOGIN_ERROR).build();
         } catch (Exception e) {
             logger.error("Error logging into dashboard server", e);

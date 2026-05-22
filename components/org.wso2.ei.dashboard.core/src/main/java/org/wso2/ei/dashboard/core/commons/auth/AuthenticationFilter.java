@@ -85,7 +85,7 @@ public class AuthenticationFilter implements ContainerRequestFilter {
             abortWithUnauthorized(requestContext);
             return;
         }
-        String performedBy = extractPerformedBy(token);
+        String performedBy = securityHandler.getSubject(config, token);
         requestContext.setProperty(ACTION_PERFORMED_BY, performedBy);
     }
 
@@ -127,10 +127,6 @@ public class AuthenticationFilter implements ContainerRequestFilter {
 
     private boolean isCookieBasedAuthentication(Map<String, Cookie> cookies) {
         return cookies != null && cookies.get(JWT_COOKIE) != null;
-    }
-
-    private String extractPerformedBy(String token) {
-        return isJWTToken(token) ? JwtUtil.extractSubject(token) : null;
     }
 
     private SecurityHandler getSecurityHandler(ContainerRequestContext requestContext, String token) {

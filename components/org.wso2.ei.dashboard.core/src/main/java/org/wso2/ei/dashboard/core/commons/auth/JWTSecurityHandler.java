@@ -73,6 +73,18 @@ public class JWTSecurityHandler implements SecurityHandler {
         return isUserInAdminGroup(jsonElementPayload, ssoConfig);
     }
 
+    @Override
+    public String getSubject(SSOConfig ssoConfig, String token) {
+
+        try {
+            JsonElement sub = TokenUtils.getParsedToken(token).getAsJsonObject().get("sub");
+            return sub != null ? sub.getAsString() : null;
+        } catch (Exception e) {
+            logger.debug("Could not extract subject from SSO JWT token", e);
+            return null;
+        }
+    }
+
     private boolean isUserInAdminGroup(JsonElement tokenPayload, SSOConfig config) {
 
         JsonArray groupElement = tokenPayload.getAsJsonObject().getAsJsonArray(config.getAdminGroupAttribute());

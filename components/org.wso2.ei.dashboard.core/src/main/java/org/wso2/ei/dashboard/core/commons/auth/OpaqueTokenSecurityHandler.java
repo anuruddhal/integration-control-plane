@@ -49,6 +49,8 @@ public class OpaqueTokenSecurityHandler implements SecurityHandler {
     private static final Logger logger = LogManager.getLogger(OpaqueTokenSecurityHandler.class);
     private static final Cache<String, Boolean> adminClaimMap =
             CacheBuilder.newBuilder().expireAfterWrite(TOKEN_CACHE_TIMEOUT, TimeUnit.MINUTES).build();
+    private static final Cache<String, String> subjectCache =
+            CacheBuilder.newBuilder().expireAfterWrite(TOKEN_CACHE_TIMEOUT, TimeUnit.MINUTES).build();
 
     @Override
     public boolean isAuthenticated(SSOConfig config, String token) {
@@ -69,7 +71,15 @@ public class OpaqueTokenSecurityHandler implements SecurityHandler {
             int httpSc = httpResponse.getStatusLine().getStatusCode();
 
             if (httpSc == HttpStatus.SC_OK) {
-                return HttpUtils.getJsonResponse(httpResponse).get(Constants.ACTIVE).getAsBoolean();
+                JsonObject introspectionResponse = HttpUtils.getJsonResponse(httpResponse);
+                boolean active = introspectionResponse.get(Constants.ACTIVE).getAsBoolean();
+                if (active) {
+                    String subject = extractSubjectFromIntrospection(introspectionResponse);
+                    if (subject != null) {
+                        subjectCache.put(token, subject);
+                    }
+                }
+                return active;
             }
             if (logger.isDebugEnabled()) {
                 logger.error("Error validating the token using introspection endpoint. ",
@@ -169,5 +179,26 @@ public class OpaqueTokenSecurityHandler implements SecurityHandler {
                     + " from well known endpoint. ", e);
         }
 
+    }
+
+    @Override
+    public String getSubject(SSOConfig ssoConfig, String token) {
+
+        return subjectCache.getIfPresent(token);
+    }
+
+    /**
+     * Extracts the subject identifier from an RFC 7662 introspection response.
+     * Checks "sub" first (standard), then "username" (WSO2 IS and some other IdPs).
+     */
+    private String extractSubjectFromIntrospection(JsonObject response) {
+
+        if (response.has("sub") && !response.get("sub").isJsonNull()) {
+            return response.get("sub").getAsString();
+        }
+        if (response.has("username") && !response.get("username").isJsonNull()) {
+            return response.get("username").getAsString();
+        }
+        return null;
     }
 }

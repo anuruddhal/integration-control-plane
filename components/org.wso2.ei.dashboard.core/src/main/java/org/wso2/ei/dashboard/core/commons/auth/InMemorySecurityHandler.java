@@ -46,4 +46,10 @@ public class InMemorySecurityHandler implements SecurityHandler {
         }
         return false;
     }
+
+    @Override
+    public String getSubject(SSOConfig ssoConfig, String token) {
+
+        return JwtUtil.isJWTToken(token) ? JwtUtil.extractSubject(token) : null;
+    }
 }

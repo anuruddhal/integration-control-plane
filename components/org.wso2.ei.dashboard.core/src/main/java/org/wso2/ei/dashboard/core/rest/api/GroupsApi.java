@@ -29,6 +29,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
+import org.wso2.ei.dashboard.core.commons.audit.AuditLogger;
+import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.exception.ManagementApiException;
 import org.wso2.ei.dashboard.core.rest.annotation.Secured;
@@ -128,9 +130,14 @@ public class GroupsApi {
     })
     public Response addLogger(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid LogConfigAddRequest request) throws ManagementApiException {
+            @Valid LogConfigAddRequest request,
+            @Context ContainerRequestContext requestContext) throws ManagementApiException {
         LogConfigDelegate logConfigDelegate = new LogConfigDelegate();
         Ack ack = logConfigDelegate.addLogger(groupId, request);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logLogConfigAdd(performedBy, request.getName(), request.getLevel());
+        }
         ResponseBuilder responseBuilder = Response.ok().entity(ack);
         HttpUtils.setHeaders(responseBuilder);
         return responseBuilder.build();
@@ -148,9 +155,93 @@ public class GroupsApi {
                     content = @Content(schema = @Schema(implementation = Error.class)))})
     public Response updateLogLevel(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid LogConfigUpdateRequest request) throws ManagementApiException {
+            @Valid LogConfigUpdateRequest request,
+            @Context ContainerRequestContext requestContext) throws ManagementApiException {
         LogConfigDelegate logConfigDelegate = new LogConfigDelegate();
         Ack ack = logConfigDelegate.updateLogLevel(groupId, request);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logLogConfigUpdate(performedBy, request.getName(), request.getLevel());
+        }
+        ResponseBuilder responseBuilder = Response.ok().entity(ack);
+        HttpUtils.setHeaders(responseBuilder);
+        return responseBuilder.build();
+    }
+
+    @DELETE
+    @Path("/{group-id}/log-configs")
+    @Produces({"application/json"})
+    @Operation(summary = "Delete logger configuration", description = "Removes a specific logger configuration",
+            tags = {"logConfigs"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Logger deletion status",
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request with empty or null logger name",
+                    content = @Content(schema = @Schema(implementation = Error.class))),
+            @ApiResponse(responseCode = "403", description = "Root logger deletion attempt",
+                    content = @Content(schema = @Schema(implementation = Error.class))),
+            @ApiResponse(responseCode = "500", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
+    public Response deleteLogger(
+            @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
+            @QueryParam("loggerName") @Parameter(description = "Name of the logger to delete") String loggerName,
+            @Context ContainerRequestContext requestContext)
+            throws ManagementApiException {
+
+        if (loggerName == null || loggerName.trim().isEmpty()) {
+            return createErrorResponse("Logger name cannot be empty or null.", Response.Status.BAD_REQUEST);
+        }
+
+        if (Constants.ROOT_LOGGER.equalsIgnoreCase(loggerName.trim())) {
+            return createErrorResponse("Deletion of the root logger is not permitted.", Response.Status.FORBIDDEN);
+        }
+
+        LogConfigDelegate logConfigDelegate = new LogConfigDelegate();
+        Ack ack = logConfigDelegate.deleteLogger(groupId, loggerName);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logLogConfigDelete(performedBy, loggerName);
+        }
+        ResponseBuilder responseBuilder = Response.ok().entity(ack);
+        HttpUtils.setHeaders(responseBuilder);
+        return responseBuilder.build();
+    }
+
+    @DELETE
+    @Path("/{group-id}/log-configs/nodes/{node-id}")
+    @Produces({"application/json"})
+    @Operation(summary = "Delete logger configuration in the given node", description = "Removes a specific logger "
+            + "configuration in the given node", tags = {"logConfigs"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Logger deletion status",
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request with empty or null logger name",
+                    content = @Content(schema = @Schema(implementation = Error.class))),
+            @ApiResponse(responseCode = "403", description = "Root logger deletion attempt",
+                    content = @Content(schema = @Schema(implementation = Error.class))),
+            @ApiResponse(responseCode = "500", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
+    public Response deleteLoggerByNodeId(
+            @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
+            @PathParam("node-id") @Parameter(description = "ID of the node") String nodeId,
+            @QueryParam("loggerName") @Parameter(description = "Name of the logger to delete") String loggerName,
+            @Context ContainerRequestContext requestContext)
+            throws ManagementApiException {
+
+        if (loggerName == null || loggerName.trim().isEmpty()) {
+            return createErrorResponse("Logger name cannot be empty or null.", Response.Status.BAD_REQUEST);
+        }
+
+        if (Constants.ROOT_LOGGER.equalsIgnoreCase(loggerName.trim())) {
+            return createErrorResponse("Deletion of the root logger is not permitted.", Response.Status.FORBIDDEN);
+        }
+
+        LogConfigDelegate logConfigDelegate = new LogConfigDelegate();
+        Ack ack = logConfigDelegate.deleteLoggerByNodeId(groupId, nodeId, loggerName);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logLogConfigDelete(performedBy, loggerName);
+        }
         ResponseBuilder responseBuilder = Response.ok().entity(ack);
         HttpUtils.setHeaders(responseBuilder);
         return responseBuilder.build();
@@ -167,9 +258,12 @@ public class GroupsApi {
     })
     public Response addUser(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid AddUserRequest request) {
+            @Valid AddUserRequest request,
+            @Context ContainerRequestContext requestContext) {
         try {
             Ack ack = UsersDelegate.getDelegate(groupId).addUser(request);
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logUserAdd(performedBy, request.getUserId());
             ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
@@ -255,6 +349,7 @@ public class GroupsApi {
         String performedBy = (String) requestContext.getProperty("performedBy");
         try {
             Ack ack = UsersDelegate.getDelegate(groupId).updateUserPassword(request, accessToken, performedBy);
+            AuditLogger.logUserPasswordUpdate(performedBy, request.getUserId());
             ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
@@ -285,6 +380,7 @@ public class GroupsApi {
         String performedBy = (String) requestContext.getProperty("performedBy");
         try {
             Ack ack = UsersDelegate.getDelegate(groupId).deleteUser(userId, domain, performedBy);
+            AuditLogger.logUserDelete(performedBy, userId);
             ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
@@ -662,9 +758,16 @@ public class GroupsApi {
     })
     public Ack updateSiddhiApp(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid ArtifactUpdateRequest request) throws ManagementApiException {
+            @Valid ArtifactUpdateRequest request,
+            @Context ContainerRequestContext requestContext) throws ManagementApiException {
         SiddhiAppsDelegate siddhiAppsDelegate = new SiddhiAppsDelegate();
-        return siddhiAppsDelegate.updateArtifact(groupId, request);
+        Ack ack = siddhiAppsDelegate.updateArtifact(groupId, request);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logArtifactUpdate(performedBy, "Siddhi App", request.getArtifactName(),
+                    request.getNodeId(), groupId, request.getType());
+        }
+        return ack;
     }
 
     @GET
@@ -1013,9 +1116,14 @@ public class GroupsApi {
     public Response updateLogLevelByNodeId(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @PathParam("node-id") @Parameter(description = "NodeId") String nodeId,
-            @Valid LogConfigUpdateRequest request) throws ManagementApiException {
+            @Valid LogConfigUpdateRequest request,
+            @Context ContainerRequestContext requestContext) throws ManagementApiException {
         LogConfigDelegate logConfigDelegate = new LogConfigDelegate();
         Ack ack = logConfigDelegate.updateLogLevelByNodeId(groupId, nodeId, request);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logLogConfigUpdate(performedBy, request.getName(), request.getLevel());
+        }
         return Response.ok().entity(ack).build();
     }
 
@@ -1424,9 +1532,12 @@ public class GroupsApi {
     })
     public Response addRole(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid AddRoleRequest request) {
+            @Valid AddRoleRequest request,
+            @Context ContainerRequestContext requestContext) {
         try {
             Ack ack = RolesDelegate.getDelegate(groupId).addRole(request);
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logRoleAdd(performedBy, request.getRoleName());
             ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
@@ -1452,9 +1563,13 @@ public class GroupsApi {
     })
     public Response updateRole(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid UpdateRoleRequest request) {
+            @Valid UpdateRoleRequest request,
+            @Context ContainerRequestContext requestContext) {
         try {
             Ack ack = RolesDelegate.getDelegate(groupId).updateRole(request);
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logRoleUpdate(performedBy, request.getUserId(),
+                    String.valueOf(request.getAddedRoles()), String.valueOf(request.getRemovedRoles()));
             ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
@@ -1480,9 +1595,12 @@ public class GroupsApi {
     public Response deleteRole(
             @PathParam("group-id") @Parameter(description = "Group ID") String groupId,
             @PathParam("role-name") @Parameter(description = "Role Name") String roleName,
-            @QueryParam("domain") @Parameter(description = "domain name") String domain) {
+            @QueryParam("domain") @Parameter(description = "domain name") String domain,
+            @Context ContainerRequestContext requestContext) {
         try {
             Ack ack = RolesDelegate.getDelegate(groupId).deleteRole(roleName, domain);
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logRoleDelete(performedBy, roleName);
             ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
@@ -1587,9 +1705,16 @@ public class GroupsApi {
                     content = @Content(schema = @Schema(implementation = Error.class)))})
     public Ack updateApi(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid ArtifactUpdateRequest request) throws ManagementApiException {
+            @Valid ArtifactUpdateRequest request,
+            @Context ContainerRequestContext requestContext) throws ManagementApiException {
         ApisDelegate apisDelegate = new ApisDelegate();
-        return apisDelegate.updateArtifact(groupId, request);
+        Ack ack = apisDelegate.updateArtifact(groupId, request);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logArtifactUpdate(performedBy, "API", request.getArtifactName(),
+                    request.getNodeId(), groupId, request.getType());
+        }
+        return ack;
     }
 
     @PATCH
@@ -1605,9 +1730,16 @@ public class GroupsApi {
     })
     public Ack updateEndpoint(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid ArtifactUpdateRequest request) throws ManagementApiException {
+            @Valid ArtifactUpdateRequest request,
+            @Context ContainerRequestContext requestContext) throws ManagementApiException {
         EndpointsDelegate endpointsDelegate = new EndpointsDelegate();
-        return endpointsDelegate.updateArtifact(groupId, request);
+        Ack ack = endpointsDelegate.updateArtifact(groupId, request);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logArtifactUpdate(performedBy, "Endpoint", request.getArtifactName(),
+                    request.getNodeId(), groupId, request.getType());
+        }
+        return ack;
     }
 
     @PATCH
@@ -1622,9 +1754,16 @@ public class GroupsApi {
                     content = @Content(schema = @Schema(implementation = Error.class)))})
     public Ack updateInboundEp(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid ArtifactUpdateRequest request) throws ManagementApiException {
+            @Valid ArtifactUpdateRequest request,
+            @Context ContainerRequestContext requestContext) throws ManagementApiException {
         InboundEndpointDelegate inboundEndpointDelegate = new InboundEndpointDelegate();
-        return inboundEndpointDelegate.updateArtifact(groupId, request);
+        Ack ack = inboundEndpointDelegate.updateArtifact(groupId, request);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logArtifactUpdate(performedBy, "Inbound Endpoint", request.getArtifactName(),
+                    request.getNodeId(), groupId, request.getType());
+        }
+        return ack;
     }
 
     @PATCH
@@ -1639,10 +1778,16 @@ public class GroupsApi {
                     content = @Content(schema = @Schema(implementation = Error.class)))})
     public Ack updateMessageProcessor(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid ArtifactUpdateRequest request) throws ManagementApiException {
-
+            @Valid ArtifactUpdateRequest request,
+            @Context ContainerRequestContext requestContext) throws ManagementApiException {
         MessageProcessorsDelegate messageProcessorsDelegate = new MessageProcessorsDelegate();
-        return messageProcessorsDelegate.updateArtifact(groupId, request);
+        Ack ack = messageProcessorsDelegate.updateArtifact(groupId, request);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logArtifactUpdate(performedBy, "Message Processor", request.getArtifactName(),
+                    request.getNodeId(), groupId, request.getType());
+        }
+        return ack;
     }
 
     @PATCH
@@ -1658,9 +1803,16 @@ public class GroupsApi {
     })
     public Ack updateProxyService(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid ArtifactUpdateRequest request) throws ManagementApiException {
+            @Valid ArtifactUpdateRequest request,
+            @Context ContainerRequestContext requestContext) throws ManagementApiException {
         ProxyServiceDelegate proxyServiceDelegate = new ProxyServiceDelegate();
-        return proxyServiceDelegate.updateArtifact(groupId, request);
+        Ack ack = proxyServiceDelegate.updateArtifact(groupId, request);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logArtifactUpdate(performedBy, "Proxy Service", request.getArtifactName(),
+                    request.getNodeId(), groupId, request.getType());
+        }
+        return ack;
     }
 
     @PATCH
@@ -1675,9 +1827,15 @@ public class GroupsApi {
                     content = @Content(schema = @Schema(implementation = Error.class)))})
     public Ack updateSequence(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid ArtifactUpdateRequest request) throws ManagementApiException {
-
+            @Valid ArtifactUpdateRequest request,
+            @Context ContainerRequestContext requestContext) throws ManagementApiException {
         SequencesDelegate sequencesDelegate = new SequencesDelegate();
-        return sequencesDelegate.updateArtifact(groupId, request);
+        Ack ack = sequencesDelegate.updateArtifact(groupId, request);
+        if (Constants.SUCCESS_STATUS.equals(ack.getStatus())) {
+            String performedBy = (String) requestContext.getProperty("performedBy");
+            AuditLogger.logArtifactUpdate(performedBy, "Sequence", request.getArtifactName(),
+                    request.getNodeId(), groupId, request.getType());
+        }
+        return ack;
     }
 }

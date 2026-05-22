@@ -20,6 +20,8 @@
 package org.wso2.ei.dashboard.core.rest.delegates.auth;
 
 import org.wso2.ei.dashboard.core.commons.Constants;
+import org.wso2.ei.dashboard.core.commons.audit.AuditLogger;
+import org.wso2.ei.dashboard.core.commons.auth.JwtUtil;
 import org.wso2.ei.dashboard.core.commons.auth.TokenCache;
 
 import javax.ws.rs.core.Response;
@@ -33,7 +35,9 @@ public class LogoutDelegate {
 
     public Response logoutUser(String accessToken) {
         if (!accessToken.isEmpty()) {
+            String username = JwtUtil.isJWTToken(accessToken) ? JwtUtil.extractSubject(accessToken) : null;
             removeTokenFromCache(accessToken);
+            AuditLogger.logLogout(username);
         }
         return Response.ok().header(Constants.COOKIE_HEADER, getTokenCookieHeader(null, 0)).build();
     }
