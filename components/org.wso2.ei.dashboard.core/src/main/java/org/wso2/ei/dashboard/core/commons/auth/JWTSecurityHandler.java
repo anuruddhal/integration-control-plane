@@ -77,8 +77,15 @@ public class JWTSecurityHandler implements SecurityHandler {
     public String getSubject(SSOConfig ssoConfig, String token) {
 
         try {
-            JsonElement sub = TokenUtils.getParsedToken(token).getAsJsonObject().get("sub");
-            return sub != null ? sub.getAsString() : null;
+            com.google.gson.JsonObject payload = TokenUtils.getParsedToken(token).getAsJsonObject();
+            // preferred_username is the human-readable login name; sub may be an opaque UUID (e.g. IS 7.2.0)
+            for (String claim : new String[]{"preferred_username", "username", "sub"}) {
+                JsonElement el = payload.get(claim);
+                if (el != null && !el.isJsonNull()) {
+                    return el.getAsString();
+                }
+            }
+            return null;
         } catch (Exception e) {
             logger.debug("Could not extract subject from SSO JWT token", e);
             return null;

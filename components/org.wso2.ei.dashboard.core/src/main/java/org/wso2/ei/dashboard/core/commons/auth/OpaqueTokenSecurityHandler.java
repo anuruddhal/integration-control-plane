@@ -189,15 +189,15 @@ public class OpaqueTokenSecurityHandler implements SecurityHandler {
 
     /**
      * Extracts the subject identifier from an RFC 7662 introspection response.
-     * Checks "sub" first (standard), then "username" (WSO2 IS and some other IdPs).
+     * Prefers human-readable claims: preferred_username → username → sub.
+     * IS 7.2.0 puts a UUID in "sub" but the readable login name in "username".
      */
     private String extractSubjectFromIntrospection(JsonObject response) {
 
-        if (response.has("sub") && !response.get("sub").isJsonNull()) {
-            return response.get("sub").getAsString();
-        }
-        if (response.has("username") && !response.get("username").isJsonNull()) {
-            return response.get("username").getAsString();
+        for (String claim : new String[]{"preferred_username", "username", "sub"}) {
+            if (response.has(claim) && !response.get(claim).isJsonNull()) {
+                return response.get(claim).getAsString();
+            }
         }
         return null;
     }

@@ -18,7 +18,10 @@
 
 package org.wso2.ei.dashboard.core.commons.auth;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import org.glassfish.jersey.server.ContainerRequest;
+import org.wso2.ei.dashboard.core.commons.audit.AuditLogger;
 import org.wso2.ei.dashboard.core.rest.annotation.Secured;
 import org.wso2.micro.integrator.dashboard.utils.SSOConfig;
 import org.wso2.micro.integrator.dashboard.utils.SSOConstants;
@@ -27,6 +30,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import static org.wso2.ei.dashboard.core.commons.Constants.TOKEN_CACHE_TIMEOUT;
 
 import javax.annotation.Priority;
 import javax.servlet.http.HttpServletRequest;
@@ -53,6 +59,9 @@ public class AuthenticationFilter implements ContainerRequestFilter {
     private static final List<String> ADMIN_ONLY_PATHS = Arrays.asList("/log-configs", "/users", "/roles");
     private static final String MAKE_NON_ADMIN_USERS_READ_ONLY = "make_non_admin_users_read_only";
     private static final String ACTION_PERFORMED_BY = "performedBy";
+    // Tracks SSO Bearer tokens that have already produced a login audit entry (TTL matches token cache)
+    private static final Cache<String, Boolean> SSO_LOGIN_AUDITED =
+            CacheBuilder.newBuilder().expireAfterWrite(TOKEN_CACHE_TIMEOUT, TimeUnit.MINUTES).build();
 
     @Context
     private HttpServletRequest servletRequest;
@@ -87,6 +96,13 @@ public class AuthenticationFilter implements ContainerRequestFilter {
         }
         String performedBy = securityHandler.getSubject(config, token);
         requestContext.setProperty(ACTION_PERFORMED_BY, performedBy);
+
+        // Log SSO logins on first use of each Bearer token (cookie-based = local login, already audited in LoginDelegate)
+        if (isTokenBasedAuthentication(requestContext.getHeaderString(HttpHeaders.AUTHORIZATION))
+                && SSO_LOGIN_AUDITED.getIfPresent(token) == null) {
+            SSO_LOGIN_AUDITED.put(token, Boolean.TRUE);
+            AuditLogger.logLogin(performedBy, true);
+        }
     }
 
     private SSOConfig getSsoConfig() {
