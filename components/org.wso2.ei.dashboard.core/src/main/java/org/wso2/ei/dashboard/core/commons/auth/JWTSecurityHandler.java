@@ -39,6 +39,12 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.text.ParseException;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class implements SecurityHandler to implement the authentication logic for a JWT self contained token.
@@ -46,6 +52,10 @@ import java.text.ParseException;
 public class JWTSecurityHandler implements SecurityHandler {
 
     private static final Logger logger = LogManager.getLogger(JWTSecurityHandler.class);
+    private static final long CLOCK_SKEW_SECONDS = 300;
+    private static final JOSEObjectType ACCESS_TOKEN_JWT_TYPE = new JOSEObjectType("at+jwt");
+    private static final Map<String, JWKSource<SecurityContext>> JWK_SOURCE_CACHE = new ConcurrentHashMap<>();
+    private static final AtomicBoolean PREFERRED_USERNAME_MISSING_WARNED = new AtomicBoolean(false);
 
     @Override
     public boolean isAuthenticated(SSOConfig config, String token) {
@@ -82,6 +92,13 @@ public class JWTSecurityHandler implements SecurityHandler {
             for (String claim : new String[]{"preferred_username", "username", "sub"}) {
                 JsonElement el = payload.get(claim);
                 if (el != null && !el.isJsonNull()) {
+                    if (!"preferred_username".equals(claim)
+                            && PREFERRED_USERNAME_MISSING_WARNED.compareAndSet(false, true)) {
+                        logger.warn("SSO access token does not contain 'preferred_username'. Audit log will use '{}' "
+                                + "instead, which may be an internal UUID on IS 7.2.0+. To fix, add "
+                                + "'preferred_username' to the OIDC application's access token attributes in the IdP.",
+                                claim);
+                    }
                     return el.getAsString();
                 }
             }

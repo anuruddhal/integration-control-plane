@@ -38,6 +38,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.wso2.ei.dashboard.core.commons.Constants.TOKEN_CACHE_TIMEOUT;
 
@@ -51,6 +52,7 @@ public class OpaqueTokenSecurityHandler implements SecurityHandler {
             CacheBuilder.newBuilder().expireAfterWrite(TOKEN_CACHE_TIMEOUT, TimeUnit.MINUTES).build();
     private static final Cache<String, String> subjectCache =
             CacheBuilder.newBuilder().expireAfterWrite(TOKEN_CACHE_TIMEOUT, TimeUnit.MINUTES).build();
+    private static final AtomicBoolean PREFERRED_USERNAME_MISSING_WARNED = new AtomicBoolean(false);
 
     @Override
     public boolean isAuthenticated(SSOConfig config, String token) {
@@ -196,6 +198,13 @@ public class OpaqueTokenSecurityHandler implements SecurityHandler {
 
         for (String claim : new String[]{"preferred_username", "username", "sub"}) {
             if (response.has(claim) && !response.get(claim).isJsonNull()) {
+                if (!"preferred_username".equals(claim)
+                        && PREFERRED_USERNAME_MISSING_WARNED.compareAndSet(false, true)) {
+                    logger.warn("SSO introspection response does not contain 'preferred_username'. Audit log will use "
+                            + "'{}' instead, which may be an internal UUID on IS 7.2.0+. To fix, add "
+                            + "'preferred_username' to the OIDC application's access token attributes in the IdP.",
+                            claim);
+                }
                 return response.get(claim).getAsString();
             }
         }
