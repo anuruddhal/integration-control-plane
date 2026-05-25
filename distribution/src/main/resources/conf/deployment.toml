@@ -60,6 +60,11 @@ make_non_admin_users_read_only = false
 #jwt_issuer = "https://<IS-host>:<port>/oauth2/token"
 #admin_group_attribute = "groups"
 #admin_groups = ["admin"]
+## ID token claim used for the UI header username chip and audit log Initiator.
+## Default: preferred_username.  IS 7.2.0 maps 'sub' to an internal UUID, so
+## ensure the IdP includes 'preferred_username' in both the ID token and the
+## access token (via Access Token Attributes in the OIDC app settings).
+##user_name_attribute = "preferred_username"
 
 # TLS configuration for the HTTPS listener.
 # protocols: accepted TLS versions (default: "TLSv1.2,TLSv1.3"). Any protocol not listed is implicitly excluded.

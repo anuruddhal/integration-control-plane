@@ -1,7 +1,7 @@
 {
 	"sso.enable": false,
 	"sso.storage": "webWorker",
-	"sso.user_name_attribute" : "sub",
+	"sso.user_name_attribute" : "preferred_username",
 	"internal_apis.file_user_store.enable": true,
 	"internal_apis.users": [
 		{
