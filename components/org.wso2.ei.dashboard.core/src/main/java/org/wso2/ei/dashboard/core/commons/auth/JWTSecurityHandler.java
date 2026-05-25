@@ -92,12 +92,11 @@ public class JWTSecurityHandler implements SecurityHandler {
             for (String claim : new String[]{"preferred_username", "username", "sub"}) {
                 JsonElement el = payload.get(claim);
                 if (el != null && !el.isJsonNull()) {
-                    if (!"preferred_username".equals(claim)
-                            && PREFERRED_USERNAME_MISSING_WARNED.compareAndSet(false, true)) {
-                        logger.warn("SSO access token does not contain 'preferred_username'. Audit log will use '{}' "
-                                + "instead, which may be an internal UUID on IS 7.2.0+. To fix, add "
-                                + "'preferred_username' to the OIDC application's access token attributes in the IdP.",
-                                claim);
+                    if ("sub".equals(claim) && PREFERRED_USERNAME_MISSING_WARNED.compareAndSet(false, true)) {
+                        logger.warn("SSO access token contains neither 'preferred_username' nor 'username'. "
+                                + "Audit log will use 'sub' value '{}', which may be an internal UUID on IS 7.2.0+. "
+                                + "To fix, add 'preferred_username' to the OIDC application's access token "
+                                + "attributes in the IdP.", el.getAsString());
                     }
                     return el.getAsString();
                 }

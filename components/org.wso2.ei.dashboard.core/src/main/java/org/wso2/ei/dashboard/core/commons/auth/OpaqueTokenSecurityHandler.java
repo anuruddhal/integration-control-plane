@@ -198,14 +198,14 @@ public class OpaqueTokenSecurityHandler implements SecurityHandler {
 
         for (String claim : new String[]{"preferred_username", "username", "sub"}) {
             if (response.has(claim) && !response.get(claim).isJsonNull()) {
-                if (!"preferred_username".equals(claim)
-                        && PREFERRED_USERNAME_MISSING_WARNED.compareAndSet(false, true)) {
-                    logger.warn("SSO introspection response does not contain 'preferred_username'. Audit log will use "
-                            + "'{}' instead, which may be an internal UUID on IS 7.2.0+. To fix, add "
-                            + "'preferred_username' to the OIDC application's access token attributes in the IdP.",
-                            claim);
+                String value = response.get(claim).getAsString();
+                if ("sub".equals(claim) && PREFERRED_USERNAME_MISSING_WARNED.compareAndSet(false, true)) {
+                    logger.warn("SSO introspection response contains neither 'preferred_username' nor 'username'. "
+                            + "Audit log will use 'sub' value '{}', which may be an internal UUID on IS 7.2.0+. "
+                            + "To fix, add 'preferred_username' to the OIDC application's access token "
+                            + "attributes in the IdP.", value);
                 }
-                return response.get(claim).getAsString();
+                return value;
             }
         }
         return null;
