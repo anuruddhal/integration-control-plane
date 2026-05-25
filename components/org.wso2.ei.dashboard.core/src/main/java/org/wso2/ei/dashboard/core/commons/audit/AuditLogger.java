@@ -43,8 +43,8 @@ public final class AuditLogger {
     // -------------------------------------------------------------------------
 
     public static void logLogin(String username, boolean success) {
-        write(username, "Login", NA,
-                "\"username\" : \"" + username + "\"",
+        write(actor(username), "Login", NA,
+                "\"username\" : \"" + actor(username) + "\"",
                 success ? SUCCESS : FAILURE);
     }
 

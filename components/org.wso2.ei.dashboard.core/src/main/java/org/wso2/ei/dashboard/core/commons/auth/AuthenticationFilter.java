@@ -59,9 +59,11 @@ public class AuthenticationFilter implements ContainerRequestFilter {
     private static final List<String> ADMIN_ONLY_PATHS = Arrays.asList("/log-configs", "/users", "/roles");
     private static final String MAKE_NON_ADMIN_USERS_READ_ONLY = "make_non_admin_users_read_only";
     private static final String ACTION_PERFORMED_BY = "performedBy";
-    // Tracks SSO Bearer tokens that have already produced a login audit entry (TTL matches token cache)
+    // Tracks SSO Bearer tokens that have already produced a login audit entry.
+    // expireAfterAccess: an active session keeps the entry alive; eviction only happens on inactivity,
+    // so a long-lived token does not generate repeated Login entries while it is in continuous use.
     private static final Cache<String, Boolean> SSO_LOGIN_AUDITED =
-            CacheBuilder.newBuilder().expireAfterWrite(TOKEN_CACHE_TIMEOUT, TimeUnit.MINUTES).build();
+            CacheBuilder.newBuilder().expireAfterAccess(TOKEN_CACHE_TIMEOUT, TimeUnit.MINUTES).build();
 
     @Context
     private HttpServletRequest servletRequest;
