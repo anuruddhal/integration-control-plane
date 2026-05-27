@@ -404,31 +404,6 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
         throw new UnsupportedOperationException();
     }
 
-    @Override
-    public UserStoreManager getSecondaryUserStoreManager() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void setSecondaryUserStoreManager(UserStoreManager userStoreManager) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public UserStoreManager getSecondaryUserStoreManager(String s) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void addSecondaryUserStoreManager(String s, UserStoreManager userStoreManager) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public RealmConfiguration getRealmConfiguration() {
-        return this.realmConfig;
-    }
-
     public boolean isAdmin(String username) {
         return userMap.get(username).isAdmin();
     }

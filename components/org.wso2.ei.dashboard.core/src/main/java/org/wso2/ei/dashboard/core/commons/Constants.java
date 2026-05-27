@@ -89,6 +89,7 @@ public final class Constants {
     public static final String LOGIN_ERROR = "Error occurred while logging in to the dashboard.";
 
     public static final String IS_ADMIN = "isAdmin";
+    public static final String IS_READ_ONLY = "isReadOnly";
     public static final String USER_ID = "userId";
 
     public enum Product {

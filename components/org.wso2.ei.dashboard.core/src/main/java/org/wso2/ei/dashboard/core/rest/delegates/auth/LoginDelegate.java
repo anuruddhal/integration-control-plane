@@ -42,15 +42,12 @@ public class LoginDelegate {
 
     public Response authenticateUser(String username, String password) {
         try {
-            boolean isAuthenticated = UserStoreManagerUtils.getUserStoreManager().authenticate(username, password);
-            if (!isAuthenticated) {
-                return Response.status(Status.UNAUTHORIZED.getStatusCode(), Constants.LOGIN_ERROR).build();
-            }
-            logger.info(String.format("User %s logged in successfully", username));
-            String scope = UserStoreManagerUtils.isAdminUser(username) ? "admin" : "default";
-            String accessToken = JwtUtil.generateToken(username, scope);
+            String resolvedUsername = UserStoreManagerUtils.authenticate(username, password);
+            logger.info(String.format("User %s logged in successfully", resolvedUsername));
+            String scope = UserStoreManagerUtils.isAdminUser(resolvedUsername) ? "admin" : "default";
+            String accessToken = JwtUtil.generateToken(resolvedUsername, scope);
             storeTokenInCache(accessToken);
-            return Response.ok(getUserInfo(username, scope)).header(Constants.COOKIE_HEADER,
+            return Response.ok(getUserInfo(resolvedUsername, scope)).header(Constants.COOKIE_HEADER,
                     getTokenCookieHeader(accessToken, NewCookie.DEFAULT_MAX_AGE)).build();
         } catch (DashboardUserStoreException e) {
             return Response.status(Status.UNAUTHORIZED.getStatusCode(), Constants.LOGIN_ERROR).build();

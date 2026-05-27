@@ -1209,33 +1209,6 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public UserStoreManager getSecondaryUserStoreManager() {
-        return null;
-    }
-
-    @Override
-    public void setSecondaryUserStoreManager(UserStoreManager userStoreManager) {
-
-    }
-
-    @Override
-    public UserStoreManager getSecondaryUserStoreManager(String s) {
-        return null;
-    }
-
-    @Override
-    public void addSecondaryUserStoreManager(String s, UserStoreManager userStoreManager) {
-
-    }
-
-    /**
-     *
-     */
-    public RealmConfiguration getRealmConfiguration() {
-        return this.realmConfig;
-    }
-
-    @Override
     public boolean isExistingRole(String s, boolean b)
             throws org.wso2.micro.integrator.security.user.api.UserStoreException {
         return false;
