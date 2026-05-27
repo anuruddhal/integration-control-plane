@@ -235,7 +235,7 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     protected boolean doCheckExistingUser(String userName) {
-        throw new UnsupportedOperationException();
+        return userName != null && userMap != null && userMap.containsKey(userName);
     }
 
     @Override

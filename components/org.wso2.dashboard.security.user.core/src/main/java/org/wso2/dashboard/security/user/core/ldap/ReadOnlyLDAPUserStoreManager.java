@@ -707,7 +707,13 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     protected boolean doCheckExistingUser(String userName) throws UserStoreException {
-        throw new UnsupportedOperationException();
+        if (userName == null || userName.isEmpty()) {
+            return false;
+        }
+        // Reuse the same LDAP lookup primitives as doAuthenticate so any LDAP flavour
+        // (OpenLDAP, Active Directory, FreeIPA, ...) works through customer-configured
+        // UserNameSearchFilter / UserDNPattern / UserSearchBase. Null DN => not present.
+        return getNameInSpaceForUsernameFromLDAP(userName) != null;
     }
 
     @Override
