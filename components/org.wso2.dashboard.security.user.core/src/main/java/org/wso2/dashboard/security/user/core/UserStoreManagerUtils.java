@@ -57,6 +57,57 @@ public class UserStoreManagerUtils {
     }
 
     /**
+     * Gate that decides whether an authenticated user is permitted to log into the
+     * dashboard, based on the {@code console_access.allowed_roles} configuration.
+     *
+     * Rules (case-insensitive):
+     *  - Empty/missing allowed list ⇒ no restriction (back-compat).
+     *  - Admins (per {@code admin_role}) are always allowed.
+     *  - Unqualified entry "role" matches users holding that role in any store.
+     *  - Qualified entry "DOMAIN/role" matches only users authenticated against
+     *    that secondary store (canonical username "DOMAIN/user") who hold "role".
+     */
+    public static boolean isLoginAllowed(String resolvedUsername) throws UserStoreException {
+        String[] allowed = DataHolder.getInstance().getAllowedLoginRoles();
+        if (allowed == null || allowed.length == 0) {
+            return true;
+        }
+        // File-based store has no role concept; the role allowlist is meaningless here.
+        // Fall back to the existing isAdmin flag and admit any authenticated user.
+        if (isFileBasedUserStoreEnabled()) {
+            return true;
+        }
+        if (isAdminUser(resolvedUsername)) {
+            return true;
+        }
+        String domain = null;
+        if (resolvedUsername != null && resolvedUsername.contains(DOMAIN_SEPARATOR)) {
+            domain = resolvedUsername.substring(0, resolvedUsername.indexOf(DOMAIN_SEPARATOR));
+        }
+        String[] userRoles = getUserStoreManager().getRoleListOfUser(resolvedUsername);
+        if (userRoles == null) {
+            return false;
+        }
+        for (String userRole : userRoles) {
+            if (userRole == null || userRole.isEmpty()) {
+                continue;
+            }
+            for (String entry : allowed) {
+                if (entry == null || entry.isEmpty()) {
+                    continue;
+                }
+                if (entry.equalsIgnoreCase(userRole)) {
+                    return true;
+                }
+                if (domain != null && entry.equalsIgnoreCase(domain + DOMAIN_SEPARATOR + userRole)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Authenticate the user and return the canonical username identifying the matched store
      * (e.g. "LDAP/alice" when matched in a secondary, bare username when matched in primary).
      * Callers should use the returned name for any subsequent identity-bound lookup so it
