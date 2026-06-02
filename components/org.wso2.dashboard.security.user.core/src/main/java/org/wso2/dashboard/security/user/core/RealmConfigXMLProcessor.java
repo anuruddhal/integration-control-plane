@@ -284,7 +284,7 @@ public class RealmConfigXMLProcessor {
             return new String[0];
         }
         String raw = elm.getText().trim();
-        String[] parts = raw.contains(",") ? raw.split(",") : raw.split(";");
+        String[] parts = raw.split("[,;]");
         java.util.List<String> entries = new java.util.ArrayList<>(parts.length);
         for (String part : parts) {
             if (part == null) {

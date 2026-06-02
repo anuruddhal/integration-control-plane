@@ -272,7 +272,14 @@ class IcpUsersDelegate extends UsersDelegate {
             JsonObject userDetails = new JsonObject();
             userDetails.addProperty(USER_ID, user.getUserId());
             userDetails.addProperty(IS_ADMIN, UserStoreManagerUtils.isAdminUser(user.getUserId()));
-            userDetails.addProperty(IS_READ_ONLY, isUserStoreReadOnly(user.getUserId()));
+            boolean isReadOnly;
+            try {
+                isReadOnly = isUserStoreReadOnly(user.getUserId());
+            } catch (UserStoreException e) {
+                log.warn("Could not determine read-only status for user " + user.getUserId() + "; defaulting to false", e);
+                isReadOnly = false;
+            }
+            userDetails.addProperty(IS_READ_ONLY, isReadOnly);
 
             JsonArray rolesArray = new JsonArray();
             Arrays.stream(roles).forEach(rolesArray::add);
