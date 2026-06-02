@@ -707,7 +707,13 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     protected boolean doCheckExistingUser(String userName) throws UserStoreException {
-        throw new UnsupportedOperationException();
+        if (userName == null || userName.isEmpty()) {
+            return false;
+        }
+        // Reuse the same LDAP lookup primitives as doAuthenticate so any LDAP flavour
+        // (OpenLDAP, Active Directory, FreeIPA, ...) works through customer-configured
+        // UserNameSearchFilter / UserDNPattern / UserSearchBase. Null DN => not present.
+        return getNameInSpaceForUsernameFromLDAP(userName) != null;
     }
 
     @Override
@@ -1206,33 +1212,6 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     @Override
     public String[] getUserList(String s, String s1, String s2) throws UserStoreException {
         return new String[0];
-    }
-
-    @Override
-    public UserStoreManager getSecondaryUserStoreManager() {
-        return null;
-    }
-
-    @Override
-    public void setSecondaryUserStoreManager(UserStoreManager userStoreManager) {
-
-    }
-
-    @Override
-    public UserStoreManager getSecondaryUserStoreManager(String s) {
-        return null;
-    }
-
-    @Override
-    public void addSecondaryUserStoreManager(String s, UserStoreManager userStoreManager) {
-
-    }
-
-    /**
-     *
-     */
-    public RealmConfiguration getRealmConfiguration() {
-        return this.realmConfig;
     }
 
     @Override
