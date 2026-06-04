@@ -30,6 +30,8 @@ import org.wso2.micro.integrator.security.user.core.UserStoreException;
 import org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants;
 import org.wso2.micro.integrator.security.user.core.util.UserCoreUtil;
 
+import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.PROPERTY_DOMAIN_NAME;
+
 import javax.naming.InitialContext;
 import javax.sql.DataSource;
 
@@ -47,6 +49,8 @@ public class DatabaseUtil {
     private static final int DEFAULT_MAX_WAIT = 1000 * 60;
     private static final int DEFAULT_MIN_IDLE = 5;
     private static final int DEFAULT_MAX_IDLE = 6;
+    private static final String REALM_POOL_NAME = "WSO2CarbonDB";
+    private static final String USER_STORE_POOL_NAME = "WSO2UserStoreDB";
     private static Log log = LogFactory.getLog(org.wso2.micro.integrator.security.user.core.util.DatabaseUtil.class);
     private static DataSource dataSource = null;
     private static final String VALIDATION_INTERVAL = "validationInterval";
@@ -76,6 +80,9 @@ public class DatabaseUtil {
 
         String dataSourceName = realmConfig.getRealmProperty(JDBCRealmConstants.DATASOURCE);
         if (dataSourceName != null) {
+            if (Boolean.parseBoolean(realmConfig.getRealmProperty(JDBCRealmConstants.JMX_ENABLED))) {
+                log.warn("jmxEnabled has no effect on JNDI-backed realm datasources.");
+            }
             dataSourceName = resolveSystemProperty(dataSourceName);
             return lookupDataSource(dataSourceName);
         }
@@ -86,7 +93,9 @@ public class DatabaseUtil {
         config.setUsername(realmConfig.getRealmProperty(JDBCRealmConstants.USER_NAME));
         config.setPassword(realmConfig.getRealmProperty(JDBCRealmConstants.PASSWORD));
 
-        HikariDataSource dataSource = new HikariDataSource(config);
+        configureJmx(config, REALM_POOL_NAME, realmConfig.getRealmProperty(JDBCRealmConstants.JMX_ENABLED));
+
+        dataSource = new HikariDataSource(config);
         return dataSource;
     }
 
@@ -112,6 +121,9 @@ public class DatabaseUtil {
 
         String dataSourceName = realmConfig.getUserStoreProperty(JDBCRealmConstants.DATASOURCE);
         if (dataSourceName != null) {
+            if (Boolean.parseBoolean(realmConfig.getUserStoreProperty(JDBCRealmConstants.JMX_ENABLED))) {
+                log.warn("jmxEnabled has no effect on JNDI-backed user store datasources.");
+            }
             dataSourceName = resolveSystemProperty(dataSourceName);
             return lookupDataSource(dataSourceName);
         }
@@ -158,6 +170,19 @@ public class DatabaseUtil {
                     JDBCRealmConstants.MAX_WAIT)));
         } else {
             config.setConnectionTimeout(DEFAULT_MAX_WAIT);
+        }
+
+        String domainName = realmConfig.getUserStoreProperty(PROPERTY_DOMAIN_NAME);
+        String poolName = StringUtils.isNotBlank(domainName)
+                ? USER_STORE_POOL_NAME + "-" + domainName
+                : USER_STORE_POOL_NAME;
+        configureJmx(config, poolName, realmConfig.getUserStoreProperty(JDBCRealmConstants.JMX_ENABLED));
+    }
+
+    private static void configureJmx(HikariConfig config, String poolName, String jmxEnabled) {
+        if (Boolean.parseBoolean(jmxEnabled)) {
+            config.setPoolName(poolName);
+            config.setRegisterMbeans(true);
         }
     }
 
