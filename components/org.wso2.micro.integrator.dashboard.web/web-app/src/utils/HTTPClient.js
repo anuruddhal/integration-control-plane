@@ -36,9 +36,61 @@ export default class HTTPClient {
         };
 
         if (AuthManager.getUser().sso) {
-            return AsgardeoSPAClient.getInstance().httpRequest(requestConfig);
+            return AsgardeoSPAClient.getInstance().httpRequest(requestConfig)
+                .catch(error => HTTPClient.handleSsoError(error));
         } else {
             return axios.request(requestConfig)
+        }
+    }
+
+    /**
+     * Handle errors thrown by SSO (Asgardeo) API requests.
+     *
+     * SSO requests are made through the Asgardeo http client and therefore do
+     * not pass through the axios response interceptor, so we decide here what a
+     * failure means. We react based on the HTTP response (when there is one):
+     *
+     *  - 503: the server could not validate the token against the identity
+     *    provider (e.g. the JWKS endpoint is unreachable or its certificate is
+     *    not trusted). The session may well be valid, so we surface a notice
+     *    instead of logging the user out (re-authenticating would not help).
+     *  - 403: the user is authenticated but not permitted to access the
+     *    resource. Leave it to the caller to display; never log the user out.
+     *  - 401, or an error with no HTTP response: the session could not be
+     *    authenticated. On a 401 the Asgardeo SDK transparently attempts a
+     *    silent token refresh before rejecting; when that refresh also fails
+     *    (e.g. the refresh token has expired) it rejects with an exception that
+     *    carries no `response`. Either way the session cannot be recovered, so
+     *    send the user to the login page. This is the only case where we log
+     *    the user out.
+     *
+     * @param {Object} error Error thrown by the Asgardeo http client
+     * @returns {Promise} A rejected promise so callers can still handle the error
+     */
+    static handleSsoError(error) {
+        const response = error?.response;
+        const status = response?.status;
+        if (status === 503) {
+            HTTPClient.notifyIdpUnavailable();
+            return Promise.reject(error);
+        }
+        if (status === 403) {
+            return Promise.reject(error);
+        }
+        if (status === 401 || !response) {
+            AuthManager.redirectToLogin(Constants.SESSION_EXPIRED);
+        }
+        return Promise.reject(error);
+    }
+
+    /**
+     * Notify the application that the identity provider could not be reached to
+     * validate the session, so a single banner can be shown instead of each
+     * page failing silently.
+     */
+    static notifyIdpUnavailable() {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent(Constants.IDP_UNAVAILABLE_EVENT));
         }
     }
 
