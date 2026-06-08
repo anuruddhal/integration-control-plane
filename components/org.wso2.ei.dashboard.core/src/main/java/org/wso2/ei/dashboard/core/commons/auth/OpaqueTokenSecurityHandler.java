@@ -38,6 +38,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.wso2.ei.dashboard.core.commons.Constants.TOKEN_CACHE_TIMEOUT;
 
@@ -49,6 +50,9 @@ public class OpaqueTokenSecurityHandler implements SecurityHandler {
     private static final Logger logger = LogManager.getLogger(OpaqueTokenSecurityHandler.class);
     private static final Cache<String, Boolean> adminClaimMap =
             CacheBuilder.newBuilder().expireAfterWrite(TOKEN_CACHE_TIMEOUT, TimeUnit.MINUTES).build();
+    private static final Cache<String, String> subjectCache =
+            CacheBuilder.newBuilder().expireAfterWrite(TOKEN_CACHE_TIMEOUT, TimeUnit.MINUTES).build();
+    private static final AtomicBoolean PREFERRED_USERNAME_MISSING_WARNED = new AtomicBoolean(false);
 
     @Override
     public boolean isAuthenticated(SSOConfig config, String token) {
@@ -69,7 +73,15 @@ public class OpaqueTokenSecurityHandler implements SecurityHandler {
             int httpSc = httpResponse.getStatusLine().getStatusCode();
 
             if (httpSc == HttpStatus.SC_OK) {
-                return HttpUtils.getJsonResponse(httpResponse).get(Constants.ACTIVE).getAsBoolean();
+                JsonObject introspectionResponse = HttpUtils.getJsonResponse(httpResponse);
+                boolean active = introspectionResponse.get(Constants.ACTIVE).getAsBoolean();
+                if (active) {
+                    String subject = extractSubjectFromIntrospection(introspectionResponse);
+                    if (subject != null) {
+                        subjectCache.put(token, subject);
+                    }
+                }
+                return active;
             }
             if (logger.isDebugEnabled()) {
                 logger.error("Error validating the token using introspection endpoint. ",
@@ -169,5 +181,33 @@ public class OpaqueTokenSecurityHandler implements SecurityHandler {
                     + " from well known endpoint. ", e);
         }
 
+    }
+
+    @Override
+    public String getSubject(SSOConfig ssoConfig, String token) {
+
+        return subjectCache.getIfPresent(token);
+    }
+
+    /**
+     * Extracts the subject identifier from an RFC 7662 introspection response.
+     * Prefers human-readable claims: preferred_username → username → sub.
+     * IS 7.2.0 puts a UUID in "sub" but the readable login name in "username".
+     */
+    private String extractSubjectFromIntrospection(JsonObject response) {
+
+        for (String claim : new String[]{"preferred_username", "username", "sub"}) {
+            if (response.has(claim) && !response.get(claim).isJsonNull()) {
+                String value = response.get(claim).getAsString();
+                if ("sub".equals(claim) && PREFERRED_USERNAME_MISSING_WARNED.compareAndSet(false, true)) {
+                    logger.warn("SSO introspection response contains neither 'preferred_username' nor 'username'. "
+                            + "Audit log will use 'sub' value '{}', which may be an internal UUID on IS 7.2.0+. "
+                            + "To fix, add 'preferred_username' to the OIDC application's access token "
+                            + "attributes in the IdP.", value);
+                }
+                return value;
+            }
+        }
+        return null;
     }
 }

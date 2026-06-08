@@ -36,3 +36,39 @@ password = "wso2carbon"
 
 [user_access]
 make_non_admin_users_read_only = false
+
+# SSO configuration (disabled by default; remove the leading '#' to enable).
+# Audit logging records the initiating username from the access token.  For the
+# username to appear correctly (rather than an internal UUID) the IdP MUST include
+# the 'preferred_username' claim in access tokens issued to this application:
+#
+#   WSO2 IS (7.x): In the IS Console, open the OIDC application → "API Authorization"
+#   (or "Token" tab) and add 'preferred_username' to the "Access Token Attributes" list.
+#   If the claim is absent, ICP falls back to 'username', then 'sub' (which IS 7.2.0
+#   maps to an internal UUID), and logs a WARN on the first affected request.
+#
+#[sso]
+#enable = true
+#client_id = "<OIDC application client ID>"
+#client_secret = "<OIDC application client secret>"
+#base_url = "https://<IS-host>:<port>"
+## well_known_endpoint defaults to <base_url>/oauth2/token/.well-known/openid-configuration
+##well_known_endpoint = "https://<IS-host>:<port>/oauth2/token/.well-known/openid-configuration"
+##jwks_endpoint = "https://<IS-host>:<port>/oauth2/jwks"
+##introspection_endpoint = "https://<IS-host>:<port>/oauth2/introspect"
+##user_info_endpoint = "https://<IS-host>:<port>/oauth2/userinfo"
+#jwt_issuer = "https://<IS-host>:<port>/oauth2/token"
+#admin_group_attribute = "groups"
+#admin_groups = ["admin"]
+## ID token claim used for the UI header username chip and audit log Initiator.
+## Default: preferred_username.  IS 7.2.0 maps 'sub' to an internal UUID, so
+## ensure the IdP includes 'preferred_username' in both the ID token and the
+## access token (via Access Token Attributes in the OIDC app settings).
+##user_name_attribute = "preferred_username"
+
+# TLS configuration for the HTTPS listener.
+# protocols: accepted TLS versions (default: "TLSv1.2,TLSv1.3"). Any protocol not listed is implicitly excluded.
+# preferred_ciphers: when set, allows only the listed cipher suites.
+#[transport.https]
+#protocols = "TLSv1.2,TLSv1.3"
+#preferred_ciphers = "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384,TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384,TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,TLS_DHE_RSA_WITH_AES_256_CBC_SHA256,TLS_DHE_RSA_WITH_AES_128_CBC_SHA256"

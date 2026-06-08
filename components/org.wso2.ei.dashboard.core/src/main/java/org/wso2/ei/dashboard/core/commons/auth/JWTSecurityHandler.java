@@ -39,6 +39,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.text.ParseException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class implements SecurityHandler to implement the authentication logic for a JWT self contained token.
@@ -46,6 +47,7 @@ import java.text.ParseException;
 public class JWTSecurityHandler implements SecurityHandler {
 
     private static final Logger logger = LogManager.getLogger(JWTSecurityHandler.class);
+    private static final AtomicBoolean PREFERRED_USERNAME_MISSING_WARNED = new AtomicBoolean(false);
 
     @Override
     public boolean isAuthenticated(SSOConfig config, String token) {
@@ -71,6 +73,31 @@ public class JWTSecurityHandler implements SecurityHandler {
 
         JsonElement jsonElementPayload = TokenUtils.getParsedToken(token);
         return isUserInAdminGroup(jsonElementPayload, ssoConfig);
+    }
+
+    @Override
+    public String getSubject(SSOConfig ssoConfig, String token) {
+
+        try {
+            com.google.gson.JsonObject payload = TokenUtils.getParsedToken(token).getAsJsonObject();
+            // preferred_username is the human-readable login name; sub may be an opaque UUID (e.g. IS 7.2.0)
+            for (String claim : new String[]{"preferred_username", "username", "sub"}) {
+                JsonElement el = payload.get(claim);
+                if (el != null && !el.isJsonNull()) {
+                    if ("sub".equals(claim) && PREFERRED_USERNAME_MISSING_WARNED.compareAndSet(false, true)) {
+                        logger.warn("SSO access token contains neither 'preferred_username' nor 'username'. "
+                                + "Audit log will use 'sub' value '{}', which may be an internal UUID on IS 7.2.0+. "
+                                + "To fix, add 'preferred_username' to the OIDC application's access token "
+                                + "attributes in the IdP.", el.getAsString());
+                    }
+                    return el.getAsString();
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            logger.debug("Could not extract subject from SSO JWT token", e);
+            return null;
+        }
     }
 
     private boolean isUserInAdminGroup(JsonElement tokenPayload, SSOConfig config) {

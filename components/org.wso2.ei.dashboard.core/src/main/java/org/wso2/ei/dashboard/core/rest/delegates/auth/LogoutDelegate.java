@@ -19,8 +19,13 @@
 
 package org.wso2.ei.dashboard.core.rest.delegates.auth;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import org.wso2.ei.dashboard.core.commons.Constants;
+import org.wso2.ei.dashboard.core.commons.audit.AuditLogger;
+import org.wso2.ei.dashboard.core.commons.auth.JwtUtil;
 import org.wso2.ei.dashboard.core.commons.auth.TokenCache;
+import org.wso2.ei.dashboard.core.commons.utils.TokenUtils;
 
 import javax.ws.rs.core.Response;
 
@@ -33,9 +38,25 @@ public class LogoutDelegate {
 
     public Response logoutUser(String accessToken) {
         if (!accessToken.isEmpty()) {
+            String username = JwtUtil.isJWTToken(accessToken) ? extractUsername(accessToken) : null;
             removeTokenFromCache(accessToken);
+            AuditLogger.logLogout(username);
         }
         return Response.ok().header(Constants.COOKIE_HEADER, getTokenCookieHeader(null, 0)).build();
+    }
+
+    private static String extractUsername(String token) {
+        try {
+            JsonObject payload = TokenUtils.getParsedToken(token).getAsJsonObject();
+            for (String claim : new String[]{"preferred_username", "username", "sub"}) {
+                JsonElement el = payload.get(claim);
+                if (el != null && !el.isJsonNull()) {
+                    return el.getAsString();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private void removeTokenFromCache(String accessToken) {

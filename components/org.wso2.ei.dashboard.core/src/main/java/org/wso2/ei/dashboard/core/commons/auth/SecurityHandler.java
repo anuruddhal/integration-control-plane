@@ -43,4 +43,16 @@ public interface SecurityHandler {
      */
     boolean isAuthorized(SSOConfig ssoConfig, String token);
 
+    /**
+     * Returns the identity (username / subject) associated with the token.
+     * Used to populate the audit log "performedBy" field.
+     * Returns null when the identity cannot be determined without an additional
+     * remote call and the caller should treat the actor as unknown.
+     *
+     * @param ssoConfig SSOConfig
+     * @param token     authorization token
+     * @return subject string, or null
+     */
+    String getSubject(SSOConfig ssoConfig, String token);
+
 }
