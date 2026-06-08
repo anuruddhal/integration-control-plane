@@ -39,11 +39,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.text.ParseException;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -52,9 +47,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class JWTSecurityHandler implements SecurityHandler {
 
     private static final Logger logger = LogManager.getLogger(JWTSecurityHandler.class);
-    private static final long CLOCK_SKEW_SECONDS = 300;
-    private static final JOSEObjectType ACCESS_TOKEN_JWT_TYPE = new JOSEObjectType("at+jwt");
-    private static final Map<String, JWKSource<SecurityContext>> JWK_SOURCE_CACHE = new ConcurrentHashMap<>();
     private static final AtomicBoolean PREFERRED_USERNAME_MISSING_WARNED = new AtomicBoolean(false);
 
     @Override
