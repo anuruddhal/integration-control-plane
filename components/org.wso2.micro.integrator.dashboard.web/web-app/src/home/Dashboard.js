@@ -172,10 +172,14 @@ function Layout(props) {
         return () => { isActive = false; };
     }, [isSsoUser, ssoSessionChecked, state.isAuthenticated, state.isLoading, trySignInSilently]);
 
-    // if the user is not logged in Redirect to login
+    // if the user is not logged in Redirect to login. When the SSO session
+    // expired during the silent-restore attempt, carry the reason so the login
+    // page can explain why the user was signed out (matching the handleSsoError
+    // path); a user who was simply never logged in gets no such notice.
     if (!AuthManager.isLoggedIn() || ssoSessionExpired) {
+        const search = ssoSessionExpired ? '?session=' + Constants.SESSION_EXPIRED : '';
         return (
-            <Redirect to={{ pathname: '/login' }} />
+            <Redirect to={{ pathname: '/login', search }} />
         );
     }
 
