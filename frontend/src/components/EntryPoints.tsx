@@ -46,8 +46,8 @@ import {
   Tooltip,
   Typography,
 } from '@wso2/oxygen-ui';
-import { RefreshCw, ListFilter, LayoutGrid, Server, Settings, Play, Plus, X, Trash2, UserPlus, Code, Sliders, Link as LinkIcon, FileText } from '@wso2/oxygen-ui-icons-react';
-import { useEffect, useMemo, useState } from 'react';
+import { RefreshCw, ListFilter, LayoutGrid, Server, Settings, Play, Square, Plus, X, Trash2, UserPlus, Code, Sliders, Link as LinkIcon, FileText } from '@wso2/oxygen-ui-icons-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useArtifacts, useRefreshEnvironmentArtifacts, useComponentRuntimes, type GqlArtifact, type GqlEnvironment } from '../api/queries';
@@ -69,6 +69,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const [listenerEnabled, setListenerEnabled] = useState(false);
   const [pendingToggle, setPendingToggle] = useState<{ type: 'tracing' | 'statistics' | 'status'; checked: boolean } | null>(null);
   const [pendingListenerToggle, setPendingListenerToggle] = useState<{ checked: boolean } | null>(null);
+  const pendingActionRef = useRef<'START' | 'STOP' | null>(null);
   const [triggerConfirmDialogOpen, setTriggerConfirmDialogOpen] = useState(false);
   const [triggerSuccessMessage, setTriggerSuccessMessage] = useState<string | null>(null);
   const { artifact, artifactType, envId, componentId, projectId } = selected;
@@ -202,21 +203,23 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
     }
 
     const runtimeIds = runtimes.map((r: { runtimeId: string }) => r.runtimeId);
-    const previousValue = listenerEnabled;
-
-    setListenerEnabled(pendingListenerToggle.checked);
+    const action = pendingListenerToggle.checked ? 'START' : 'STOP';
     const artifactQueryKey = ['artifacts', artifactType, envId, componentId];
+
+    pendingActionRef.current = action;
 
     updateListenerState.mutate(
       {
         runtimeIds,
         listenerName: artifactName,
         listenerPackage: artifact.package?.toString(),
-        action: pendingListenerToggle.checked ? 'START' : 'STOP',
+        action,
       },
       {
-        onError: () => setListenerEnabled(previousValue),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: artifactQueryKey }),
+        onSettled: () => {
+          pendingActionRef.current = null;
+          queryClient.invalidateQueries({ queryKey: artifactQueryKey });
+        },
       },
     );
 
@@ -225,7 +228,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
 
   const toggleLabel = pendingToggle?.type ?? 'status';
   const toggleAction = pendingToggle?.checked ? 'enable' : 'disable';
-  const listenerAction = pendingListenerToggle?.checked ? 'enable' : 'disable';
+  const listenerAction = pendingListenerToggle?.checked ? 'start' : 'stop';
 
   return (
     <>
@@ -246,7 +249,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         </DialogActions>
       </Dialog>
       <Dialog open={pendingListenerToggle !== null} onClose={() => setPendingListenerToggle(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>{listenerAction === 'enable' ? 'Enable Listener' : 'Disable Listener'}</DialogTitle>
+        <DialogTitle>{listenerAction === 'start' ? 'Start Listener' : 'Stop Listener'}</DialogTitle>
         <DialogContent>
           <DialogContentText>
             Are you sure you want to {listenerAction} the listener <strong>{artifactName}</strong>?
@@ -254,8 +257,8 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPendingListenerToggle(null)}>Cancel</Button>
-          <Button variant="contained" color={listenerAction === 'disable' ? 'error' : 'primary'} onClick={handleConfirmListenerToggle}>
-            {listenerAction === 'enable' ? 'Enable' : 'Disable'}
+          <Button variant="contained" color={listenerAction === 'stop' ? 'error' : 'success'} onClick={handleConfirmListenerToggle}>
+            {listenerAction === 'start' ? 'Start' : 'Stop'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -293,8 +296,34 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
           {showTracingToggle && <SyncSwitch label="Tracing" checked={tracingEnabled} inSync={artifact.tracingInSync as boolean | null} onChange={handleToggleTracing} disabled={updateTracingStatus.isPending} />}
           {showTracingToggle && showStatisticsToggle && <Divider orientation="vertical" flexItem />}
           {showStatisticsToggle && <SyncSwitch label="Statistics" checked={statisticsEnabled} inSync={artifact.statisticsInSync as boolean | null} onChange={handleToggleStatistics} disabled={updateStatisticsStatus.isPending} />}
-          {(showTracingToggle || showStatisticsToggle) && showListenerToggle && <Divider orientation="vertical" flexItem />}
-          {showListenerToggle && <SyncSwitch label="State" checked={listenerEnabled} inSync={artifact.stateInSync as boolean | null} onChange={handleToggleListener} disabled={updateListenerState.isPending} />}
+          {showListenerToggle && (!listenerEnabled || (updateListenerState.isPending && pendingActionRef.current === 'START')) && (
+            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Start listener'}>
+              <span>
+                <Button
+                  variant="outlined" size="small" color="success"
+                  startIcon={!(updateListenerState.isPending && pendingActionRef.current === 'START') && <Play size={14} />}
+                  disabled={updateListenerState.isPending || !hasRuntimes}
+                  onClick={() => handleToggleListener(true)}
+                >
+                  {updateListenerState.isPending && pendingActionRef.current === 'START' ? <><CircularProgress size={12} color="inherit" sx={{ mr: 0.5 }} />Starting…</> : 'Start'}
+                </Button>
+              </span>
+            </Tooltip>
+          )}
+          {showListenerToggle && (listenerEnabled || (updateListenerState.isPending && pendingActionRef.current === 'STOP')) && (
+            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Stop listener'}>
+              <span>
+                <Button
+                  variant="outlined" size="small" color="error"
+                  startIcon={!(updateListenerState.isPending && pendingActionRef.current === 'STOP') && <Square size={14} />}
+                  disabled={updateListenerState.isPending || !hasRuntimes}
+                  onClick={() => handleToggleListener(false)}
+                >
+                  {updateListenerState.isPending && pendingActionRef.current === 'STOP' ? <><CircularProgress size={12} color="inherit" sx={{ mr: 0.5 }} />Stopping…</> : 'Stop'}
+                </Button>
+              </span>
+            </Tooltip>
+          )}
           {showTaskToggle && (
             <>
               {hasPrecedingControls && <Divider orientation="vertical" flexItem />}
