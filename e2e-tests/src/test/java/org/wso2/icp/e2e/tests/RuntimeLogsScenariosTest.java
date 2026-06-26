@@ -75,6 +75,8 @@ class RuntimeLogsScenariosTest extends BaseE2ETest {
         openSelect("Environment");
         assertThat(option(environment)).isVisible();
         page.keyboard().press("Escape");
+
+        assertMiRuntimeInventoryAndOperations();
     }
 
     private void createUiSetup() throws Exception {
@@ -155,6 +157,59 @@ class RuntimeLogsScenariosTest extends BaseE2ETest {
 
     private void openProjectLogs() {
         page.navigate(config.url("/organizations/default/projects/" + project + "/logs"));
+    }
+
+    private void assertMiRuntimeInventoryAndOperations() {
+        page.navigate(config.url("/organizations/default/projects/" + project + "/components/" + miComponent + "/runtimes"));
+        assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("Runtime"))).isVisible();
+        Locator card = environmentCard();
+        card.getByLabel("Search runtimes...").fill(miRuntimeId);
+        assertThat(card.getByText(miRuntimeId).first()).isVisible(new LocatorAssertions.IsVisibleOptions().setTimeout(120_000));
+        assertThat(card.getByText("RUNNING").first()).isVisible();
+        card.getByLabel("View logs for " + miRuntimeId).click();
+        assertThat(page.getByText("Log Files - " + miRuntimeId)).isVisible();
+        assertThat(page.getByText(Pattern.compile("[0-9]+ log files? found|No log files available")))
+                .isVisible(new LocatorAssertions.IsVisibleOptions().setTimeout(60_000));
+        page.getByLabel("Search log files...").fill("carbon");
+        assertThat(page.getByText(Pattern.compile("[0-9]+ log files? found|No log files match your search|wso2carbon.log")))
+                .isVisible(new LocatorAssertions.IsVisibleOptions().setTimeout(60_000));
+        page.getByLabel("close").last().click();
+
+        page.navigate(config.url("/organizations/default/projects/" + project + "/components/" + miComponent + "/loggers"));
+        assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName(miComponent))).isVisible();
+        assertThat(page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Add Logger")))
+                .isVisible(new LocatorAssertions.IsVisibleOptions().setTimeout(120_000));
+        addMiLogger();
+
+        page.navigate(config.url("/organizations/default/projects/" + project + "/components/" + miComponent));
+        assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName(miComponent))).isVisible();
+        Locator componentCard = environmentCard();
+        componentCard.getByLabel("Refresh").click();
+        assertThat(page.getByText(Pattern.compile("E2ELogAPI|No entry points found")).first())
+                .isVisible(new LocatorAssertions.IsVisibleOptions().setTimeout(120_000));
+        if (page.getByText("E2ELogAPI").isVisible()) {
+            page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("View Source")).click();
+            assertThat(page.getByText("E2ELogAPI").last()).isVisible();
+            assertThat(page.getByText("/e2e").first()).isVisible(new LocatorAssertions.IsVisibleOptions().setTimeout(60_000));
+            page.getByLabel("close").last().click();
+        }
+        componentCard.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Supporting Artifacts")).click();
+        page.waitForTimeout(1_000);
+        assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName(miComponent))).isVisible();
+    }
+
+    private Locator environmentCard() {
+        return page.locator("xpath=//h2[normalize-space()='" + environment + "']/ancestor::*[contains(@class,'MuiCardContent-root')][1]");
+    }
+
+    private void addMiLogger() {
+        String loggerName = "org.wso2.e2e." + miRuntimeId.substring(0, 8);
+        page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Add Logger")).click();
+        Locator dialog = page.getByRole(AriaRole.DIALOG);
+        dialog.getByLabel("Logger Name").fill(loggerName);
+        dialog.getByLabel("Logger Class").fill(loggerName);
+        dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Add Logger")).click();
+        assertThat(dialog).not().isVisible(new LocatorAssertions.IsVisibleOptions().setTimeout(60_000));
     }
 
     private void assertRuntimeLogsPage() {
