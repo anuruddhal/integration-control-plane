@@ -77,7 +77,7 @@ export const ENTRY_POINT_CONFIG: Record<string, { label: string; detailLabel: st
   InboundEndpoint: { label: 'Inbound', detailLabel: 'INBOUND ENDPOINT', color: '#2e7d32', bgColor: '#e8f5e9', metaField: 'protocol', overviewFields: 'protocol, sequence, onError' },
   Task: { label: 'Task', detailLabel: 'TASK', color: '#00695c', bgColor: '#e0f2f1', overviewFields: 'group, class' },
   Service: { label: 'Service', detailLabel: 'SERVICE', color: '#4a148c', bgColor: '#f3e5f5', metaField: 'basePath', overviewFields: 'package, basePath, type' },
-  Listener: { label: 'Listener', detailLabel: 'LISTENER', color: '#bf360c', bgColor: '#fbe9e7', overviewFields: 'package, protocol, host, port' },
+  Listener: { label: 'Listener', detailLabel: 'LISTENER', color: '#bf360c', bgColor: '#fbe9e7', metaField: 'port', overviewFields: 'package, protocol, host, port' },
   Automation: { label: 'Automation', detailLabel: 'AUTOMATION', color: '#f57c00', bgColor: '#fff3e0', metaField: 'packageVersion', overviewFields: 'packageOrg, packageName, packageVersion' },
 };
 
