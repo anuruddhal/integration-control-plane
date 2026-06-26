@@ -45,6 +45,8 @@ public final class E2EEnvironment implements AutoCloseable {
     private final Path biJar;
     private final Ports ports;
     private final boolean observability;
+    private final boolean coverage;
+    private final Path jacocoAgentJar;
     private final List<Process> runtimeProcesses = new ArrayList<>();
     private Process icpProcess;
     private boolean fluentBitStarted;
@@ -55,7 +57,7 @@ public final class E2EEnvironment implements AutoCloseable {
     private int opensearchPort;
 
     private E2EEnvironment(Path runDir, Path reportDir, Path icpHome, Path miZip, Path biJar, Ports ports,
-                           boolean observability) {
+                           boolean observability, boolean coverage, String jacocoAgentJar) {
         this.runDir = runDir;
         this.reportDir = reportDir;
         this.icpHome = icpHome;
@@ -63,6 +65,8 @@ public final class E2EEnvironment implements AutoCloseable {
         this.biJar = biJar;
         this.ports = ports;
         this.observability = observability;
+        this.coverage = coverage;
+        this.jacocoAgentJar = jacocoAgentJar.isBlank() ? null : Path.of(jacocoAgentJar).toAbsolutePath();
     }
 
     public static synchronized E2EConfig start(E2EConfig config) {
@@ -86,7 +90,7 @@ public final class E2EEnvironment implements AutoCloseable {
             Path biJar = config.biJar().isBlank() ? null : Path.of(config.biJar()).toAbsolutePath();
             Ports ports = Ports.allocate();
             E2EEnvironment env = new E2EEnvironment(runDir, reportDir, icpHome, miZip, biJar, ports,
-                    config.observability());
+                    config.observability(), config.coverage(), config.jacocoAgentJar());
             environment = env;
             env.startObservability();
             env.prepareIcp();
@@ -347,11 +351,12 @@ public final class E2EEnvironment implements AutoCloseable {
 
     private void startIcp() throws Exception {
         Path log = reportDir.resolve("icp-stdout.log");
-        icpProcess = new ProcessBuilder("./icp.sh", "run")
+        ProcessBuilder builder = new ProcessBuilder("./icp.sh", "run")
                 .directory(icpHome.resolve("bin").toFile())
                 .redirectErrorStream(true)
-                .redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()))
-                .start();
+                .redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()));
+        enableCoverage(builder);
+        icpProcess = builder.start();
 
         try {
             waitForUrl(baseUrl() + "/login", Duration.ofSeconds(120));
@@ -359,6 +364,45 @@ public final class E2EEnvironment implements AutoCloseable {
             closeQuietly();
             throw new RuntimeException("ICP did not become ready. See " + log, e);
         }
+    }
+
+    private void enableCoverage(ProcessBuilder builder) throws IOException {
+        if (!coverage) return;
+        if (jacocoAgentJar == null || !Files.exists(jacocoAgentJar)) {
+            throw new IOException("icp.e2e.jacocoAgentJar is required when icp.e2e.coverage=true");
+        }
+        Files.createDirectories(coverageDir());
+        builder.environment().put("JAVA_TOOL_OPTIONS", "-javaagent:" + jacocoAgentJar + "=destfile="
+                + coverageExec() + ",includes=wso2.*,append=false,dumponexit=true");
+    }
+
+    private void writeCoverageReport() {
+        if (!coverage) return;
+        try {
+            BallerinaCoverageReport.write(icpHome.resolve("bin/icp-server.jar"), coverageExec(), coverageDir(),
+                    icpServerSourceRoot());
+            System.out.println("ICP Ballerina E2E line coverage: " + coverageDir().resolve("summary.md"));
+        } catch (Exception e) {
+            try {
+                Files.writeString(coverageDir().resolve("coverage-error.log"), e.toString());
+            } catch (IOException ignored) {
+            }
+            System.err.println("Failed to write ICP Ballerina E2E coverage report: " + e);
+        }
+    }
+
+    private Path coverageDir() {
+        return reportDir.resolve("coverage");
+    }
+
+    private static Path icpServerSourceRoot() {
+        Path cwd = Path.of(System.getProperty("user.dir")).toAbsolutePath();
+        if (Files.isDirectory(cwd.resolve("icp_server"))) return cwd.resolve("icp_server");
+        return cwd.getParent().resolve("icp_server");
+    }
+
+    private Path coverageExec() {
+        return coverageDir().resolve("jacoco.exec");
     }
 
     private static void waitForUrl(String url, Duration timeout) throws Exception {
@@ -524,7 +568,11 @@ public final class E2EEnvironment implements AutoCloseable {
     public void close() {
         runtimeProcesses.reversed().forEach(E2EEnvironment::destroyTree);
         runtimeProcesses.clear();
-        if (icpProcess != null) destroyTree(icpProcess);
+        if (icpProcess != null) {
+            destroyTree(icpProcess);
+            icpProcess = null;
+            writeCoverageReport();
+        }
         if (fluentBit != null) fluentBit.stop();
         if (opensearch != null) opensearch.stop();
         if (network != null) network.close();

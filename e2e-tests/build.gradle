@@ -20,6 +20,7 @@ repositories {
 
 configurations {
     miDistribution
+    jacocoAgent
 }
 
 def resolvedMiVersion = providers.gradleProperty('miVersion').orElse('latest.release')
@@ -29,8 +30,11 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.3'
     testImplementation 'org.testcontainers:testcontainers:1.20.4'
     testRuntimeOnly 'org.slf4j:slf4j-simple:2.0.13'
+    testImplementation 'org.jacoco:org.jacoco.core:0.8.12'
+    testImplementation 'org.jacoco:org.jacoco.report:0.8.12'
 
     miDistribution "org.wso2.ei:wso2mi:${resolvedMiVersion.get()}@zip"
+    jacocoAgent 'org.jacoco:org.jacoco.agent:0.8.12:runtime'
 }
 
 tasks.register('resolveMiDistribution') {
@@ -82,13 +86,20 @@ test {
     dependsOn 'playwrightInstall'
 
     systemProperties System.getProperties().findAll { key, _ -> key.toString().startsWith('icp.e2e.') }
+    def coverageEnabled = System.getProperty('icp.e2e.coverage', 'true')
     systemProperty 'icp.e2e.selfContained', System.getProperty('icp.e2e.selfContained', 'true')
+    systemProperty 'icp.e2e.coverage', coverageEnabled
     systemProperty 'icp.e2e.distributionZip', rootProject.layout.buildDirectory.file("distribution/wso2-integration-control-plane-${rootProject.version}.zip").get().asFile.absolutePath
     systemProperty 'icp.e2e.workDir', layout.buildDirectory.dir('runtime').get().asFile.absolutePath
     doFirst {
         systemProperty 'icp.e2e.miZip', configurations.miDistribution.singleFile.absolutePath
         systemProperty 'icp.e2e.biJar', layout.buildDirectory.file('bi/hello-world/target/bin/icp_e2e_hello_world.jar').get().asFile.absolutePath
         systemProperty 'icp.e2e.reportDir', layout.buildDirectory.dir('reports/e2e').get().asFile.absolutePath
+        // Ballerina compiles to JVM bytecode carrying .bal SourceFile/line info, so the JaCoCo agent
+        // on the packaged ICP process yields Ballerina line coverage. Resolve the agent only when needed.
+        if (coverageEnabled == 'true') {
+            systemProperty 'icp.e2e.jacocoAgentJar', configurations.jacocoAgent.singleFile.absolutePath
+        }
     }
 
     testLogging {

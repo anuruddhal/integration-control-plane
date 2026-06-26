@@ -8,6 +8,8 @@ public record E2EConfig(
         int slowMoMs,
         int timeoutMs,
         boolean observability,
+        boolean coverage,
+        String jacocoAgentJar,
         String logsProject,
         String logsBiComponent,
         String logsMiComponent,
@@ -27,6 +29,8 @@ public record E2EConfig(
                 integer("icp.e2e.slowMoMs", "ICP_E2E_SLOW_MO_MS", 0),
                 integer("icp.e2e.timeoutMs", "ICP_E2E_TIMEOUT_MS", 15_000),
                 bool("icp.e2e.observability", "ICP_E2E_OBSERVABILITY", true),
+                bool("icp.e2e.coverage", "ICP_E2E_COVERAGE", false),
+                value("icp.e2e.jacocoAgentJar", "ICP_E2E_JACOCO_AGENT_JAR", ""),
                 value("icp.e2e.logs.project", "ICP_E2E_LOGS_PROJECT", "sample-project"),
                 value("icp.e2e.logs.biComponent", "ICP_E2E_LOGS_BI_COMPONENT", "sample-integration"),
                 value("icp.e2e.logs.miComponent", "ICP_E2E_LOGS_MI_COMPONENT", "mi-sample-integration"),
@@ -40,8 +44,8 @@ public record E2EConfig(
 
     public E2EConfig withBaseUrl(String baseUrl) {
         return new E2EConfig(baseUrl, adminUsername, adminPassword, headless, slowMoMs, timeoutMs, observability,
-                logsProject, logsBiComponent, logsMiComponent, selfContained, distributionZip, miZip, biJar, workDir,
-                reportDir);
+                coverage, jacocoAgentJar, logsProject, logsBiComponent, logsMiComponent, selfContained, distributionZip,
+                miZip, biJar, workDir, reportDir);
     }
 
     public String url(String path) {

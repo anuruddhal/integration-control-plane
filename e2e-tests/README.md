@@ -56,3 +56,16 @@ export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
 ```
 
 OpenSearch needs `vm.max_map_count >= 262144` on the Docker host.
+
+## Ballerina coverage
+
+Self-contained E2E runs collect ICP server Ballerina line coverage by attaching
+JaCoCo to the packaged ICP JVM. Reports are written to:
+
+- `build/reports/e2e/coverage/html/index.html` — detailed JaCoCo HTML report
+- `build/reports/e2e/coverage/summary.md` — merged Ballerina source line summary
+- `build/reports/e2e/coverage/jacoco.xml` — raw JaCoCo XML
+- `build/reports/e2e/coverage/jacoco.exec` — execution data
+
+Coverage is enabled by default for `:e2e-tests:test`; disable it with
+`-Dicp.e2e.coverage=false`.
