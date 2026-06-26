@@ -500,6 +500,8 @@ function EntryPointsList({
         autoHighlight
         fullWidth
         getOptionLabel={(option) => {
+          const cfg = ENTRY_POINT_CONFIG[option.type];
+          if (cfg?.primaryDisplay && cfg.metaField) return option.artifact[cfg.metaField]?.toString() ?? option.artifact.name?.toString() ?? '';
           const displayName = option.type === 'Automation' ? option.artifact.packageName : option.artifact.name;
           return displayName?.toString() ?? '';
         }}
@@ -512,14 +514,15 @@ function EntryPointsList({
           const { key, ...optionProps } = props;
           const cfg = ENTRY_POINT_CONFIG[type];
           const meta = cfg?.metaField ? a[cfg.metaField]?.toString() : undefined;
-          const displayName = type === 'Automation' ? a.packageName?.toString() : a.name?.toString();
+          const useMeta = cfg?.primaryDisplay && !!meta;
+          const displayName = useMeta ? meta : (type === 'Automation' ? a.packageName?.toString() : a.name?.toString());
           return (
             <Box key={key} component="li" sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }} {...optionProps}>
               <Chip label={cfg?.label} size="small" sx={{ bgcolor: cfg?.bgColor, color: cfg?.color, fontWeight: 700, fontSize: 11, minWidth: 60, justifyContent: 'center' }} />
               <Typography variant="body2" sx={{ fontWeight: 500, flex: 1 }}>
                 {displayName}
               </Typography>
-              {meta && (
+              {!useMeta && meta && (
                 <Typography variant="body2" color="text.secondary">
                   {meta}
                 </Typography>
