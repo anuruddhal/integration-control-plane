@@ -298,7 +298,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
           {showStatisticsToggle && <SyncSwitch label="Statistics" checked={statisticsEnabled} inSync={artifact.statisticsInSync as boolean | null} onChange={handleToggleStatistics} disabled={updateStatisticsStatus.isPending} />}
           {showListenerToggle && (!listenerEnabled || (updateListenerState.isPending && pendingActionRef.current === 'START')) && (
             <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Start listener'}>
-              <span>
+              <span style={{ marginLeft: 'auto' }}>
                 <Button
                   variant="outlined" size="small" color="success"
                   startIcon={!(updateListenerState.isPending && pendingActionRef.current === 'START') && <Play size={14} />}
@@ -312,7 +312,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
           )}
           {showListenerToggle && (listenerEnabled || (updateListenerState.isPending && pendingActionRef.current === 'STOP')) && (
             <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Stop listener'}>
-              <span>
+              <span style={{ marginLeft: 'auto' }}>
                 <Button
                   variant="outlined" size="small" color="error"
                   startIcon={!(updateListenerState.isPending && pendingActionRef.current === 'STOP') && <Square size={14} />}
@@ -363,7 +363,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
             </Button>
           )}
           {showRuntimesButton && (
-            <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerTab('Runtimes')} sx={{ ml: showSourceButton || showParametersButton || showWsdlButton ? 0 : 'auto' }}>
+            <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerTab('Runtimes')} sx={{ ml: showSourceButton || showParametersButton || showWsdlButton || showListenerToggle ? 0 : 'auto' }}>
               View Runtimes
             </Button>
           )}
