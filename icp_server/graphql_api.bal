@@ -813,6 +813,32 @@ service /graphql on graphqlListener {
         return result;
     }
 
+    // Get workflow definitions for a specific environment and component.
+    // Definitions are fetched live from the runtime's /workflow/definitions API
+    // (via its workflowCallbackUrl) rather than from the heartbeat/DB.
+    isolated resource function get workflowsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:Workflow[]|error {
+        types:UserContextV2 userContext = check extractUserContext(context);
+
+        // Get project ID for the component (lightweight query for access control)
+        string projectId = check storage:getProjectIdByComponentId(componentId);
+
+        // Build scope with project, integration, and environment
+        types:AccessScope scope = {
+            orgUuid: 1,
+            projectUuid: projectId,
+            integrationUuid: componentId,
+            envUuid: environmentId
+        };
+
+        // Verify user has view, edit, or manage permission
+        if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
+            log:printWarn("Attempt to access component workflows without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
+            return [];
+        }
+
+        return check fetchWorkflowDefinitions(componentId, environmentId);
+    }
+
     // Get automation artifacts for a specific environment and component
     isolated resource function get automationsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:Automation[]|error {
         types:UserContextV2 userContext = check extractUserContext(context);

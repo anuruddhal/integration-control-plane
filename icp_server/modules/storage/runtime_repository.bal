@@ -254,6 +254,29 @@ public isolated function getListenersForRuntime(string runtimeId) returns types:
     return listenerList;
 }
 
+// Resolve the workflow management service base URL (callbackUrl) for a component+environment.
+// Prefers a RUNNING runtime; returns () when none of the matching runtimes reported a callbackUrl.
+public isolated function getRuntimeCallbackUrl(string componentId, string environmentId) returns string?|error {
+    stream<record {|string? callback_url; string status;|}, sql:Error?> rs = dbClient->query(`
+        SELECT callback_url, status
+        FROM runtimes
+        WHERE component_id = ${componentId} AND environment_id = ${environmentId}
+            AND callback_url IS NOT NULL AND callback_url <> ''
+    `);
+    record {|string? callback_url; string status;|}[] rows = check from var r in rs
+        select r;
+    if rows.length() == 0 {
+        return ();
+    }
+    // Prefer a RUNNING runtime's callbackUrl; fall back to the first available.
+    foreach var r in rows {
+        if r.status == "RUNNING" && r.callback_url is string {
+            return r.callback_url;
+        }
+    }
+    return rows[0].callback_url;
+}
+
 type ApiRecordInDB record {|
     string api_name;
     string url;

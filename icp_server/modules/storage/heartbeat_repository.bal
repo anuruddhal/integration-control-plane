@@ -519,12 +519,14 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
     // Use default values if management hostname and port are not provided
     string runtimeHostname = heartbeat.runtimeHostname ?: "";
     string runtimePort = heartbeat.runtimePort ?: "";
+    // Workflow management service base URL reported by the runtime bridge (optional; NULL when absent)
+    string? callbackUrl = heartbeat?.workflowCallbackUrl;
 
     // Try INSERT first
     sql:ExecutionResult|error insertRes = dbClient->execute(`
         INSERT INTO runtimes (
             runtime_id, name, runtime_type, status, version,
-            runtime_hostname, runtime_port,
+            runtime_hostname, runtime_port, callback_url,
             environment_id, project_id, component_id,
             platform_name, platform_version, platform_home,
             os_name, os_version,
@@ -533,7 +535,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
             os_arch, server_name, last_heartbeat
         ) VALUES (
             ${runtimeId}, ${runtimeName}, ${heartbeat.runtimeType}, ${heartbeat.status}, ${heartbeat.version},
-            ${runtimeHostname}, ${runtimePort},
+            ${runtimeHostname}, ${runtimePort}, ${callbackUrl},
             ${heartbeat.environment}, ${heartbeat.project}, ${heartbeat.component},
             ${heartbeat.nodeInfo.platformName}, ${heartbeat.nodeInfo.platformVersion}, ${heartbeat.nodeInfo.platformHome},
             ${heartbeat.nodeInfo.osName}, ${heartbeat.nodeInfo.osVersion},
@@ -581,7 +583,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
         sql:ExecutionResult res = check dbClient->execute(`
             INSERT INTO runtimes (
                 runtime_id, name, runtime_type, status, version,
-                runtime_hostname, runtime_port,
+                runtime_hostname, runtime_port, callback_url,
                 environment_id, project_id, component_id,
                 platform_name, platform_version, platform_home,
                 os_name, os_version,
@@ -590,7 +592,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
                 os_arch, server_name, last_heartbeat
             ) VALUES (
                 ${runtimeId}, ${runtimeName}, ${heartbeat.runtimeType}, ${heartbeat.status}, ${heartbeat.version},
-                ${runtimeHostname}, ${runtimePort},
+                ${runtimeHostname}, ${runtimePort}, ${callbackUrl},
                 ${heartbeat.environment}, ${heartbeat.project}, ${heartbeat.component},
                 ${heartbeat.nodeInfo.platformName}, ${heartbeat.nodeInfo.platformVersion}, ${heartbeat.nodeInfo.platformHome},
                 ${heartbeat.nodeInfo.osName}, ${heartbeat.nodeInfo.osVersion},
@@ -612,6 +614,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
             version = ${heartbeat.version},
             runtime_hostname = ${runtimeHostname},
             runtime_port = ${runtimePort},
+            callback_url = ${callbackUrl},
             environment_id = ${heartbeat.environment},
             project_id = ${heartbeat.project},
             component_id = ${heartbeat.component},

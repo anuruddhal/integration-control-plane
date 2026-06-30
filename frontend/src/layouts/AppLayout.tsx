@@ -49,7 +49,7 @@ import { useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { useNavigate, Outlet, NavLink } from 'react-router';
 import Logo from '../components/Logo';
-import { BarChart3, Bell, Building, ChevronDown, ChevronRight, Layers, LayoutDashboard, LogOut, Plus, ScrollText, Search, Server, Shield, Sliders, User as UserIcon, X } from '@wso2/oxygen-ui-icons-react';
+import { BarChart3, Bell, Building, ChevronDown, ChevronRight, Layers, LayoutDashboard, LogOut, Plus, ScrollText, Search, Server, Shield, Sliders, User as UserIcon, Workflow, X } from '@wso2/oxygen-ui-icons-react';
 import { useProjectByHandler, useProjects, useComponents } from '../api/queries';
 import { mockNotifications } from '../mock-data/mockNotifications';
 import { useScope, useResource, resourceUrl, broaden, narrow, newProjectUrl, newComponentUrl, sidebarItems, hasProject, hasComponent, type Resource } from '../nav';
@@ -60,6 +60,7 @@ import { ALL_USER_MGT_PERMISSIONS, Permissions } from '../constants/permissions'
 
 const SIDEBAR_ICONS: Record<Resource, JSX.Element> = {
   overview: <LayoutDashboard size={20} />,
+  workflows: <Workflow size={20} />,
   logs: <ScrollText size={20} />,
   loggers: <Sliders size={20} />,
   metrics: <BarChart3 size={20} />,
@@ -69,7 +70,7 @@ const SIDEBAR_ICONS: Record<Resource, JSX.Element> = {
 };
 
 const SIDEBAR_CATEGORIES: { label: string; resources: Resource[] }[] = [
-  { label: '', resources: ['overview', 'runtimes'] },
+  { label: '', resources: ['overview', 'workflows', 'runtimes'] },
   { label: 'Observability', resources: ['logs', 'loggers', 'metrics'] },
   { label: 'Infrastructure', resources: ['environments'] },
   { label: 'Management', resources: ['access-control'] },
@@ -118,6 +119,8 @@ export default function AppLayout(): JSX.Element {
     switch (target) {
       case 'overview':
         return 'overview';
+      case 'workflows':
+        return 'workflows';
       case 'access-control': {
         const perms: string[] = [...ALL_USER_MGT_PERMISSIONS];
         if (hasProject(targetScope)) perms.push(Permissions.PROJECT_EDIT, Permissions.PROJECT_MANAGE);

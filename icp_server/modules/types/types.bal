@@ -179,6 +179,7 @@ public type Node record {
 public type Heartbeat record {|
     string heartbeatVersion = "v1.0"; // Version of the heartbeat format
     string runtimeId; // Unique identifier for the runtime
+    string workflowCallbackUrl?; // Base URL of the runtime's workflow management service (when it hosts workflows)
     string? runtime = (); // Alias for runtimeId (for backward compatibility)
     string runtimeType; // "wso2-mi" from payloads
     string status; // "RUNNING", "STOPPED", etc.
@@ -195,6 +196,14 @@ public type Heartbeat record {|
     map<log:Level> logLevels?; // BI log levels from heartbeat payload
 |};
 
+// Shape of a single entry in the runtime's GET /workflow/definitions response.
+// Open record with optional fields so parsing tolerates missing/extra fields.
+public type WorkflowDefinition record {
+    string workflowType;
+    string? inputSchema?;
+    boolean isActive?;
+    int workerCount?;
+};
 // Delta heartbeat with hash value
 public type DeltaHeartbeat record {|
     string heartbeatVersion = "v1.0"; // Version of the heartbeat format
@@ -426,6 +435,7 @@ public type RuntimeDBRecord record {
     string version?;
     string runtime_hostname?;
     string runtime_port?;
+    string callback_url?;
     string platform_name?;
     string platform_version?;
     string platform_home?;
@@ -736,6 +746,20 @@ public type Listener record {
     }
     ArtifactState state = "enabled";
     boolean? stateInSync = ();
+    string[] runtimeIds?;
+    ArtifactRuntimeInfo[]? runtimes?;
+};
+
+// Workflow definition deployed on a BI workflow runtime, fetched live from the
+// runtime's GET /workflow/definitions API (via its workflowCallbackUrl). Exposed
+// to the frontend as a service/listener-style artifact, keyed by `workflowType`
+// (mapped to `name`).
+public type Workflow record {
+    string name; // workflowType — used as the entry-point identity
+    boolean isActive = false;
+    int workerCount = 0;
+    string? inputSchema = ();
+    ArtifactState state = "enabled"; // derived from isActive for the UI status chip
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };

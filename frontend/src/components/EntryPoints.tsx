@@ -55,6 +55,7 @@ import { useUpdateArtifactTracingStatus, useUpdateArtifactStatisticsStatus } fro
 import { useUpdateArtifactStatus, useUpdateListenerState, useTriggerTask } from '../api/mutations';
 import { useListMiUsers, useCreateMiUser, useDeleteMiUser } from '../api/miUsers';
 import { ArtifactApiDefinition, ServiceResources, AutomationExecutions, ProxyApiReference } from './ArtifactTabs';
+import { SchemaDisclosure } from './workflow/shared';
 import { ArtifactTypeSelector } from './ArtifactDetail';
 import Authorized from './Authorized';
 import { Permissions } from '../constants/permissions';
@@ -73,6 +74,8 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const [triggerSuccessMessage, setTriggerSuccessMessage] = useState<string | null>(null);
   const { artifact, artifactType, envId, componentId, projectId } = selected;
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const scope = useScope();
   const updateTracingStatus = useUpdateArtifactTracingStatus();
   const updateStatisticsStatus = useUpdateArtifactStatisticsStatus();
   const updateArtifactStatus = useUpdateArtifactStatus();
@@ -87,6 +90,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const showRuntimesButton = true; // Show View Runtimes button for all entry points
   const showParametersButton = artifactType === 'InboundEndpoint';
   const showSourceButton = ['RestApi', 'ProxyService', 'InboundEndpoint', 'Task'].includes(artifactType);
+  const showInstancesButton = artifactType === 'Workflow';
   const showWsdlButton = artifactType === 'ProxyService';
   const showStatisticsToggle = ['RestApi', 'ProxyService', 'InboundEndpoint'].includes(artifactType);
   const showStatusToggle = ['ProxyService', 'InboundEndpoint'].includes(artifactType);
@@ -333,8 +337,18 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
               View WSDL
             </Button>
           )}
+          {showInstancesButton && (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<LayoutGrid size={14} />}
+              onClick={() => navigate(`${resourceUrl(scope, 'workflows')}?tab=admin&type=${encodeURIComponent(artifactName)}&env=${encodeURIComponent(envId)}`)}
+              sx={{ ml: showSourceButton || showParametersButton || showWsdlButton ? 0 : 'auto' }}>
+              View Instances
+            </Button>
+          )}
           {showRuntimesButton && (
-            <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerTab('Runtimes')} sx={{ ml: showSourceButton || showParametersButton || showWsdlButton ? 0 : 'auto' }}>
+            <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerTab('Runtimes')} sx={{ ml: showSourceButton || showParametersButton || showWsdlButton || showInstancesButton ? 0 : 'auto' }}>
               View Runtimes
             </Button>
           )}
@@ -362,6 +376,17 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
                 )}
               </Box>
             ))}
+          </Box>
+        )}
+        {artifactType === 'Workflow' && (
+          <Box sx={{ px: 2, py: 1.5 }}>
+            {artifact.inputSchema ? (
+              <SchemaDisclosure schema={String(artifact.inputSchema)} />
+            ) : (
+              <Typography variant="caption" color="text.secondary">
+                No input schema defined for this workflow.
+              </Typography>
+            )}
           </Box>
         )}
         {(ENTRY_POINT_DETAIL_TABS[artifactType] ?? []).includes('Resources') && <Box sx={{ px: 2, py: 1.5 }}>{artifactType === 'RestApi' ? <ArtifactApiDefinition {...tabProps} /> : <ServiceResources {...tabProps} />}</Box>}
@@ -398,15 +423,16 @@ function EntryPointsList({ envId, componentId, projectId, componentType, onOpenD
   const { data: services = [], isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI });
   const { data: listeners = [], isLoading: loadingListeners } = useArtifacts('Listener', envId, componentId, { enabled: !isMI });
   const { data: automations = [], isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI });
+  const { data: workflows = [], isLoading: loadingWorkflows } = useArtifacts('Workflow', envId, componentId, { enabled: !isMI });
 
-  const isLoading = isMI ? loadingApis || loadingProxies || loadingInbound || loadingTasks : loadingServices || loadingListeners || loadingAutomations;
+  const isLoading = isMI ? loadingApis || loadingProxies || loadingInbound || loadingTasks : loadingServices || loadingListeners || loadingAutomations || loadingWorkflows;
 
   const allEntryPoints = useMemo(
     () =>
       isMI
         ? [...apis.map((a) => ({ artifact: a, type: 'RestApi' })), ...proxies.map((a) => ({ artifact: a, type: 'ProxyService' })), ...inboundEps.map((a) => ({ artifact: a, type: 'InboundEndpoint' })), ...tasks.map((a) => ({ artifact: a, type: 'Task' }))]
-        : [...services.map((a) => ({ artifact: a, type: 'Service' })), ...listeners.map((a) => ({ artifact: a, type: 'Listener' })), ...automations.map((a) => ({ artifact: a, type: 'Automation' }))],
-    [isMI, apis, proxies, inboundEps, tasks, services, listeners, automations],
+        : [...services.map((a) => ({ artifact: a, type: 'Service' })), ...listeners.map((a) => ({ artifact: a, type: 'Listener' })), ...workflows.map((a) => ({ artifact: a, type: 'Workflow' })), ...automations.map((a) => ({ artifact: a, type: 'Automation' }))],
+    [isMI, apis, proxies, inboundEps, tasks, services, listeners, workflows, automations],
   );
 
   const allKeys = new Set(
