@@ -280,7 +280,80 @@ function testCreateComponentSuccess() returns error? {
 }
 
 // =============================================================================
-// Test 8: Create component - Fails without manage permission
+// Test 8: Create component - Success without component type
+// =============================================================================
+
+@test:Config {
+    groups: ["component-graphql", "create-component"]
+}
+function testCreateComponentWithoutComponentType() returns error? {
+    string mutation = string `
+        mutation CreateComponent($component: ComponentInput!) {
+            createComponent(component: $component) {
+                id
+                name
+                componentType
+            }
+        }
+    `;
+
+    json variables = {
+        component: {
+            name: "test-integration-default-type",
+            displayName: "Test Integration Default Type",
+            description: "Test component without componentType",
+            projectId: PROJECT_1_ID
+        }
+    };
+
+    json response = check executeGraphQL(mutation, project1AdminToken, variables);
+
+    test:assertFalse(response.errors is json, "Mutation should not return errors");
+
+    json data = check response.data;
+    json component = check data.createComponent;
+    string componentType = check component.componentType;
+    test:assertEquals(componentType, "BI", "Should default component type to BI");
+}
+
+// =============================================================================
+// Test 9: Update component - Success without component type
+// =============================================================================
+
+@test:Config {
+    groups: ["component-graphql", "update-component"]
+}
+function testUpdateComponentWithoutComponentType() returns error? {
+    string mutation = string `
+        mutation UpdateComponent($component: ComponentUpdateInput!) {
+            updateComponent(component: $component) {
+                id
+                displayName
+                description
+            }
+        }
+    `;
+
+    json variables = {
+        component: {
+            id: COMPONENT_2_ID,
+            displayName: "Component Two Updated",
+            description: "Updated without componentType"
+        }
+    };
+
+    json response = check executeGraphQL(mutation, project1AdminToken, variables);
+
+    test:assertFalse(response.errors is json, "Mutation should not return errors");
+
+    json data = check response.data;
+    json component = check data.updateComponent;
+    string displayName = check component.displayName;
+    test:assertEquals(displayName, "Component Two Updated", "Should update component");
+}
+
+// =============================================================================
+// Test 10: Create component - Fails without manage permission
 // =============================================================================
 
 @test:Config {
