@@ -9,10 +9,12 @@ import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
@@ -29,13 +31,31 @@ import java.util.stream.Stream;
 import java.util.regex.Matcher;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.jacoco.core.runtime.RemoteControlReader;
+import org.jacoco.core.runtime.RemoteControlWriter;
+import org.jacoco.core.tools.ExecFileLoader;
 import org.testcontainers.containers.BindMode;
+import org.testcontainers.containers.FixedHostPortGenericContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
+import org.testcontainers.containers.startupcheck.OneShotStartupCheckStrategy;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.MountableFile;
 
 public final class E2EEnvironment implements AutoCloseable {
+    public static final String SSO_USERNAME = "sso.user@example.com";
+    public static final String SSO_PASSWORD = "Passw0rd!";
+    // Distinct from the fixed UUID ICP auto-assigns to the local `admin` user, so SSO and
+    // password logins do not collide. ICP uses the OIDC `sub` as the user id, so ThunderID's
+    // declarative user id and this seeded id must match.
+    private static final String SSO_USER_ID = "5501b0b0-e29b-41d4-a716-446655440111";
+    private static final String THUNDERID_IMAGE = "ghcr.io/thunder-id/thunderid:latest";
+    private static final int THUNDERID_PORT = 8090;
+    private static final String MYSQL_IMAGE = "mysql:8.0";
+    private static final int MYSQL_PORT = 3306;
+    private static final String DB_NAME = "icp_database";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "my-secret-pw";
     private static E2EEnvironment current;
 
     private final Path runDir;
@@ -46,18 +66,22 @@ public final class E2EEnvironment implements AutoCloseable {
     private final Ports ports;
     private final boolean observability;
     private final boolean coverage;
+    private final boolean sso;
     private final Path jacocoAgentJar;
+    private int jacocoPort;
     private final List<Process> runtimeProcesses = new ArrayList<>();
     private Process icpProcess;
     private boolean fluentBitStarted;
     private Network network;
     private GenericContainer<?> opensearch;
     private GenericContainer<?> fluentBit;
+    private GenericContainer<?> thunderId;
+    private GenericContainer<?> mysql;
     private String opensearchHost;
     private int opensearchPort;
 
     private E2EEnvironment(Path runDir, Path reportDir, Path icpHome, Path miZip, Path biJar, Ports ports,
-                           boolean observability, boolean coverage, String jacocoAgentJar) {
+                           boolean observability, boolean coverage, boolean sso, String jacocoAgentJar) {
         this.runDir = runDir;
         this.reportDir = reportDir;
         this.icpHome = icpHome;
@@ -66,12 +90,13 @@ public final class E2EEnvironment implements AutoCloseable {
         this.ports = ports;
         this.observability = observability;
         this.coverage = coverage;
+        this.sso = sso;
         this.jacocoAgentJar = jacocoAgentJar.isBlank() ? null : Path.of(jacocoAgentJar).toAbsolutePath();
     }
 
     public static synchronized E2EConfig start(E2EConfig config) {
         if (!config.selfContained()) return config;
-        if (current != null) return config.withBaseUrl(current.baseUrl());
+        if (current != null) return config.withBaseUrlAndObservability(current.baseUrl(), current.observability);
         if (config.distributionZip().isBlank()) {
             throw new IllegalStateException("icp.e2e.distributionZip is required for self-contained E2E tests");
         }
@@ -90,14 +115,25 @@ public final class E2EEnvironment implements AutoCloseable {
             Path biJar = config.biJar().isBlank() ? null : Path.of(config.biJar()).toAbsolutePath();
             Ports ports = Ports.allocate();
             E2EEnvironment env = new E2EEnvironment(runDir, reportDir, icpHome, miZip, biJar, ports,
-                    config.observability(), config.coverage(), config.jacocoAgentJar());
+                    config.observability(), config.coverage(), config.sso(), config.jacocoAgentJar());
             environment = env;
-            env.startObservability();
+            try {
+                env.startObservability();
+            } catch (Exception e) {
+                if (!config.observability() || !isDockerUnavailable(e)) throw e;
+                env.closeQuietly();
+                env = new E2EEnvironment(runDir, reportDir, icpHome, miZip, biJar, ports,
+                        false, config.coverage(), config.sso(), config.jacocoAgentJar());
+                environment = env;
+                System.err.println("Docker is unavailable; running E2E tests without observability.");
+            }
+            env.startThunderId();
+            env.startMysql();
             env.prepareIcp();
             env.startIcp();
             current = env;
             Runtime.getRuntime().addShutdownHook(new Thread(env::closeQuietly));
-            return config.withBaseUrl(env.baseUrl());
+            return config.withBaseUrlAndObservability(env.baseUrl(), env.observability);
         } catch (Exception e) {
             if (environment != null) environment.closeQuietly();
             throw new RuntimeException("Failed to start self-contained ICP E2E environment", e);
@@ -150,14 +186,261 @@ public final class E2EEnvironment implements AutoCloseable {
         current.startFluentBit();
     }
 
+    // Storage DB for the product under test: a fresh MySQL seeded with the same schema + data the
+    // packaged distribution ships (dbscripts/), so E2E exercises the real MySQL code path.
+    private void startMysql() {
+        mysql = new GenericContainer<>(MYSQL_IMAGE)
+                .withExposedPorts(MYSQL_PORT)
+                .withEnv("MYSQL_ROOT_PASSWORD", DB_PASSWORD)
+                .withEnv("MYSQL_DATABASE", DB_NAME)
+                .withCopyFileToContainer(MountableFile.forHostPath(icpHome.resolve("dbscripts/mysql_init.sql")),
+                        "/docker-entrypoint-initdb.d/01_init.sql")
+                .withCopyFileToContainer(MountableFile.forHostPath(icpHome.resolve("dbscripts/mysql_test_data_init.sql")),
+                        "/docker-entrypoint-initdb.d/02_test_data.sql")
+                // MySQL logs "ready for connections" for the temp init server and the X plugin too;
+                // wait for the real server line ("port: 3306") so ICP never connects mid-init.
+                .waitingFor(Wait.forLogMessage(".*ready for connections.*port: 3306.*", 1)
+                        .withStartupTimeout(Duration.ofMinutes(3)));
+        mysql.start();
+    }
+
+    private static void allowContainerWrites(Path dir) {
+        try {
+            Files.setPosixFilePermissions(dir, PosixFilePermissions.fromString("rwxrwxrwx"));
+        } catch (IOException | UnsupportedOperationException ignored) {
+            // Non-POSIX filesystem (e.g. Windows); bind-mount permissions are handled by the OS there.
+        }
+    }
+
+    private void execMysql(String sql) throws Exception {
+        var result = mysql.execInContainer("mysql", "-uroot", "-p" + DB_PASSWORD, DB_NAME, "-e", sql);
+        if (result.getExitCode() != 0) {
+            throw new IllegalStateException("MySQL exec failed: " + result.getStderr());
+        }
+    }
+
     private void prepareIcp() throws Exception {
         Files.createDirectories(icpHome.resolve("bin/database"));
         Files.createDirectories(icpHome.resolve("logs"));
         Files.createDirectories(runDir.resolve("logs/bi/e2e-bi"));
         Files.createDirectories(runDir.resolve("logs/mi"));
-        initializeH2("icp_db", icpHome.resolve("dbscripts/h2_init.sql"));
+        // Main storage runs on MySQL (Testcontainers); credentials stay on local H2.
         initializeH2("credentials_db", icpHome.resolve("dbscripts/credentials_h2_init.sql"));
+        if (sso) seedOidcUser();
         writeDeploymentToml();
+    }
+
+    private void startThunderId() throws Exception {
+        if (!sso) return;
+        Path home = runDir.resolve("thunderid");
+        Path db = home.resolve("database");
+        Path consentDb = home.resolve("consent-database");
+        Files.createDirectories(db);
+        Files.createDirectories(consentDb);
+        // ThunderID's container writes into these bind mounts as its own UID; on CI runners the
+        // runner-owned dirs are otherwise not writable by it ("cp: can't create ...: Permission denied").
+        allowContainerWrites(db);
+        allowContainerWrites(consentDb);
+        writeThunderIdConfig(home);
+
+        new GenericContainer<>(THUNDERID_IMAGE)
+                .withCommand("sh", "-c", "cp -r /opt/thunderid/database/* /data/ && (cp -r /opt/thunderid/consent/repository/database/* /consent-data/ 2>/dev/null || true)")
+                .withFileSystemBind(db.toString(), "/data", BindMode.READ_WRITE)
+                .withFileSystemBind(consentDb.toString(), "/consent-data", BindMode.READ_WRITE)
+                .withStartupCheckStrategy(new OneShotStartupCheckStrategy().withTimeout(Duration.ofMinutes(2)))
+                .start();
+
+        new GenericContainer<>(THUNDERID_IMAGE)
+                .withCommand("./setup.sh")
+                .withEnv("ADMIN_USERNAME", "admin")
+                .withEnv("ADMIN_PASSWORD", "admin")
+                .withFileSystemBind(db.toString(), "/opt/thunderid/database", BindMode.READ_WRITE)
+                .withFileSystemBind(consentDb.toString(), "/opt/thunderid/consent/repository/database", BindMode.READ_WRITE)
+                .withFileSystemBind(home.resolve("deployment-setup.yaml").toString(), "/opt/thunderid/deployment.yaml", BindMode.READ_ONLY)
+                .withStartupCheckStrategy(new OneShotStartupCheckStrategy().withTimeout(Duration.ofMinutes(2)))
+                .start();
+
+        thunderId = new FixedHostPortGenericContainer<>(THUNDERID_IMAGE)
+                .withFixedExposedPort(ports.thunderId, THUNDERID_PORT)
+                .withExposedPorts(THUNDERID_PORT)
+                .withFileSystemBind(db.toString(), "/opt/thunderid/database", BindMode.READ_WRITE)
+                .withFileSystemBind(consentDb.toString(), "/opt/thunderid/consent/repository/database", BindMode.READ_WRITE)
+                .withFileSystemBind(home.resolve("deployment.yaml").toString(), "/opt/thunderid/deployment.yaml", BindMode.READ_ONLY)
+                .withFileSystemBind(home.resolve("gate-config.js").toString(), "/opt/thunderid/apps/gate/config.js", BindMode.READ_ONLY)
+                .withFileSystemBind(home.resolve("resources").toString(), "/opt/thunderid/config/resources", BindMode.READ_ONLY)
+                .waitingFor(Wait.forHttps("/health/readiness").forPort(THUNDERID_PORT).allowInsecure()
+                        .withStartupTimeout(Duration.ofMinutes(2)));
+        thunderId.start();
+    }
+
+    private void writeThunderIdConfig(Path home) throws IOException {
+        Path resources = home.resolve("resources");
+        Files.createDirectories(resources.resolve("applications"));
+        Files.createDirectories(resources.resolve("users"));
+
+        String baseDeployment = """
+                server:
+                  hostname: \"0.0.0.0\"
+                  port: 8090
+                  public_url: \"%s\"
+
+                gate_client:
+                  hostname: \"localhost\"
+                  port: %d
+                  scheme: \"https\"
+                  path: \"/gate\"
+
+                jwt:
+                  issuer: \"%s\"
+                  preferred_key_id: \"default-key\"
+
+                passkey:
+                  allowed_origins:
+                    - \"%s\"
+                    - \"%s\"
+
+                cors:
+                  allowed_origins:
+                    - \"%s\"
+                    - \"%s\"
+                """.formatted(thunderIdUrl(), ports.thunderId, thunderIdUrl(), thunderIdUrl(), baseUrl(),
+                thunderIdUrl(), baseUrl());
+        Files.writeString(home.resolve("deployment-setup.yaml"), baseDeployment);
+        Files.writeString(home.resolve("gate-config.js"), """
+                window.__THUNDERID_RUNTIME_CONFIG__ = {
+                  brand: {
+                    product_name: 'ThunderID',
+                    favicon: {
+                      light: 'assets/images/favicon.ico',
+                      dark: 'assets/images/favicon-inverted.ico',
+                    },
+                  },
+                  client: {
+                    base: '/gate',
+                  },
+                  server: {
+                    public_url: '%s',
+                  },
+                  sdk: {
+                    organizationHandle: 'default',
+                  },
+                };
+                """.formatted(thunderIdUrl()));
+        Files.writeString(home.resolve("deployment.yaml"), baseDeployment + """
+
+                declarative_resources:
+                  enabled: true
+
+                organization_unit:
+                  store: composite
+
+                identity_provider:
+                  store: composite
+
+                application:
+                  store: composite
+
+                agent:
+                  store: composite
+
+                user_type:
+                  store: composite
+
+                user:
+                  store: composite
+
+                group:
+                  store: composite
+
+                role:
+                  store: composite
+
+                theme:
+                  store: composite
+
+                layout:
+                  store: composite
+
+                translation:
+                  store: composite
+
+                resource:
+                  store: composite
+
+                openid4vci:
+                  store: composite
+                """);
+        Files.writeString(resources.resolve("applications/icp-console.yaml"), """
+                id: 8b215f89-96f7-48dd-ae2b-3f9e3a6d15d1
+                ouHandle: default
+                name: ICP E2E Console
+                url: %s
+                contacts:
+                  - admin@example.com
+                authFlowHandle: default-basic-flow
+                isRegistrationFlowEnabled: false
+                isRecoveryFlowEnabled: false
+                assertion:
+                  validityPeriod: 3600
+                loginConsent:
+                  validityPeriod: 0
+                allowedUserTypes:
+                  - Person
+                inboundAuthConfig:
+                  - type: oauth2
+                    config:
+                      clientId: ICP_CONSOLE
+                      clientSecret: icp-console-secret
+                      redirectUris:
+                        - %s/sso/callback
+                      grantTypes:
+                        - authorization_code
+                      responseTypes:
+                        - code
+                      tokenEndpointAuthMethod: client_secret_basic
+                      pkceRequired: false
+                      publicClient: false
+                      requirePushedAuthorizationRequests: false
+                      token:
+                        accessToken:
+                          validityPeriod: 3600
+                          userAttributes:
+                            - email
+                            - name
+                        idToken:
+                          validityPeriod: 3600
+                          userAttributes:
+                            - email
+                            - name
+                          responseType: JWT
+                      userInfo:
+                        responseType: JSON
+                        userAttributes:
+                          - email
+                          - name
+                      scopeClaims:
+                        email:
+                          - email
+                        profile:
+                          - name
+                """.formatted(baseUrl(), baseUrl()));
+        Files.writeString(resources.resolve("users/sso-user.yaml"), """
+                id: %s
+                type: Person
+                ouHandle: default
+                attributes:
+                  username: %s
+                  email: %s
+                  given_name: SSO
+                  family_name: User
+                  name: SSO User
+                credentials:
+                  password: \"%s\"
+                """.formatted(SSO_USER_ID, SSO_USERNAME, SSO_USERNAME, SSO_PASSWORD));
+    }
+
+    private String thunderIdUrl() {
+        return "https://localhost:" + ports.thunderId;
     }
 
     private void startObservability() throws Exception {
@@ -205,6 +488,14 @@ public final class E2EEnvironment implements AutoCloseable {
     public static void captureDiagnostics(String label) {
         if (current == null || !current.observability) return;
         current.dumpDiagnostics(label);
+    }
+
+    private static boolean isDockerUnavailable(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            String message = cause.getMessage();
+            if (message != null && message.contains("Docker environment")) return true;
+        }
+        return false;
     }
 
     private void dumpDiagnostics(String label) {
@@ -278,10 +569,12 @@ public final class E2EEnvironment implements AutoCloseable {
         if (miZip == null || !Files.exists(miZip)) throw new IllegalStateException("icp.e2e.miZip is required");
         int httpPort = freePort();
         int httpsPort = freePort();
+        int inboundPort = freePort();
         Path miRuntimeDir = runDir.resolve("mi-runtime");
         recreate(miRuntimeDir);
         Path miHome = unzipRoot(miZip, miRuntimeDir);
-        Files.createDirectories(miHome.resolve("repository/deployment/server/synapse-configs/default/api"));
+        Path synapse = miHome.resolve("repository/deployment/server/synapse-configs/default");
+        Files.createDirectories(synapse.resolve("api"));
         Files.writeString(miHome.resolve(".icp_runtime_id"), runtimeId);
         Map<String, String> vars = new LinkedHashMap<>();
         vars.put("HTTP_PORT", Integer.toString(httpPort));
@@ -294,7 +587,8 @@ public final class E2EEnvironment implements AutoCloseable {
         Files.writeString(miHome.resolve("conf/deployment.toml"), render("mi/deployment.toml", vars));
         patchMiLog4j(miHome.resolve("conf/log4j2.properties"));
         String api = render("mi/e2e-log-api.xml.template", Map.of("MESSAGE", xmlEscape(logMessage)));
-        Files.writeString(miHome.resolve("repository/deployment/server/synapse-configs/default/api/e2e-log-api.xml"), api);
+        Files.writeString(synapse.resolve("api/e2e-log-api.xml"), api);
+        deployRichMiArtifacts(synapse, inboundPort);
 
         ProcessBuilder builder = new ProcessBuilder("./micro-integrator.sh");
         builder.directory(miHome.resolve("bin").toFile());
@@ -309,6 +603,26 @@ public final class E2EEnvironment implements AutoCloseable {
         return new RuntimeProcess("MI", runtimeId, url);
     }
 
+    private void deployRichMiArtifacts(Path synapse, int inboundPort) throws IOException {
+        writeMiArtifact(synapse, "api", "health-check-api.xml", resource("mi/artifacts/HealthCheckAPI.xml"));
+        writeMiArtifact(synapse, "proxy-services", "sample-proxy-service.xml", resource("mi/artifacts/SampleProxyService.xml"));
+        writeMiArtifact(synapse, "endpoints", "sample-endpoint.xml", resource("mi/artifacts/SampleEndpoint.xml"));
+        writeMiArtifact(synapse, "sequences", "sample-sequence.xml", resource("mi/artifacts/SampleSequence.xml"));
+        writeMiArtifact(synapse, "tasks", "sample-task.xml", resource("mi/artifacts/SampleTask.xml"));
+        writeMiArtifact(synapse, "message-stores", "sample-message-store.xml", resource("mi/artifacts/SampleMessageStore.xml"));
+        writeMiArtifact(synapse, "message-processors", "sample-message-processor.xml", resource("mi/artifacts/SampleMessageProcessor.xml"));
+        writeMiArtifact(synapse, "templates", "sample-template.xml", resource("mi/artifacts/SampleTemplate.xml"));
+        writeMiArtifact(synapse, "local-entries", "sample-local-entry.xml", resource("mi/artifacts/SampleLocalEntry.xml"));
+        writeMiArtifact(synapse, "inbound-endpoints", "sample-inbound-endpoint.xml",
+                render("mi/artifacts/SampleInboundEndpoint.xml.template", Map.of("INBOUND_PORT", Integer.toString(inboundPort))));
+    }
+
+    private static void writeMiArtifact(Path synapse, String directory, String file, String content) throws IOException {
+        Path target = synapse.resolve(directory);
+        Files.createDirectories(target);
+        Files.writeString(target.resolve(file), content);
+    }
+
     // Mirror the real ICP+MI deployment: emit timezone-aware ISO timestamps and append the
     // icp.runtime.log.suffix system property (set by MI from .icp_runtime_id). Without the
     // timezone the carbon log times are parsed as UTC and land in the future, outside the UI
@@ -320,6 +634,18 @@ public final class E2EEnvironment implements AutoCloseable {
                 Matcher.quoteReplacement(
                         "appender.CARBON_LOGFILE.layout.pattern = [%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}] %5p {%c} %X{Artifact-Container} - %m%ex ${sys:icp.runtime.log.suffix:-}%n"));
         Files.writeString(log4j, content);
+    }
+
+    private void seedOidcUser() throws Exception {
+        execMysql("""
+                INSERT INTO users (user_id, username, display_name, is_super_admin, is_project_author, is_oidc_user, require_password_change)
+                VALUES ('%s', '%s', 'SSO User', TRUE, FALSE, TRUE, FALSE);
+
+                INSERT INTO group_user_mapping (group_id, user_uuid)
+                SELECT group_id, '%s'
+                FROM user_groups
+                WHERE group_name = 'Super Admins' AND org_uuid = 1;
+                """.formatted(SSO_USER_ID, SSO_USERNAME, SSO_USER_ID));
     }
 
     private void initializeH2(String dbName, Path script) throws Exception {
@@ -339,6 +665,20 @@ public final class E2EEnvironment implements AutoCloseable {
                 ? "opensearchUrl = \"https://" + opensearchHost + ":" + opensearchPort + "\"\n"
                 + "opensearchUsername = \"admin\"\nopensearchPassword = \"Ballerina@123\""
                 : "";
+        String ssoConfig = sso ? """
+                ssoEnabled = true
+                ssoIssuer = "%s"
+                ssoAuthorizationEndpoint = "%s/oauth2/authorize"
+                ssoTokenEndpoint = "%s/oauth2/token"
+                ssoLogoutEndpoint = "%s/oauth2/logout"
+                ssoJwksUrl = "%s/oauth2/jwks"
+                ssoClientId = "ICP_CONSOLE"
+                ssoClientSecret = "icp-console-secret"
+                ssoRedirectUri = "%s/sso/callback"
+                ssoUsernameClaim = "email"
+                ssoScopes = ["openid", "email", "profile"]
+                ssoAllowInsecureTLS = true
+                """.formatted(thunderIdUrl(), thunderIdUrl(), thunderIdUrl(), thunderIdUrl(), thunderIdUrl(), baseUrl()) : "";
         Map<String, String> vars = new LinkedHashMap<>();
         vars.put("SERVER_PORT", Integer.toString(ports.icp));
         vars.put("AUTH_PORT", Integer.toString(ports.auth));
@@ -346,6 +686,12 @@ public final class E2EEnvironment implements AutoCloseable {
         vars.put("RUNTIME_LISTENER_PORT", Integer.toString(ports.runtimeListener));
         vars.put("ICP_PORT", Integer.toString(ports.icp));
         vars.put("OPENSEARCH", opensearch);
+        vars.put("SSO", ssoConfig);
+        vars.put("DB_HOST", mysql.getHost());
+        vars.put("DB_PORT", Integer.toString(mysql.getMappedPort(MYSQL_PORT)));
+        vars.put("DB_NAME", DB_NAME);
+        vars.put("DB_USER", DB_USER);
+        vars.put("DB_PASSWORD", DB_PASSWORD);
         Files.writeString(icpHome.resolve("conf/deployment.toml"), render("icp/deployment.toml", vars));
     }
 
@@ -372,15 +718,38 @@ public final class E2EEnvironment implements AutoCloseable {
             throw new IOException("icp.e2e.jacocoAgentJar is required when icp.e2e.coverage=true");
         }
         Files.createDirectories(coverageDir());
-        builder.environment().put("JAVA_TOOL_OPTIONS", "-javaagent:" + jacocoAgentJar + "=destfile="
-                + coverageExec() + ",includes=wso2.*,append=false,dumponexit=true");
+        jacocoPort = freePort();
+        // TCP-server output lets us pull a complete dump before teardown, instead of racing the
+        // dump-on-exit shutdown hook against SIGTERM/SIGKILL (which truncates the exec file).
+        builder.environment().put("JAVA_TOOL_OPTIONS", "-javaagent:" + jacocoAgentJar
+                + "=output=tcpserver,address=127.0.0.1,port=" + jacocoPort + ",includes=wso2.*,dumponexit=true");
+    }
+
+    // Pull a full execution-data dump from the running ICP JaCoCo agent over its TCP control port.
+    private void dumpCoverage() {
+        if (!coverage || jacocoPort == 0) return;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try (Socket socket = new Socket("127.0.0.1", jacocoPort)) {
+                ExecFileLoader loader = new ExecFileLoader();
+                RemoteControlWriter writer = new RemoteControlWriter(socket.getOutputStream());
+                RemoteControlReader reader = new RemoteControlReader(socket.getInputStream());
+                reader.setSessionInfoVisitor(loader.getSessionInfoStore());
+                reader.setExecutionDataVisitor(loader.getExecutionDataStore());
+                writer.visitDumpCommand(true, false);
+                reader.read();
+                loader.save(coverageExec().toFile(), false);
+                return;
+            } catch (Exception e) {
+                if (attempt == 2) System.err.println("Failed to dump ICP coverage over TCP: " + e);
+            }
+        }
     }
 
     private void writeCoverageReport() {
         if (!coverage) return;
         try {
-            BallerinaCoverageReport.write(icpHome.resolve("bin/icp-server.jar"), coverageExec(), coverageDir(),
-                    icpServerSourceRoot());
+            BallerinaCoverageReport.write(icpHome.resolve("bin/icp-server.jar"), coverageDir(),
+                    icpServerSourceRoot(), "ICP Ballerina E2E line coverage", coverageExec());
             System.out.println("ICP Ballerina E2E line coverage: " + coverageDir().resolve("summary.md"));
         } catch (Exception e) {
             try {
@@ -569,11 +938,20 @@ public final class E2EEnvironment implements AutoCloseable {
         runtimeProcesses.reversed().forEach(E2EEnvironment::destroyTree);
         runtimeProcesses.clear();
         if (icpProcess != null) {
+            dumpCoverage();
             destroyTree(icpProcess);
             icpProcess = null;
             writeCoverageReport();
         }
         if (fluentBit != null) fluentBit.stop();
+        if (thunderId != null) {
+            try {
+                Files.writeString(reportDir.resolve("thunderid.log"), thunderId.getLogs());
+            } catch (IOException ignored) {
+            }
+            thunderId.stop();
+        }
+        if (mysql != null) mysql.stop();
         if (opensearch != null) opensearch.stop();
         if (network != null) network.close();
     }
@@ -595,9 +973,9 @@ public final class E2EEnvironment implements AutoCloseable {
     public record RuntimeProcess(String type, String runtimeId, String url) {
     }
 
-    private record Ports(int icp, int auth, int runtimeListener, int opensearchAdaptor) {
+    private record Ports(int icp, int auth, int runtimeListener, int opensearchAdaptor, int thunderId) {
         static Ports allocate() throws IOException {
-            return new Ports(freePort(), freePort(), freePort(), freePort());
+            return new Ports(freePort(), freePort(), freePort(), freePort(), freePort());
         }
     }
 }

@@ -15,14 +15,17 @@ enableAuditLogging = true
 auditLogFilePath = "../logs/audit.log"
 enableMetrics = true
 {{OPENSEARCH}}
+{{SSO}}
 
 [icp_server.secrets]
 
 [icp_server.storage]
-dbType = "h2"
-dbName = "icp_db"
-dbUser = "icp_user"
-dbPassword = "icp_password"
+dbType = "mysql"
+dbHost = "{{DB_HOST}}"
+dbPort = {{DB_PORT}}
+dbName = "{{DB_NAME}}"
+dbUser = "{{DB_USER}}"
+dbPassword = "{{DB_PASSWORD}}"
 heartbeatTimeoutSeconds = 20
 
 [icp_server.storage.secrets]

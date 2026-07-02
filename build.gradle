@@ -90,12 +90,16 @@ task run {
 }
 
 task testICP {
-    description = 'Run tests for the Integration Control Plane'
+    description = 'Run ICP Ballerina unit tests (self-contained H2) with code coverage'
+    // Seed the H2 test databases first so the suite needs no external MySQL.
+    dependsOn ':icp_server:initTestH2'
+    // When both run, build the jar first: buildICP cleans target, so it must precede the dump.
+    mustRunAfter buildICP
     doLast {
         logger.info('Running tests...')
         exec {
             workingDir 'icp_server'
-            commandLine 'bal', 'test'
+            commandLine 'bal', 'test', '--code-coverage'
         }
         logger.info('Tests complete')
     }
@@ -390,8 +394,22 @@ task checkICP {
     dependsOn testICP
 }
 
+task coverage {
+    group = 'verification'
+    description = 'Run unit tests + E2E and build the combined coverage report (skip E2E with -PskipE2E)'
+    // buildICP gives combinedCoverageReport a jar matching the dumps; testICP runs after it.
+    dependsOn buildICP, testICP
+    // The combined report needs both dumps, so it (and E2E) only run when E2E is not skipped.
+    if (!project.hasProperty('skipE2E')) {
+        dependsOn ':e2e-tests:test', ':e2e-tests:combinedCoverageReport'
+    }
+}
+
 check.dependsOn checkICP
 check.dependsOn ':e2e-tests:test'
+// A normal `gradle build` runs both suites (unit + E2E), so also emit the combined report.
+// It self-skips when only one suite ran (e.g. `build -x :e2e-tests:test`).
+check.dependsOn ':e2e-tests:combinedCoverageReport'
 
 // Help task
 task helpICP {

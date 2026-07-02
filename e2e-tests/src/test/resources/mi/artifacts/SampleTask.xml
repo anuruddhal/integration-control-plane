@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<task class="org.apache.synapse.startup.tasks.MessageInjector" group="synapse.simple.quartz" name="SampleTask" xmlns="http://ws.apache.org/ns/synapse">
+    <trigger interval="60"/>
+    <property name="message" xmlns:task="http://www.wso2.org/products/wso2commons/tasks">
+        <sample>scheduled task message</sample>
+    </property>
+    <property name="injectTo" xmlns:task="http://www.wso2.org/products/wso2commons/tasks">sequence</property>
+    <property name="sequenceName" xmlns:task="http://www.wso2.org/products/wso2commons/tasks">SampleSequence</property>
+</task>

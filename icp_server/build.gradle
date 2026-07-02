@@ -282,6 +282,34 @@ task initAllH2Databases {
     }
 }
 
+// Recreate the self-contained H2 databases the unit tests use (see tests/Config.toml).
+// Fresh every run so mutating tests start from the seeded state; files live under the
+// gitignored database/ dir.
+def loadH2(dbName, scripts) {
+    def dbFile = file("database/${dbName}")
+    ['', '.mv.db', '.trace.db'].each { delete file("database/${dbName}${it}") }
+    scripts.each { script ->
+        ant.sql(
+            driver: 'org.h2.Driver',
+            url: "jdbc:h2:file:${dbFile.absolutePath};MODE=MySQL",
+            userid: 'icp_user', password: 'icp_password',
+            src: file(script).absolutePath,
+            classpath: buildscript.configurations.classpath.asPath,
+            onerror: 'abort'
+        )
+    }
+}
+
+task initTestH2 {
+    description = 'Recreate the seeded H2 databases used by the Ballerina unit tests'
+    doLast {
+        def s = 'resources/db/init-scripts'
+        loadH2('icp_test_db', ["${s}/h2_init.sql", "${s}/h2_test_data.sql"])
+        loadH2('credentials_test_db', ["${s}/credentials_h2_init.sql"])
+        logger.lifecycle('✓ Test H2 databases ready: database/icp_test_db, database/credentials_test_db')
+    }
+}
+
 task cleanH2Database {
     description = 'Clean/delete all H2 database files (main and credentials)'
     

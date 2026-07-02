@@ -29,7 +29,7 @@ public class LoginPage {
     public void signIn(String username, String password) {
         page.getByLabel("Username").fill(username);
         password().fill(password);
-        page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Sign In")).click();
+        page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Sign In").setExact(true)).click();
     }
 
     public void assertError(String messageRegex) {

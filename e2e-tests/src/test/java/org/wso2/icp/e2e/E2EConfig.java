@@ -9,6 +9,7 @@ public record E2EConfig(
         int timeoutMs,
         boolean observability,
         boolean coverage,
+        boolean sso,
         String jacocoAgentJar,
         String logsProject,
         String logsBiComponent,
@@ -21,6 +22,7 @@ public record E2EConfig(
         String reportDir) {
 
     public static E2EConfig load() {
+        boolean selfContained = bool("icp.e2e.selfContained", "ICP_E2E_SELF_CONTAINED", true);
         return new E2EConfig(
                 value("icp.e2e.baseUrl", "ICP_E2E_BASE_URL", "https://localhost:9445"),
                 value("icp.e2e.admin.username", "ICP_E2E_ADMIN_USERNAME", "admin"),
@@ -29,12 +31,13 @@ public record E2EConfig(
                 integer("icp.e2e.slowMoMs", "ICP_E2E_SLOW_MO_MS", 0),
                 integer("icp.e2e.timeoutMs", "ICP_E2E_TIMEOUT_MS", 15_000),
                 bool("icp.e2e.observability", "ICP_E2E_OBSERVABILITY", true),
-                bool("icp.e2e.coverage", "ICP_E2E_COVERAGE", false),
+                bool("icp.e2e.coverage", "ICP_E2E_COVERAGE", true),
+                bool("icp.e2e.sso", "ICP_E2E_SSO", selfContained),
                 value("icp.e2e.jacocoAgentJar", "ICP_E2E_JACOCO_AGENT_JAR", ""),
                 value("icp.e2e.logs.project", "ICP_E2E_LOGS_PROJECT", "sample-project"),
                 value("icp.e2e.logs.biComponent", "ICP_E2E_LOGS_BI_COMPONENT", "sample-integration"),
                 value("icp.e2e.logs.miComponent", "ICP_E2E_LOGS_MI_COMPONENT", "mi-sample-integration"),
-                bool("icp.e2e.selfContained", "ICP_E2E_SELF_CONTAINED", false),
+                selfContained,
                 value("icp.e2e.distributionZip", "ICP_E2E_DISTRIBUTION_ZIP", ""),
                 value("icp.e2e.miZip", "ICP_E2E_MI_ZIP", ""),
                 value("icp.e2e.biJar", "ICP_E2E_BI_JAR", ""),
@@ -43,8 +46,12 @@ public record E2EConfig(
     }
 
     public E2EConfig withBaseUrl(String baseUrl) {
+        return withBaseUrlAndObservability(baseUrl, observability);
+    }
+
+    public E2EConfig withBaseUrlAndObservability(String baseUrl, boolean observability) {
         return new E2EConfig(baseUrl, adminUsername, adminPassword, headless, slowMoMs, timeoutMs, observability,
-                coverage, jacocoAgentJar, logsProject, logsBiComponent, logsMiComponent, selfContained, distributionZip,
+                coverage, sso, jacocoAgentJar, logsProject, logsBiComponent, logsMiComponent, selfContained, distributionZip,
                 miZip, biJar, workDir, reportDir);
     }
 

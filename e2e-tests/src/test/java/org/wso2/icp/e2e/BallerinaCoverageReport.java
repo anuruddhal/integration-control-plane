@@ -18,8 +18,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -37,11 +39,19 @@ final class BallerinaCoverageReport {
     private BallerinaCoverageReport() {
     }
 
-    static void write(Path icpServerJar, Path execFile, Path reportDir, Path sourceRoot) throws IOException {
+    // JaCoCo merges probes for identical class ids across exec files, so passing both the E2E dump and
+    // the `bal test --code-coverage` dump yields a single union of covered .bal lines.
+    // Returns the total line-coverage percentage (0..100).
+    static double write(Path icpServerJar, Path reportDir, Path sourceRoot, String title, Path... execFiles)
+            throws IOException {
         Files.createDirectories(reportDir);
-        if (!Files.exists(execFile) || Files.size(execFile) == 0) {
-            Files.writeString(reportDir.resolve("summary.md"), "# ICP Ballerina E2E line coverage\n\nNo JaCoCo execution data was written.\n");
-            return;
+        List<Path> execs = new ArrayList<>();
+        for (Path exec : execFiles) {
+            if (exec != null && Files.exists(exec) && Files.size(exec) > 0) execs.add(exec);
+        }
+        if (execs.isEmpty()) {
+            Files.writeString(reportDir.resolve("summary.md"), "# " + title + "\n\nNo JaCoCo execution data was written.\n");
+            return 0.0;
         }
 
         Path classesDir = reportDir.resolve("classes");
@@ -49,7 +59,7 @@ final class BallerinaCoverageReport {
         extractClasses(icpServerJar, classesDir);
 
         ExecFileLoader loader = new ExecFileLoader();
-        loader.load(execFile.toFile());
+        for (Path exec : execs) loader.load(exec.toFile());
         CoverageBuilder builder = new CoverageBuilder();
         new Analyzer(loader.getExecutionDataStore(), builder).analyzeAll(classesDir.toFile());
         IBundleCoverage bundle = builder.getBundle("icp-server-e2e-ballerina");
@@ -57,9 +67,13 @@ final class BallerinaCoverageReport {
         Map<String, SourceStats> coverage = mergeBallerinaSources(builder, sources);
 
         writeXml(reportDir.resolve("jacoco.xml"), sources, loader, bundle);
-        writeSummary(reportDir.resolve("summary.md"), coverage);
-        writeBallerinaHtml(reportDir.resolve("html"), coverage, sources);
+        writeSummary(reportDir.resolve("summary.md"), title, coverage);
+        writeBallerinaHtml(reportDir.resolve("html"), title, coverage, sources);
         delete(classesDir);
+
+        int covered = coverage.values().stream().mapToInt(SourceStats::coveredCount).sum();
+        int total = covered + coverage.values().stream().mapToInt(SourceStats::missedCount).sum();
+        return total == 0 ? 0.0 : 100.0 * covered / total;
     }
 
     private static void writeXml(Path output, ISourceFileLocator sources, ExecFileLoader loader,
@@ -95,10 +109,10 @@ final class BallerinaCoverageReport {
         return coverage;
     }
 
-    private static void writeSummary(Path output, Map<String, SourceStats> coverage) throws IOException {
+    private static void writeSummary(Path output, String title, Map<String, SourceStats> coverage) throws IOException {
         int covered = coverage.values().stream().mapToInt(SourceStats::coveredCount).sum();
         int missed = coverage.values().stream().mapToInt(SourceStats::missedCount).sum();
-        StringBuilder markdown = new StringBuilder("# ICP Ballerina E2E line coverage\n\n")
+        StringBuilder markdown = new StringBuilder("# ").append(title).append("\n\n")
                 .append("Generated: ").append(Instant.now()).append("\n\n")
                 .append("## Total\n\n")
                 .append(summaryLine(covered, missed)).append("\n\n")
@@ -113,8 +127,8 @@ final class BallerinaCoverageReport {
         Files.writeString(output, markdown.toString());
     }
 
-    private static void writeBallerinaHtml(Path output, Map<String, SourceStats> coverage, SourceLocator sources)
-            throws IOException {
+    private static void writeBallerinaHtml(Path output, String title, Map<String, SourceStats> coverage,
+                                           SourceLocator sources) throws IOException {
         recreate(output);
         Map<String, String> pages = new LinkedHashMap<>();
         for (SourceStats stats : coverage.values()) {
@@ -122,14 +136,14 @@ final class BallerinaCoverageReport {
             pages.put(stats.path, page);
             Files.writeString(output.resolve(page), sourceHtml(stats, sources.source(stats.path)));
         }
-        Files.writeString(output.resolve("index.html"), indexHtml(coverage, pages));
+        Files.writeString(output.resolve("index.html"), indexHtml(title, coverage, pages));
     }
 
-    private static String indexHtml(Map<String, SourceStats> coverage, Map<String, String> pages) {
+    private static String indexHtml(String title, Map<String, SourceStats> coverage, Map<String, String> pages) {
         int covered = coverage.values().stream().mapToInt(SourceStats::coveredCount).sum();
         int missed = coverage.values().stream().mapToInt(SourceStats::missedCount).sum();
-        StringBuilder html = htmlStart("ICP Ballerina E2E coverage")
-                .append("<h1>ICP Ballerina E2E line coverage</h1>")
+        StringBuilder html = htmlStart(title)
+                .append("<h1>").append(escape(title)).append("</h1>")
                 .append("<p>Generated: ").append(escape(Instant.now().toString())).append("</p>")
                 .append("<h2>Total: ").append(summaryText(covered, missed)).append("</h2>")
                 .append("<table><thead><tr><th>Source</th><th>Covered</th><th>Missed</th><th>Line coverage</th></tr></thead><tbody>");

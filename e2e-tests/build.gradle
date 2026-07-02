@@ -25,6 +25,26 @@ configurations {
 
 def resolvedMiVersion = providers.gradleProperty('miVersion').orElse('latest.release')
 
+def dockerContextHost() {
+    def context = commandOutput('docker', 'context', 'show')
+    context ? commandOutput('docker', 'context', 'inspect', '--format', '{{.Endpoints.docker.Host}}', context) : ''
+}
+
+def commandOutput(String... args) {
+    def output = new ByteArrayOutputStream()
+    try {
+        def result = exec {
+            commandLine args
+            standardOutput = output
+            errorOutput = new ByteArrayOutputStream()
+            ignoreExitValue = true
+        }
+        return result.exitValue == 0 ? output.toString().trim() : ''
+    } catch (Exception ignored) {
+        return ''
+    }
+}
+
 dependencies {
     testImplementation 'com.microsoft.playwright:playwright:1.49.0'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.3'
@@ -73,12 +93,17 @@ tasks.register('buildBiE2eArtifact') {
 test {
     useJUnitPlatform()
 
-    // Forward local Docker/Testcontainers config (e.g. Colima) to the forked test JVM.
-    ['DOCKER_HOST', 'TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE', 'TESTCONTAINERS_RYUK_DISABLED'].each { key ->
+    // Forward local Docker/Testcontainers config. Docker CLI contexts are not env vars, so pass them explicitly.
+    def dockerHost = System.getenv('DOCKER_HOST') ?: dockerContextHost()
+    if (dockerHost) environment 'DOCKER_HOST', dockerHost
+    ['TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE', 'TESTCONTAINERS_RYUK_DISABLED'].each { key ->
         if (System.getenv(key)) environment key, System.getenv(key)
     }
+    if (!System.getenv('TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE') && dockerHost?.startsWith('unix://')) {
+        environment 'TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE', '/var/run/docker.sock'
+    }
     // docker-java negotiates too low an API version for some daemons (e.g. Colima); pin a supported one.
-    if (System.getenv('DOCKER_HOST')) systemProperty 'api.version', System.getenv('DOCKER_API_VERSION') ?: '1.41'
+    if (dockerHost) systemProperty 'api.version', System.getenv('DOCKER_API_VERSION') ?: '1.41'
 
     dependsOn rootProject.tasks.named('packageICP')
     dependsOn tasks.named('resolveMiDistribution')
@@ -88,6 +113,8 @@ test {
     systemProperties System.getProperties().findAll { key, _ -> key.toString().startsWith('icp.e2e.') }
     def coverageEnabled = System.getProperty('icp.e2e.coverage', 'true')
     systemProperty 'icp.e2e.selfContained', System.getProperty('icp.e2e.selfContained', 'true')
+    systemProperty 'icp.e2e.observability', System.getProperty('icp.e2e.observability', 'true')
+    systemProperty 'icp.e2e.sso', System.getProperty('icp.e2e.sso', 'true')
     systemProperty 'icp.e2e.coverage', coverageEnabled
     systemProperty 'icp.e2e.distributionZip', rootProject.layout.buildDirectory.file("distribution/wso2-integration-control-plane-${rootProject.version}.zip").get().asFile.absolutePath
     systemProperty 'icp.e2e.workDir', layout.buildDirectory.dir('runtime').get().asFile.absolutePath
@@ -106,6 +133,37 @@ test {
         events 'passed', 'skipped', 'failed'
         exceptionFormat 'full'
     }
+}
+
+// Pure merge step: unions whatever JaCoCo dumps already exist into one report. It does NOT run either
+// test suite — those own their own infra (E2E is self-contained; unit tests need the MySQL from
+// docker-compose.test.yml). All dumps and the jar MUST come from the same source and Ballerina
+// toolchain, or JaCoCo drops the mismatched class ids. Paths are overridable via -P properties.
+tasks.register('combinedCoverageReport', JavaExec) {
+    group = 'verification'
+    description = 'Merge existing E2E and Ballerina unit-test JaCoCo dumps into one line-coverage report.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.wso2.icp.e2e.CombinedCoverageReport'
+    def jar = providers.gradleProperty('icp.coverage.jar')
+            .getOrElse(rootProject.file('icp_server/target/bin/icp_server.jar').absolutePath)
+    mustRunAfter rootProject.tasks.named('testICP')
+    mustRunAfter tasks.named('test')
+    def e2eExec = providers.gradleProperty('icp.coverage.e2eExec')
+            .getOrElse(layout.buildDirectory.file('reports/e2e/coverage/jacoco.exec').get().asFile.absolutePath)
+    def unitExec = providers.gradleProperty('icp.coverage.unitExec')
+            .getOrElse(rootProject.file('icp_server/target/cache/tests_cache/coverage/ballerina.exec').absolutePath)
+    // A "combined" report needs both dumps. Skip (don't fail) when either is absent — e.g. a
+    // unit-only `build -x :e2e-tests:test` — so it never emits a one-suite report.
+    onlyIf {
+        [e2eExec, unitExec].every { path -> def d = file(path); d.exists() && d.length() > 0 }
+    }
+    // Optional CI gate: -Picp.coverage.min=NN fails the build below that line-coverage percentage.
+    providers.gradleProperty('icp.coverage.min').map { systemProperty 'icp.coverage.min', it }.getOrNull()
+    args jar,
+            rootProject.file('icp_server').absolutePath,
+            layout.buildDirectory.dir('reports/combined/coverage').get().asFile.absolutePath,
+            e2eExec,
+            unitExec
 }
 
 tasks.register('playwrightInstall', JavaExec) {
