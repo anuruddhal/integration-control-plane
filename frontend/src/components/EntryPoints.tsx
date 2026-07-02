@@ -91,7 +91,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const showWsdlButton = artifactType === 'ProxyService';
   const showStatisticsToggle = ['RestApi', 'ProxyService', 'InboundEndpoint'].includes(artifactType);
   const showStatusToggle = ['ProxyService', 'InboundEndpoint'].includes(artifactType);
-  const showStatusChip = artifactType === 'RestApi';
+  const showStatusChip = artifactType === 'RestApi' || artifactType === 'Listener';
   const showListenerToggle = artifactType === 'Listener';
   const showTaskToggle = artifactType === 'Task';
   const showTaskTrigger = artifactType === 'Task';
@@ -204,9 +204,11 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
 
     const runtimeIds = runtimes.map((r: { runtimeId: string }) => r.runtimeId);
     const action = pendingListenerToggle.checked ? 'START' : 'STOP';
+    const targetEnabled = pendingListenerToggle.checked;
     const artifactQueryKey = ['artifacts', artifactType, envId, componentId];
 
     pendingActionRef.current = action;
+    setListenerEnabled(targetEnabled);
 
     updateListenerState.mutate(
       {
@@ -216,6 +218,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         action,
       },
       {
+        onError: () => setListenerEnabled(!targetEnabled),
         onSettled: () => {
           pendingActionRef.current = null;
           queryClient.invalidateQueries({ queryKey: artifactQueryKey });
@@ -228,7 +231,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
 
   const toggleLabel = pendingToggle?.type ?? 'status';
   const toggleAction = pendingToggle?.checked ? 'enable' : 'disable';
-  const listenerAction = pendingListenerToggle?.checked ? 'start' : 'stop';
+  const listenerAction = pendingListenerToggle?.checked ? 'enable' : 'disable';
 
   return (
     <>
@@ -249,7 +252,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         </DialogActions>
       </Dialog>
       <Dialog open={pendingListenerToggle !== null} onClose={() => setPendingListenerToggle(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>{listenerAction === 'start' ? 'Start Listener' : 'Stop Listener'}</DialogTitle>
+        <DialogTitle>{listenerAction === 'enable' ? 'Enable Listener' : 'Disable Listener'}</DialogTitle>
         <DialogContent>
           <DialogContentText>
             Are you sure you want to {listenerAction} the listener <strong>{artifactName}</strong>?
@@ -257,8 +260,8 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPendingListenerToggle(null)}>Cancel</Button>
-          <Button variant="contained" color={listenerAction === 'stop' ? 'error' : 'success'} onClick={handleConfirmListenerToggle}>
-            {listenerAction === 'start' ? 'Start' : 'Stop'}
+          <Button variant="contained" color={listenerAction === 'disable' ? 'error' : 'success'} onClick={handleConfirmListenerToggle}>
+            {listenerAction === 'enable' ? 'Enable' : 'Disable'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -287,7 +290,14 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
               <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
                 Status
               </Typography>
-              <Chip label={artifactState.charAt(0).toUpperCase() + artifactState.slice(1).toLowerCase()} size="small" variant="outlined" color={toEnabled(artifact.state) ? 'success' : 'default'} />
+              {artifactType === 'Listener' ? (
+                <Stack direction="row" alignItems="center" gap={0.75}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: toEnabled(artifact.state) ? 'success.main' : 'text.disabled' }} />
+                  <Typography variant="body2">{toEnabled(artifact.state) ? 'Enabled' : 'Disabled'}</Typography>
+                </Stack>
+              ) : (
+                <Chip label={artifactState.charAt(0).toUpperCase() + artifactState.slice(1).toLowerCase()} size="small" variant="outlined" color={toEnabled(artifact.state) ? 'success' : 'default'} sx={{ fontSize: '0.875rem' }} />
+              )}
             </Box>
           )}
           {showStatusChip && artifactState && (showStatusToggle || showTracingToggle || showStatisticsToggle || showListenerToggle) && <Divider orientation="vertical" flexItem />}
@@ -297,29 +307,39 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
           {showTracingToggle && showStatisticsToggle && <Divider orientation="vertical" flexItem />}
           {showStatisticsToggle && <SyncSwitch label="Statistics" checked={statisticsEnabled} inSync={artifact.statisticsInSync as boolean | null} onChange={handleToggleStatistics} disabled={updateStatisticsStatus.isPending} />}
           {showListenerToggle && (!listenerEnabled || (updateListenerState.isPending && pendingActionRef.current === 'START')) && (
-            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Start listener'}>
+            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Enable listener'}>
               <span style={{ marginLeft: 'auto' }}>
-                <Button
-                  variant="outlined" size="small" color="success"
-                  startIcon={!(updateListenerState.isPending && pendingActionRef.current === 'START') && <Play size={14} />}
-                  disabled={updateListenerState.isPending || !hasRuntimes}
-                  onClick={() => handleToggleListener(true)}
-                >
-                  {updateListenerState.isPending && pendingActionRef.current === 'START' ? <><CircularProgress size={12} color="inherit" sx={{ mr: 0.5 }} />Starting…</> : 'Start'}
+                <Button variant="contained" size="small" color="success" startIcon={!updateListenerState.isPending && <Play size={14} />} disabled={updateListenerState.isPending || !hasRuntimes} onClick={() => handleToggleListener(true)}>
+                  {updateListenerState.isPending && pendingActionRef.current === 'START' ? (
+                    <>
+                      <CircularProgress size={12} color="inherit" sx={{ mr: 0.5 }} />
+                      Enabling…
+                    </>
+                  ) : (
+                    <>
+                      {artifact.stateInSync === false && <CircularProgress size={10} color="inherit" sx={{ mr: 0.5 }} />}
+                      Enable
+                    </>
+                  )}
                 </Button>
               </span>
             </Tooltip>
           )}
           {showListenerToggle && (listenerEnabled || (updateListenerState.isPending && pendingActionRef.current === 'STOP')) && (
-            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Stop listener'}>
+            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Disable listener'}>
               <span style={{ marginLeft: 'auto' }}>
-                <Button
-                  variant="outlined" size="small" color="error"
-                  startIcon={!(updateListenerState.isPending && pendingActionRef.current === 'STOP') && <Square size={14} />}
-                  disabled={updateListenerState.isPending || !hasRuntimes}
-                  onClick={() => handleToggleListener(false)}
-                >
-                  {updateListenerState.isPending && pendingActionRef.current === 'STOP' ? <><CircularProgress size={12} color="inherit" sx={{ mr: 0.5 }} />Stopping…</> : 'Stop'}
+                <Button variant="contained" size="small" color="error" startIcon={!updateListenerState.isPending && <Square size={14} />} disabled={updateListenerState.isPending || !hasRuntimes} onClick={() => handleToggleListener(false)}>
+                  {updateListenerState.isPending && pendingActionRef.current === 'STOP' ? (
+                    <>
+                      <CircularProgress size={12} color="inherit" sx={{ mr: 0.5 }} />
+                      Disabling…
+                    </>
+                  ) : (
+                    <>
+                      {artifact.stateInSync === false && <CircularProgress size={10} color="inherit" sx={{ mr: 0.5 }} />}
+                      Disable
+                    </>
+                  )}
                 </Button>
               </span>
             </Tooltip>
@@ -515,7 +535,7 @@ function EntryPointsList({
           const cfg = ENTRY_POINT_CONFIG[type];
           const meta = cfg?.metaField ? a[cfg.metaField]?.toString() : undefined;
           const useMeta = cfg?.primaryDisplay && !!meta;
-          const displayName = useMeta ? meta : (type === 'Automation' ? a.packageName?.toString() : a.name?.toString());
+          const displayName = useMeta ? meta : type === 'Automation' ? a.packageName?.toString() : a.name?.toString();
           return (
             <Box key={key} component="li" sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }} {...optionProps}>
               <Chip label={cfg?.label} size="small" sx={{ bgcolor: cfg?.bgColor, color: cfg?.color, fontWeight: 700, fontSize: 11, minWidth: 60, justifyContent: 'center' }} />
