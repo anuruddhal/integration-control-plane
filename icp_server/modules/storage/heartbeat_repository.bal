@@ -516,6 +516,9 @@ isolated function writeObservedStateBI(string runtimeId, string componentId, str
         record {|string status; boolean optimistic;|}|error? prev = readListenerObservedStatus(runtimeId, qualName);
         if prev is record {|string status; boolean optimistic;|} {
             prevListenerRows[qualName] = prev;
+        } else if prev is error {
+            log:printWarn("Failed to read previous listener observed status; notification for this listener may be skipped",
+                runtimeId = runtimeId, listenerName = qualName, err = prev.message());
         }
         entries.push([
             {artifactName: qualName, artifactType: "listener"},
