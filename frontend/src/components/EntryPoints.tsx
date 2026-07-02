@@ -111,7 +111,10 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
     setTracingEnabled(toEnabled(artifact.tracing));
     setStatisticsEnabled(toEnabled(artifact.statistics));
     setStatusEnabled(toEnabled(artifact.state));
-    setListenerEnabled(toEnabled(artifact.state));
+    // Don't overwrite the optimistic listenerEnabled while a listener action is still in flight.
+    if (!pendingActionRef.current) {
+      setListenerEnabled(toEnabled(artifact.state));
+    }
   }, [artifactKey, artifact.tracing, artifact.statistics, artifact.state]);
 
   const handleToggleTracing = (checked: boolean) => {
@@ -219,10 +222,13 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         action,
       },
       {
-        onError: () => setListenerEnabled(!targetEnabled),
-        onSettled: () => {
+        onError: () => {
+          setListenerEnabled(!targetEnabled);
           pendingActionRef.current = null;
-          queryClient.invalidateQueries({ queryKey: artifactQueryKey });
+        },
+        onSettled: async () => {
+          await queryClient.invalidateQueries({ queryKey: artifactQueryKey });
+          pendingActionRef.current = null;
         },
       },
     );
