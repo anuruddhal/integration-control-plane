@@ -117,7 +117,9 @@ export function useRuntimeStatusSubscription(environmentId: string | undefined, 
             });
           } else if (event.eventType === 'LISTENER_STATE_CHANGE') {
             const e = event as ListenerStateChangeEvent;
-            pushListenerStateChangeNotification(addNotificationRef.current, e);
+            if (notificationsEnabledRef.current) {
+              pushListenerStateChangeNotification(addNotificationRef.current, e);
+            }
             queryClient.invalidateQueries({
               predicate: (query) => {
                 const key = query.queryKey;
@@ -215,7 +217,9 @@ export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[], n
               });
             } else if (event.eventType === 'LISTENER_STATE_CHANGE') {
               const e = event as ListenerStateChangeEvent;
-              pushListenerStateChangeNotification(addNotificationRef.current, e);
+              if (notificationsEnabledRef.current) {
+                pushListenerStateChangeNotification(addNotificationRef.current, e);
+              }
               queryClient.invalidateQueries({
                 predicate: (query) => {
                   const key = query.queryKey;
