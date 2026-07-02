@@ -30,9 +30,9 @@ public record E2EConfig(
                 bool("icp.e2e.headless", "ICP_E2E_HEADLESS", true),
                 integer("icp.e2e.slowMoMs", "ICP_E2E_SLOW_MO_MS", 0),
                 integer("icp.e2e.timeoutMs", "ICP_E2E_TIMEOUT_MS", 15_000),
-                bool("icp.e2e.observability", "ICP_E2E_OBSERVABILITY", true),
+                false,
                 bool("icp.e2e.coverage", "ICP_E2E_COVERAGE", true),
-                bool("icp.e2e.sso", "ICP_E2E_SSO", selfContained),
+                false,
                 value("icp.e2e.jacocoAgentJar", "ICP_E2E_JACOCO_AGENT_JAR", ""),
                 value("icp.e2e.logs.project", "ICP_E2E_LOGS_PROJECT", "sample-project"),
                 value("icp.e2e.logs.biComponent", "ICP_E2E_LOGS_BI_COMPONENT", "sample-integration"),
@@ -45,11 +45,25 @@ public record E2EConfig(
                 value("icp.e2e.reportDir", "ICP_E2E_REPORT_DIR", "build/reports/e2e"));
     }
 
-    public E2EConfig withBaseUrl(String baseUrl) {
-        return withBaseUrlAndObservability(baseUrl, observability);
+    public E2EConfig forCoreSuite() {
+        return withFixture(false, false);
     }
 
-    public E2EConfig withBaseUrlAndObservability(String baseUrl, boolean observability) {
+    public E2EConfig forObservabilitySuite() {
+        return withFixture(true, false);
+    }
+
+    public E2EConfig forSsoSuite() {
+        return withFixture(false, true);
+    }
+
+    public E2EConfig withBaseUrl(String baseUrl) {
+        return new E2EConfig(baseUrl, adminUsername, adminPassword, headless, slowMoMs, timeoutMs, observability,
+                coverage, sso, jacocoAgentJar, logsProject, logsBiComponent, logsMiComponent, selfContained, distributionZip,
+                miZip, biJar, workDir, reportDir);
+    }
+
+    private E2EConfig withFixture(boolean observability, boolean sso) {
         return new E2EConfig(baseUrl, adminUsername, adminPassword, headless, slowMoMs, timeoutMs, observability,
                 coverage, sso, jacocoAgentJar, logsProject, logsBiComponent, logsMiComponent, selfContained, distributionZip,
                 miZip, biJar, workDir, reportDir);

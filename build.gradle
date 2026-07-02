@@ -407,8 +407,8 @@ task coverage {
 
 check.dependsOn checkICP
 check.dependsOn ':e2e-tests:test'
-// A normal `gradle build` runs both suites (unit + E2E), so also emit the combined report.
-// It self-skips when only one suite ran (e.g. `build -x :e2e-tests:test`).
+// A normal `gradle build` runs unit tests plus all E2E suites, so also emit the combined report.
+// It self-skips when any required dump is missing (e.g. `build -x :e2e-tests:test`).
 check.dependsOn ':e2e-tests:combinedCoverageReport'
 
 // Help task

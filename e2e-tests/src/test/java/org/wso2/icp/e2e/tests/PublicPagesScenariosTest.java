@@ -5,7 +5,7 @@ import com.microsoft.playwright.options.AriaRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.wso2.icp.e2e.BaseE2ETest;
+import org.wso2.icp.e2e.BaseCoreE2ETest;
 
 import java.util.regex.Pattern;
 
@@ -13,7 +13,7 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 
 @Tag("e2e")
 @DisplayName("Public page scenarios")
-class PublicPagesScenariosTest extends BaseE2ETest {
+class PublicPagesScenariosTest extends BaseCoreE2ETest {
 
     @Test
     @DisplayName("Policy pages are public")

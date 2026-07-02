@@ -5,11 +5,10 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.assertions.LocatorAssertions;
 import com.microsoft.playwright.options.AriaRole;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.wso2.icp.e2e.BaseE2ETest;
+import org.wso2.icp.e2e.BaseObservabilityE2ETest;
 import org.wso2.icp.e2e.E2EEnvironment;
 import org.wso2.icp.e2e.pages.AppPage;
 import org.wso2.icp.e2e.pages.LoginPage;
@@ -23,7 +22,7 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 @Tag("e2e")
 @Tag("observability")
 @DisplayName("Runtime logs scenarios")
-class RuntimeLogsScenariosTest extends BaseE2ETest {
+class RuntimeLogsScenariosTest extends BaseObservabilityE2ETest {
     private String project;
     private String environment;
     private String biComponent;
@@ -43,7 +42,6 @@ class RuntimeLogsScenariosTest extends BaseE2ETest {
     @Test
     @DisplayName("Project and component logs")
     void projectAndComponentLogsShowOpenSearchEntries() throws Exception {
-        Assumptions.assumeTrue(config.observability(), "Run with -Dicp.e2e.observability=true.");
         page.setDefaultTimeout(Math.max(config.timeoutMs(), 120_000));
 
         signInAsAdmin();

@@ -96,7 +96,12 @@ public final class E2EEnvironment implements AutoCloseable {
 
     public static synchronized E2EConfig start(E2EConfig config) {
         if (!config.selfContained()) return config;
-        if (current != null) return config.withBaseUrlAndObservability(current.baseUrl(), current.observability);
+        if (current != null) {
+            if (current.observability != config.observability() || current.sso != config.sso()) {
+                throw new IllegalStateException("E2E environment already started with a different suite fixture");
+            }
+            return config.withBaseUrl(current.baseUrl());
+        }
         if (config.distributionZip().isBlank()) {
             throw new IllegalStateException("icp.e2e.distributionZip is required for self-contained E2E tests");
         }
@@ -117,23 +122,14 @@ public final class E2EEnvironment implements AutoCloseable {
             E2EEnvironment env = new E2EEnvironment(runDir, reportDir, icpHome, miZip, biJar, ports,
                     config.observability(), config.coverage(), config.sso(), config.jacocoAgentJar());
             environment = env;
-            try {
-                env.startObservability();
-            } catch (Exception e) {
-                if (!config.observability() || !isDockerUnavailable(e)) throw e;
-                env.closeQuietly();
-                env = new E2EEnvironment(runDir, reportDir, icpHome, miZip, biJar, ports,
-                        false, config.coverage(), config.sso(), config.jacocoAgentJar());
-                environment = env;
-                System.err.println("Docker is unavailable; running E2E tests without observability.");
-            }
+            env.startObservability();
             env.startThunderId();
             env.startMysql();
             env.prepareIcp();
             env.startIcp();
             current = env;
             Runtime.getRuntime().addShutdownHook(new Thread(env::closeQuietly));
-            return config.withBaseUrlAndObservability(env.baseUrl(), env.observability);
+            return config.withBaseUrl(env.baseUrl());
         } catch (Exception e) {
             if (environment != null) environment.closeQuietly();
             throw new RuntimeException("Failed to start self-contained ICP E2E environment", e);
@@ -278,169 +274,28 @@ public final class E2EEnvironment implements AutoCloseable {
         Files.createDirectories(resources.resolve("applications"));
         Files.createDirectories(resources.resolve("users"));
 
-        String baseDeployment = """
-                server:
-                  hostname: \"0.0.0.0\"
-                  port: 8090
-                  public_url: \"%s\"
-
-                gate_client:
-                  hostname: \"localhost\"
-                  port: %d
-                  scheme: \"https\"
-                  path: \"/gate\"
-
-                jwt:
-                  issuer: \"%s\"
-                  preferred_key_id: \"default-key\"
-
-                passkey:
-                  allowed_origins:
-                    - \"%s\"
-                    - \"%s\"
-
-                cors:
-                  allowed_origins:
-                    - \"%s\"
-                    - \"%s\"
-                """.formatted(thunderIdUrl(), ports.thunderId, thunderIdUrl(), thunderIdUrl(), baseUrl(),
-                thunderIdUrl(), baseUrl());
+        Map<String, String> vars = thunderIdVars();
+        String baseDeployment = render("thunderid/deployment-base.yaml.template", vars);
         Files.writeString(home.resolve("deployment-setup.yaml"), baseDeployment);
-        Files.writeString(home.resolve("gate-config.js"), """
-                window.__THUNDERID_RUNTIME_CONFIG__ = {
-                  brand: {
-                    product_name: 'ThunderID',
-                    favicon: {
-                      light: 'assets/images/favicon.ico',
-                      dark: 'assets/images/favicon-inverted.ico',
-                    },
-                  },
-                  client: {
-                    base: '/gate',
-                  },
-                  server: {
-                    public_url: '%s',
-                  },
-                  sdk: {
-                    organizationHandle: 'default',
-                  },
-                };
-                """.formatted(thunderIdUrl()));
-        Files.writeString(home.resolve("deployment.yaml"), baseDeployment + """
-
-                declarative_resources:
-                  enabled: true
-
-                organization_unit:
-                  store: composite
-
-                identity_provider:
-                  store: composite
-
-                application:
-                  store: composite
-
-                agent:
-                  store: composite
-
-                user_type:
-                  store: composite
-
-                user:
-                  store: composite
-
-                group:
-                  store: composite
-
-                role:
-                  store: composite
-
-                theme:
-                  store: composite
-
-                layout:
-                  store: composite
-
-                translation:
-                  store: composite
-
-                resource:
-                  store: composite
-
-                openid4vci:
-                  store: composite
-                """);
-        Files.writeString(resources.resolve("applications/icp-console.yaml"), """
-                id: 8b215f89-96f7-48dd-ae2b-3f9e3a6d15d1
-                ouHandle: default
-                name: ICP E2E Console
-                url: %s
-                contacts:
-                  - admin@example.com
-                authFlowHandle: default-basic-flow
-                isRegistrationFlowEnabled: false
-                isRecoveryFlowEnabled: false
-                assertion:
-                  validityPeriod: 3600
-                loginConsent:
-                  validityPeriod: 0
-                allowedUserTypes:
-                  - Person
-                inboundAuthConfig:
-                  - type: oauth2
-                    config:
-                      clientId: ICP_CONSOLE
-                      clientSecret: icp-console-secret
-                      redirectUris:
-                        - %s/sso/callback
-                      grantTypes:
-                        - authorization_code
-                      responseTypes:
-                        - code
-                      tokenEndpointAuthMethod: client_secret_basic
-                      pkceRequired: false
-                      publicClient: false
-                      requirePushedAuthorizationRequests: false
-                      token:
-                        accessToken:
-                          validityPeriod: 3600
-                          userAttributes:
-                            - email
-                            - name
-                        idToken:
-                          validityPeriod: 3600
-                          userAttributes:
-                            - email
-                            - name
-                          responseType: JWT
-                      userInfo:
-                        responseType: JSON
-                        userAttributes:
-                          - email
-                          - name
-                      scopeClaims:
-                        email:
-                          - email
-                        profile:
-                          - name
-                """.formatted(baseUrl(), baseUrl()));
-        Files.writeString(resources.resolve("users/sso-user.yaml"), """
-                id: %s
-                type: Person
-                ouHandle: default
-                attributes:
-                  username: %s
-                  email: %s
-                  given_name: SSO
-                  family_name: User
-                  name: SSO User
-                credentials:
-                  password: \"%s\"
-                """.formatted(SSO_USER_ID, SSO_USERNAME, SSO_USERNAME, SSO_PASSWORD));
+        Files.writeString(home.resolve("deployment.yaml"), baseDeployment + "\n" + resource("thunderid/declarative-stores.yaml"));
+        Files.writeString(home.resolve("gate-config.js"), render("thunderid/gate-config.js.template", vars));
+        Files.writeString(resources.resolve("applications/icp-console.yaml"),
+                render("thunderid/applications/icp-console.yaml.template", vars));
+        Files.writeString(resources.resolve("users/sso-user.yaml"), render("thunderid/users/sso-user.yaml.template", vars));
     }
 
     private String thunderIdUrl() {
         return "https://localhost:" + ports.thunderId;
+    }
+
+    private Map<String, String> thunderIdVars() {
+        return Map.of(
+                "BASE_URL", baseUrl(),
+                "THUNDERID_PORT", Integer.toString(ports.thunderId),
+                "THUNDERID_URL", thunderIdUrl(),
+                "SSO_PASSWORD", SSO_PASSWORD,
+                "SSO_USERNAME", SSO_USERNAME,
+                "SSO_USER_ID", SSO_USER_ID);
     }
 
     private void startObservability() throws Exception {
@@ -488,14 +343,6 @@ public final class E2EEnvironment implements AutoCloseable {
     public static void captureDiagnostics(String label) {
         if (current == null || !current.observability) return;
         current.dumpDiagnostics(label);
-    }
-
-    private static boolean isDockerUnavailable(Throwable error) {
-        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
-            String message = cause.getMessage();
-            if (message != null && message.contains("Docker environment")) return true;
-        }
-        return false;
     }
 
     private void dumpDiagnostics(String label) {
@@ -637,15 +484,7 @@ public final class E2EEnvironment implements AutoCloseable {
     }
 
     private void seedOidcUser() throws Exception {
-        execMysql("""
-                INSERT INTO users (user_id, username, display_name, is_super_admin, is_project_author, is_oidc_user, require_password_change)
-                VALUES ('%s', '%s', 'SSO User', TRUE, FALSE, TRUE, FALSE);
-
-                INSERT INTO group_user_mapping (group_id, user_uuid)
-                SELECT group_id, '%s'
-                FROM user_groups
-                WHERE group_name = 'Super Admins' AND org_uuid = 1;
-                """.formatted(SSO_USER_ID, SSO_USERNAME, SSO_USER_ID));
+        execMysql(render("sql/seed-oidc-user.sql.template", thunderIdVars()));
     }
 
     private void initializeH2(String dbName, Path script) throws Exception {
@@ -665,20 +504,7 @@ public final class E2EEnvironment implements AutoCloseable {
                 ? "opensearchUrl = \"https://" + opensearchHost + ":" + opensearchPort + "\"\n"
                 + "opensearchUsername = \"admin\"\nopensearchPassword = \"Ballerina@123\""
                 : "";
-        String ssoConfig = sso ? """
-                ssoEnabled = true
-                ssoIssuer = "%s"
-                ssoAuthorizationEndpoint = "%s/oauth2/authorize"
-                ssoTokenEndpoint = "%s/oauth2/token"
-                ssoLogoutEndpoint = "%s/oauth2/logout"
-                ssoJwksUrl = "%s/oauth2/jwks"
-                ssoClientId = "ICP_CONSOLE"
-                ssoClientSecret = "icp-console-secret"
-                ssoRedirectUri = "%s/sso/callback"
-                ssoUsernameClaim = "email"
-                ssoScopes = ["openid", "email", "profile"]
-                ssoAllowInsecureTLS = true
-                """.formatted(thunderIdUrl(), thunderIdUrl(), thunderIdUrl(), thunderIdUrl(), thunderIdUrl(), baseUrl()) : "";
+        String ssoConfig = sso ? render("icp/sso.toml.template", thunderIdVars()) : "";
         Map<String, String> vars = new LinkedHashMap<>();
         vars.put("SERVER_PORT", Integer.toString(ports.icp));
         vars.put("AUTH_PORT", Integer.toString(ports.auth));

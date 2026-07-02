@@ -6,8 +6,8 @@ import java.util.Locale;
 
 /**
  * Emits one Ballerina line-coverage report merging every supplied JaCoCo exec dump — typically the
- * E2E dump (JaCoCo agent on the packaged server) plus the `bal test --code-coverage` dump. Both are
- * analysed against the same built ICP jar; JaCoCo unions probes per class id.
+ * E2E suite dumps (JaCoCo agent on the packaged server) plus the `bal test --code-coverage` dump.
+ * All are analysed against the same built ICP jar; JaCoCo unions probes per class id.
  *
  * <p>Args: {@code <icp-server.jar> <ballerinaSourceRoot> <outputDir> <exec>...}
  *

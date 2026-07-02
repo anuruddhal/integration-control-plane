@@ -5,7 +5,7 @@ import com.microsoft.playwright.options.AriaRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.wso2.icp.e2e.BaseE2ETest;
+import org.wso2.icp.e2e.BaseCoreE2ETest;
 import org.wso2.icp.e2e.pages.AppPage;
 import org.wso2.icp.e2e.pages.LoginPage;
 
@@ -15,7 +15,7 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 
 @Tag("e2e")
 @DisplayName("Access control scenarios")
-class AccessControlScenariosTest extends BaseE2ETest {
+class AccessControlScenariosTest extends BaseCoreE2ETest {
 
     @Test
     @DisplayName("Org access tabs")

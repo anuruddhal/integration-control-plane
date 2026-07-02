@@ -1,0 +1,24 @@
+server:
+  hostname: "0.0.0.0"
+  port: 8090
+  public_url: "{{THUNDERID_URL}}"
+
+gate_client:
+  hostname: "localhost"
+  port: {{THUNDERID_PORT}}
+  scheme: "https"
+  path: "/gate"
+
+jwt:
+  issuer: "{{THUNDERID_URL}}"
+  preferred_key_id: "default-key"
+
+passkey:
+  allowed_origins:
+    - "{{THUNDERID_URL}}"
+    - "{{BASE_URL}}"
+
+cors:
+  allowed_origins:
+    - "{{THUNDERID_URL}}"
+    - "{{BASE_URL}}"

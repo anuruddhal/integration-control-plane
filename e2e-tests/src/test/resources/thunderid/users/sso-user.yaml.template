@@ -1,0 +1,11 @@
+id: {{SSO_USER_ID}}
+type: Person
+ouHandle: default
+attributes:
+  username: {{SSO_USERNAME}}
+  email: {{SSO_USERNAME}}
+  given_name: SSO
+  family_name: User
+  name: SSO User
+credentials:
+  password: "{{SSO_PASSWORD}}"

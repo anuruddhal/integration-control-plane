@@ -7,7 +7,6 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 
 public abstract class BaseE2ETest {
@@ -18,9 +17,8 @@ public abstract class BaseE2ETest {
     protected BrowserContext context;
     protected Page page;
 
-    @BeforeAll
-    static void startBrowser() {
-        config = E2EEnvironment.start(E2EConfig.load());
+    protected static void startBrowser(E2EConfig suiteConfig) {
+        config = E2EEnvironment.start(suiteConfig);
         playwright = Playwright.create();
         browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
                 .setHeadless(config.headless())
@@ -44,7 +42,7 @@ public abstract class BaseE2ETest {
     // The shared ICP environment is started once and torn down by a JVM shutdown hook,
     // so it is not stopped here per test class.
     @AfterAll
-    static void stopBrowser() {
+    protected static void stopBrowser() {
         if (browser != null) browser.close();
         if (playwright != null) playwright.close();
     }
