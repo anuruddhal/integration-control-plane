@@ -54,6 +54,9 @@ public type ListenerStateChangeEvent record {|
 // caller for that environment; dead callers are pruned inline.
 public isolated class RuntimeBroadcaster {
     private map<map<websocket:Caller>> topics = {};
+    // Tracks the last published state per (runtimeId + ":" + listenerName) to suppress
+    // duplicate consecutive events caused by the reconcile engine's optimistic writes.
+    private map<string> lastListenerState = {};
 
     // Called by the WebSocket upgrade handler when a client connects.
     // Returns the clientId that must be passed to unsubscribe() on close.
@@ -163,6 +166,16 @@ public isolated class RuntimeBroadcaster {
         string payload;
         map<websocket:Caller> snapshot = {};
         lock {
+            // Deduplicate: skip if this (runtime, listener) pair last published the same state.
+            // This prevents spurious repeat events fired by the reconcile engine's optimistic writes.
+            string stateKey = runtimeId + ":" + listenerName;
+            string? prev = self.lastListenerState[stateKey];
+            if prev == state {
+                log:printDebug("Skipping duplicate listener state change event", runtimeId = runtimeId, listenerName = listenerName, state = state);
+                return;
+            }
+            self.lastListenerState[stateKey] = state;
+
             map<websocket:Caller>? callers = self.topics[environmentId];
             if callers is () || callers.length() == 0 {
                 log:printDebug("No WS subscribers for listener state change event", environmentId = environmentId, listenerName = listenerName, state = state);
