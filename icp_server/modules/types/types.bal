@@ -2503,6 +2503,7 @@ public type ListenerControlInput record {|
     string[] runtimeIds;
     string listenerName;
     string listenerPackage?;
+    int port?;
     ControlAction action;
 |};
 

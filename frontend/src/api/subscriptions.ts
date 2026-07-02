@@ -20,7 +20,18 @@ interface LogLevelChangeEvent {
   logLevel: string;
 }
 
-type ICPEvent = RuntimeStatusEvent | LogLevelChangeEvent;
+interface ListenerStateChangeEvent {
+  eventType: 'LISTENER_STATE_CHANGE';
+  environmentId: string;
+  environmentName: string;
+  componentId: string;
+  runtimeId: string;
+  listenerName: string;
+  port?: number;
+  state: string;
+}
+
+type ICPEvent = RuntimeStatusEvent | LogLevelChangeEvent | ListenerStateChangeEvent;
 
 function pushRuntimeNotification(addNotification: ReturnType<typeof useNotificationsContext>['addNotification'], event: RuntimeStatusEvent) {
   const offline = event.status === 'OFFLINE';
@@ -31,6 +42,19 @@ function pushRuntimeNotification(addNotification: ReturnType<typeof useNotificat
     timestamp: new Date(),
     read: false,
     avatar: offline ? '!' : '✓',
+  });
+}
+
+function pushListenerStateChangeNotification(addNotification: ReturnType<typeof useNotificationsContext>['addNotification'], event: ListenerStateChangeEvent) {
+  const s = event.state.toLowerCase();
+  const enabled = s === 'enabled' || s === 'active' || s === 'true';
+  addNotification({
+    type: enabled ? 'success' : 'warning',
+    title: enabled ? 'Listener Enabled' : 'Listener Disabled',
+    message: `Listener "${event.listenerName}"${event.port ? ` (port ${event.port})` : ''} in environment ${event.environmentName} is now ${event.state}.`,
+    timestamp: new Date(),
+    read: false,
+    avatar: enabled ? '▶' : '■',
   });
 }
 
@@ -89,6 +113,15 @@ export function useRuntimeStatusSubscription(environmentId: string | undefined, 
               predicate: (query) => {
                 const key = query.queryKey;
                 return Array.isArray(key) && key[0] === 'loggers' && key.includes(environmentId);
+              },
+            });
+          } else if (event.eventType === 'LISTENER_STATE_CHANGE') {
+            const e = event as ListenerStateChangeEvent;
+            pushListenerStateChangeNotification(addNotificationRef.current, e);
+            queryClient.invalidateQueries({
+              predicate: (query) => {
+                const key = query.queryKey;
+                return Array.isArray(key) && key[0] === 'artifacts' && key.includes(environmentId) && key.includes(e.componentId);
               },
             });
           } else {
@@ -178,6 +211,15 @@ export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[], n
                 predicate: (query) => {
                   const key = query.queryKey;
                   return Array.isArray(key) && key[0] === 'loggers' && key.includes(environmentId);
+                },
+              });
+            } else if (event.eventType === 'LISTENER_STATE_CHANGE') {
+              const e = event as ListenerStateChangeEvent;
+              pushListenerStateChangeNotification(addNotificationRef.current, e);
+              queryClient.invalidateQueries({
+                predicate: (query) => {
+                  const key = query.queryKey;
+                  return Array.isArray(key) && key[0] === 'artifacts' && key.includes(environmentId) && key.includes(e.componentId);
                 },
               });
             } else {

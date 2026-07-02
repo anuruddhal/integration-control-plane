@@ -507,8 +507,16 @@ isolated function writeObservedStateBI(string runtimeId, string componentId, str
             {"status": svc.state.toLowerAscii()}
         ]);
     }
+    // Snapshot previous listener status + optimistic flag before upsert.
+    // We publish a WS event when: (a) state actually changed, OR (b) the previous row
+    // was optimistic (meaning this heartbeat is the runtime confirming a command).
+    map<record {|string status; boolean optimistic;|}> prevListenerRows = {};
     foreach types:Listener 'listener in artifacts.listeners {
         string qualName = types:qualifiedArtifactName('listener.name, 'listener.package);
+        record {|string status; boolean optimistic;|}|error? prev = readListenerObservedStatus(runtimeId, qualName);
+        if prev is record {|string status; boolean optimistic;|} {
+            prevListenerRows[qualName] = prev;
+        }
         entries.push([
             {artifactName: qualName, artifactType: "listener"},
             {"status": 'listener.state.toLowerAscii()}
@@ -523,6 +531,20 @@ isolated function writeObservedStateBI(string runtimeId, string componentId, str
         }
     }
     check batchUpsertReconcileObservedState(runtimeId, componentId, envId, entries);
+
+    // Publish WebSocket events for listeners whose state changed or whose optimistic
+    // row is now being confirmed by the runtime heartbeat.
+    string|error envNameResult = getEnvironmentNameById(envId);
+    string environmentName = envNameResult is string ? envNameResult : envId;
+    foreach types:Listener 'listener in artifacts.listeners {
+        string qualName = types:qualifiedArtifactName('listener.name, 'listener.package);
+        string newState = 'listener.state.toLowerAscii();
+        record {|string status; boolean optimistic;|}? prev = prevListenerRows[qualName];
+        boolean shouldPublish = prev is record {|string status; boolean optimistic;|} && (prev.optimistic || prev.status != newState);
+        if shouldPublish {
+            runtimeBroadcaster.publishListenerStateChange(envId, environmentName, componentId, runtimeId, qualName, 'listener.port, newState);
+        }
+    }
 }
 
 // Upsert runtime record

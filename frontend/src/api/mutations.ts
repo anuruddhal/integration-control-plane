@@ -189,6 +189,7 @@ export interface ListenerStateInput {
   runtimeIds: string[];
   listenerName: string;
   listenerPackage?: string;
+  port?: number;
   action: 'START' | 'STOP';
 }
 
@@ -303,6 +304,7 @@ export function useUpdateListenerState() {
           runtimeIds: input.runtimeIds,
           listenerName: input.listenerName,
           listenerPackage: input.listenerPackage,
+          port: input.port,
           action: input.action,
         },
       }).then((d) => d.updateListenerState),

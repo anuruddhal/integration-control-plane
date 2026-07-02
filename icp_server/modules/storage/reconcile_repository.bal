@@ -75,6 +75,22 @@ public isolated function readReconcileObservedState(string runtimeId,
     return result;
 }
 
+// Returns {status, optimistic} for a single listener artifact, or nil if no row exists.
+public isolated function readListenerObservedStatus(string runtimeId, string artifactName) returns record {|string status; boolean optimistic;|}|error? {
+    stream<record {|string? state_value; boolean optimistic;|}, sql:Error?> rows = dbClient->query(`
+        SELECT state_value, optimistic FROM reconcile_observed_state
+        WHERE runtime_id = ${runtimeId}
+        AND artifact_name = ${artifactName} AND artifact_type = 'listener' AND state_key = 'status'
+        ORDER BY heartbeat_gen DESC LIMIT 1
+    `);
+    record {|string? state_value; boolean optimistic;|}[] results = check from var r in rows select r;
+    if results.length() == 0 {
+        return ();
+    }
+    string? sv = results[0].state_value;
+    return {status: sv ?: "", optimistic: results[0].optimistic};
+}
+
 public isolated function readReconcileBackoff(string runtimeId,
         types:ReconcileArtifactKey artifact) returns types:ReconcileBackoffRecord[]|error {
     log:printDebug("readReconcileBackoff", runtimeId = runtimeId,

@@ -215,6 +215,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         runtimeIds,
         listenerName: artifactName,
         listenerPackage: artifact.package?.toString(),
+        port: typeof artifact.port === 'number' ? artifact.port : undefined,
         action,
       },
       {
@@ -306,40 +307,32 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
           {showTracingToggle && <SyncSwitch label="Tracing" checked={tracingEnabled} inSync={artifact.tracingInSync as boolean | null} onChange={handleToggleTracing} disabled={updateTracingStatus.isPending} />}
           {showTracingToggle && showStatisticsToggle && <Divider orientation="vertical" flexItem />}
           {showStatisticsToggle && <SyncSwitch label="Statistics" checked={statisticsEnabled} inSync={artifact.statisticsInSync as boolean | null} onChange={handleToggleStatistics} disabled={updateStatisticsStatus.isPending} />}
-          {showListenerToggle && (!listenerEnabled || (updateListenerState.isPending && pendingActionRef.current === 'START')) && (
+          {showListenerToggle && (updateListenerState.isPending ? pendingActionRef.current === 'START' : !listenerEnabled) && (
             <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Enable listener'}>
               <span style={{ marginLeft: 'auto' }}>
-                <Button variant="contained" size="small" color="success" startIcon={!updateListenerState.isPending && <Play size={14} />} disabled={updateListenerState.isPending || !hasRuntimes} onClick={() => handleToggleListener(true)}>
-                  {updateListenerState.isPending && pendingActionRef.current === 'START' ? (
-                    <>
-                      <CircularProgress size={12} color="inherit" sx={{ mr: 0.5 }} />
-                      Enabling…
-                    </>
-                  ) : (
-                    <>
-                      {artifact.stateInSync === false && <CircularProgress size={10} color="inherit" sx={{ mr: 0.5 }} />}
-                      Enable
-                    </>
-                  )}
+                <Button
+                  variant="contained"
+                  size="small"
+                  color="success"
+                  startIcon={updateListenerState.isPending || artifact.stateInSync === false ? <CircularProgress size={12} color="inherit" /> : <Play size={14} />}
+                  disabled={updateListenerState.isPending || !hasRuntimes}
+                  onClick={() => handleToggleListener(true)}>
+                  {updateListenerState.isPending ? 'Enabling…' : 'Enable'}
                 </Button>
               </span>
             </Tooltip>
           )}
-          {showListenerToggle && (listenerEnabled || (updateListenerState.isPending && pendingActionRef.current === 'STOP')) && (
+          {showListenerToggle && (updateListenerState.isPending ? pendingActionRef.current === 'STOP' : listenerEnabled) && (
             <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Disable listener'}>
               <span style={{ marginLeft: 'auto' }}>
-                <Button variant="contained" size="small" color="error" startIcon={!updateListenerState.isPending && <Square size={14} />} disabled={updateListenerState.isPending || !hasRuntimes} onClick={() => handleToggleListener(false)}>
-                  {updateListenerState.isPending && pendingActionRef.current === 'STOP' ? (
-                    <>
-                      <CircularProgress size={12} color="inherit" sx={{ mr: 0.5 }} />
-                      Disabling…
-                    </>
-                  ) : (
-                    <>
-                      {artifact.stateInSync === false && <CircularProgress size={10} color="inherit" sx={{ mr: 0.5 }} />}
-                      Disable
-                    </>
-                  )}
+                <Button
+                  variant="contained"
+                  size="small"
+                  color="error"
+                  startIcon={updateListenerState.isPending || artifact.stateInSync === false ? <CircularProgress size={12} color="inherit" /> : <Square size={14} />}
+                  disabled={updateListenerState.isPending || !hasRuntimes}
+                  onClick={() => handleToggleListener(false)}>
+                  {updateListenerState.isPending ? 'Disabling…' : 'Disable'}
                 </Button>
               </span>
             </Tooltip>

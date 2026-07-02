@@ -36,6 +36,18 @@ public type LogLevelChangeEvent record {|
     string logLevel;
 |};
 
+// Payload pushed when a listener's state changes as confirmed by a runtime heartbeat.
+public type ListenerStateChangeEvent record {|
+    string eventType = "LISTENER_STATE_CHANGE";
+    string environmentId;
+    string environmentName;
+    string componentId;
+    string runtimeId;
+    string listenerName;
+    int? port;
+    string state;
+|};
+
 // Fan-out broadcaster over plain WebSocket connections.
 // Each subscriber is identified by a unique clientId and is associated with
 // a specific environmentId.  publish() writes a JSON message to every live
@@ -141,6 +153,44 @@ public isolated class RuntimeBroadcaster {
                     _ = callers.remove(clientId);
                 }
                 log:printInfo("Published log level change event", environmentId = environmentId, environmentName = environmentName, runtimeId = runtimeId, loggerName = loggerName, logLevel = logLevel, subscribers = callers.length());
+            }
+        }
+    }
+
+    // Called from heartbeat processing when a listener's confirmed state changes.
+    // Uses the same lock-snapshot-I/O pattern as publish().
+    public isolated function publishListenerStateChange(string environmentId, string environmentName, string componentId, string runtimeId, string listenerName, int? port, string state) {
+        string payload;
+        map<websocket:Caller> snapshot = {};
+        lock {
+            map<websocket:Caller>? callers = self.topics[environmentId];
+            if callers is () || callers.length() == 0 {
+                log:printDebug("No WS subscribers for listener state change event", environmentId = environmentId, listenerName = listenerName, state = state);
+                return;
+            }
+            ListenerStateChangeEvent event = {environmentId, environmentName, componentId, runtimeId, listenerName, port, state};
+            payload = event.toJson().toJsonString();
+            foreach var [clientId, caller] in callers.entries() {
+                snapshot[clientId] = caller;
+            }
+        }
+
+        string[] dead = [];
+        foreach var [clientId, caller] in snapshot.entries() {
+            websocket:Error? err = caller->writeTextMessage(payload);
+            if err is websocket:Error {
+                dead.push(clientId);
+            }
+        }
+
+        string[] & readonly deadSnapshot = dead.cloneReadOnly();
+        lock {
+            map<websocket:Caller>? callers = self.topics[environmentId];
+            if callers is map<websocket:Caller> {
+                foreach string clientId in deadSnapshot {
+                    _ = callers.remove(clientId);
+                }
+                log:printInfo("Published listener state change event", environmentId = environmentId, environmentName = environmentName, componentId = componentId, runtimeId = runtimeId, listenerName = listenerName, port = port, state = state, subscribers = callers.length());
             }
         }
     }
