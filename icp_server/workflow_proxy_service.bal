@@ -130,8 +130,10 @@ function proxyWorkflowRequest(string componentId, string environmentId, string[]
         return workflowErrorResponse(401, "Invalid token: " + userContext.message());
     }
 
-    // 2. Authorize against the integration scope. Reads need VIEW; human-task /
-    //    retry-task actions need EDIT; workflow lifecycle/start needs MANAGE.
+    // 2. Authorize with the dedicated workflow permissions (scoped to the integration).
+    //    - human-tasks: browsing needs view_human_tasks; acting needs manage_human_tasks.
+    //    - everything else (workflows lifecycle, definitions, retry-tasks): browsing needs
+    //      view_workflows; any mutation needs manage_workflows.
     string|error projectId = storage:getProjectIdByComponentId(componentId);
     if projectId is error {
         return workflowErrorResponse(404, "Component not found: " + componentId);
@@ -145,12 +147,14 @@ function proxyWorkflowRequest(string componentId, string environmentId, string[]
     string method = req.method;
     string firstSeg = wfPath.length() > 0 ? wfPath[0] : "";
     string[] allowedPermissions;
-    if method == http:GET {
-        allowedPermissions = [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE];
-    } else if firstSeg == "human-tasks" || firstSeg == "retry-tasks" {
-        allowedPermissions = [auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE];
+    if firstSeg == "human-tasks" {
+        allowedPermissions = method == http:GET
+            ? [auth:PERMISSION_WORKFLOW_VIEW_HUMAN_TASKS, auth:PERMISSION_WORKFLOW_MANAGE_HUMAN_TASKS]
+            : [auth:PERMISSION_WORKFLOW_MANAGE_HUMAN_TASKS];
     } else {
-        allowedPermissions = [auth:PERMISSION_INTEGRATION_MANAGE];
+        allowedPermissions = method == http:GET
+            ? [auth:PERMISSION_WORKFLOW_VIEW_WORKFLOWS, auth:PERMISSION_WORKFLOW_MANAGE_WORKFLOWS]
+            : [auth:PERMISSION_WORKFLOW_MANAGE_WORKFLOWS];
     }
     boolean|error permitted = auth:hasAnyPermission(userContext.userId, allowedPermissions, scope);
     if permitted is error {
@@ -177,8 +181,13 @@ function proxyWorkflowRequest(string componentId, string environmentId, string[]
     string query = qIdx is int ? rawPath.substring(qIdx) : "";
     string targetPath = "/workflow/" + subPath + query;
 
-    // 5. Inject identity headers; drop ICP's bearer token (not used upstream).
-    string roles = string:'join(",", ...userContext.permissions);
+    // 5. Inject identity headers. Forward the caller's ICP role names so the workflow
+    //    service can match/authorize human tasks by role. Drop ICP's bearer token.
+    string[]|error roleNames = storage:getAllUserRoleNames(userContext.userId);
+    if roleNames is error {
+        return workflowErrorResponse(500, "Failed to resolve user roles: " + roleNames.message());
+    }
+    string roles = string:'join(",", ...roleNames);
     boolean|error superAdmin = auth:isSuperAdmin(userContext.userId);
     if superAdmin is boolean && superAdmin {
         roles = roles.length() > 0 ? roles + ",admin" : "admin";

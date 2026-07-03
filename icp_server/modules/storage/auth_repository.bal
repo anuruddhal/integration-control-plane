@@ -908,6 +908,24 @@ public isolated function getAllUserPermissions(string userId) returns types:Perm
     return permissions;
 }
 
+# Returns the distinct role names assigned to a user across all of their group
+# memberships (any scope). Used to forward the caller's roles to the runtime
+# workflow service (x-user-roles) for human-task assignment matching.
+#
+# + userId - The user's UUID.
+# + return - Distinct role names, or an error.
+public isolated function getAllUserRoleNames(string userId) returns string[]|error {
+    stream<record {|string role_name;|}, sql:Error?> roleStream = dbClient->query(`
+        SELECT DISTINCT r.role_name
+        FROM roles_v2 r
+        INNER JOIN group_role_mapping grm ON grm.role_id = r.role_id
+        INNER JOIN group_user_mapping gum ON gum.group_id = grm.group_id
+        WHERE gum.user_uuid = ${userId}
+    `);
+    return from record {|string role_name;|} row in roleStream
+        select row.role_name;
+}
+
 // ============================================================================
 // 3.7 Access Query Functions (Using Views)
 // ============================================================================

@@ -41,6 +41,8 @@ import { useState } from 'react';
 import CodeViewer from '../CodeViewer';
 import { formatTime, jsonPretty } from './helpers';
 import { StatusChip, type WorkflowScope } from './shared';
+import Authorized from '../Authorized';
+import { Permissions } from '../../constants/permissions';
 import {
   useCancelHumanTask,
   useCompleteHumanTask,
@@ -309,33 +311,36 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Button onClick={onClose}>Close</Button>
-        {actionable && mode === 'view' && (
-          <>
-            <Button color="error" disabled={busy} onClick={submitCancel}>
-              Cancel Task
+        {/* Acting on human tasks requires the workflow manage-human-tasks permission. */}
+        <Authorized permissions={[Permissions.WORKFLOW_MANAGE_HUMAN_TASKS]}>
+          {actionable && mode === 'view' && (
+            <>
+              <Button color="error" disabled={busy} onClick={submitCancel}>
+                Cancel Task
+              </Button>
+              <Button color="warning" disabled={busy} onClick={() => setMode('fail')}>
+                Reject
+              </Button>
+              <Tooltip title={canComplete ? '' : 'You do not have a matching role to complete this task'}>
+                <span>
+                  <Button variant="contained" disabled={busy || !canComplete} onClick={() => setMode('complete')}>
+                    Complete
+                  </Button>
+                </span>
+              </Tooltip>
+            </>
+          )}
+          {mode === 'complete' && (
+            <Button variant="contained" disabled={busy} onClick={submitComplete}>
+              {complete.isPending ? 'Completing…' : 'Submit Completion'}
             </Button>
-            <Button color="warning" disabled={busy} onClick={() => setMode('fail')}>
-              Reject
+          )}
+          {mode === 'fail' && (
+            <Button variant="contained" color="warning" disabled={busy} onClick={submitFail}>
+              {fail.isPending ? 'Submitting…' : 'Submit Rejection'}
             </Button>
-            <Tooltip title={canComplete ? '' : 'You do not have a matching role to complete this task'}>
-              <span>
-                <Button variant="contained" disabled={busy || !canComplete} onClick={() => setMode('complete')}>
-                  Complete
-                </Button>
-              </span>
-            </Tooltip>
-          </>
-        )}
-        {mode === 'complete' && (
-          <Button variant="contained" disabled={busy} onClick={submitComplete}>
-            {complete.isPending ? 'Completing…' : 'Submit Completion'}
-          </Button>
-        )}
-        {mode === 'fail' && (
-          <Button variant="contained" color="warning" disabled={busy} onClick={submitFail}>
-            {fail.isPending ? 'Submitting…' : 'Submit Rejection'}
-          </Button>
-        )}
+          )}
+        </Authorized>
       </DialogActions>
     </Dialog>
   );

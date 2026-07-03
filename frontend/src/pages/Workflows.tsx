@@ -23,6 +23,9 @@ import { useProjectByHandler, useComponentByHandler, useEnvironments } from '../
 import NotFound from '../components/NotFound';
 import AdminPortal from '../components/workflow/AdminPortal';
 import UserPortal from '../components/workflow/UserPortal';
+import { useAccessControl } from '../contexts/AccessControlContext';
+import { useLoadComponentPermissions } from '../hooks/usePermissionLoader';
+import { Permissions } from '../constants/permissions';
 import { resourceUrl, broaden, type ComponentScope } from '../nav';
 
 export default function Workflows(scope: ComponentScope): JSX.Element {
@@ -30,12 +33,17 @@ export default function Workflows(scope: ComponentScope): JSX.Element {
   const projectId = project?.id ?? '';
   const { data: component, isLoading: loadingComponent } = useComponentByHandler(projectId, scope.component);
   const { data: environments = [], isLoading: loadingEnvs } = useEnvironments(projectId);
+  const componentId = component?.id ?? '';
+
+  // Load this component's permissions so the User Actions tab can be gated.
+  useLoadComponentPermissions(scope.org, projectId, componentId);
+  const { hasAnyPermission } = useAccessControl();
 
   // Optional deep-link params (e.g. from the Overview page's "View Instances" action):
   // ?tab=admin&type=<workflowType>&env=<environmentId>
   const [searchParams] = useSearchParams();
   const initialWorkflowType = searchParams.get('type') ?? undefined;
-  const [tab, setTab] = useState(searchParams.get('tab') === 'admin' ? 1 : 0);
+  const [tabKey, setTabKey] = useState<'user' | 'admin'>(searchParams.get('tab') === 'admin' ? 'admin' : 'user');
   const [selectedEnvId, setSelectedEnvId] = useState(searchParams.get('env') ?? '');
 
   if (loadingProject || loadingComponent || loadingEnvs)
@@ -46,9 +54,14 @@ export default function Workflows(scope: ComponentScope): JSX.Element {
     );
   if (!component) return <NotFound message="Component not found" backTo={resourceUrl(broaden(scope)!, 'overview')} backLabel="Back to Project" />;
 
-  const componentId = component.id;
   const activeEnvId = environments.some((e) => e.id === selectedEnvId) ? selectedEnvId : (environments[0]?.id ?? '');
   const selectedEnv = environments.find((e) => e.id === activeEnvId) ?? null;
+  // Each tab is gated by its dedicated workflow permission.
+  const canViewHumanTasks = hasAnyPermission([Permissions.WORKFLOW_VIEW_HUMAN_TASKS, Permissions.WORKFLOW_MANAGE_HUMAN_TASKS], projectId, componentId);
+  const canViewWorkflows = hasAnyPermission([Permissions.WORKFLOW_VIEW_WORKFLOWS, Permissions.WORKFLOW_MANAGE_WORKFLOWS], projectId, componentId);
+  // Resolve the requested tab to one the user is allowed to see (null = neither).
+  const activeTab: 'user' | 'admin' | null =
+    tabKey === 'admin' && canViewWorkflows ? 'admin' : tabKey === 'user' && canViewHumanTasks ? 'user' : canViewHumanTasks ? 'user' : canViewWorkflows ? 'admin' : null;
 
   return (
     <PageContent>
@@ -73,19 +86,23 @@ export default function Workflows(scope: ComponentScope): JSX.Element {
         <Typography color="text.secondary" sx={{ py: 6, textAlign: 'center' }}>
           No environments found for this integration.
         </Typography>
+      ) : activeTab === null ? (
+        <Typography color="text.secondary" sx={{ py: 6, textAlign: 'center' }}>
+          You do not have permission to view workflows for this integration.
+        </Typography>
       ) : (
         <>
           <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-            <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-              <Tab label="User Actions" />
-              <Tab label="Admin Actions" />
+            <Tabs value={activeTab} onChange={(_, v) => setTabKey(v as 'user' | 'admin')}>
+              {canViewHumanTasks && <Tab label="User Actions" value="user" />}
+              {canViewWorkflows && <Tab label="Admin Actions" value="admin" />}
             </Tabs>
           </Box>
           {!activeEnvId ? (
             <Typography color="text.secondary" sx={{ py: 6, textAlign: 'center' }}>
               Select an environment to continue.
             </Typography>
-          ) : tab === 0 ? (
+          ) : activeTab === 'user' ? (
             <UserPortal componentId={componentId} environmentId={activeEnvId} />
           ) : (
             <AdminPortal componentId={componentId} environmentId={activeEnvId} initialWorkflowType={initialWorkflowType} />

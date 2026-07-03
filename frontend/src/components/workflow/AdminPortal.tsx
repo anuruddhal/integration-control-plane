@@ -42,6 +42,8 @@ import SearchField from '../SearchField';
 import WorkflowDetailDrawer from './WorkflowDetailDrawer';
 import { formatTime } from './helpers';
 import { SchemaDisclosure, StatusChip, type WorkflowScope } from './shared';
+import Authorized from '../Authorized';
+import { Permissions } from '../../constants/permissions';
 import {
   useRetryDecision,
   useRetryTasks,
@@ -161,9 +163,11 @@ function WorkflowsAdmin({ scope, onToast, initialWorkflowType }: { scope: Workfl
             <RefreshCw size={16} style={{ animation: isFetching ? 'spin 1s linear infinite' : 'none' }} />
           </IconButton>
         </Tooltip>
-        <Button variant="contained" size="small" startIcon={<Play size={14} />} onClick={() => setStartOpen(true)}>
-          Start Workflow
-        </Button>
+        <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+          <Button variant="contained" size="small" startIcon={<Play size={14} />} onClick={() => setStartOpen(true)}>
+            Start Workflow
+          </Button>
+        </Authorized>
       </Stack>
 
       <Stack direction="row" gap={1.5} sx={{ mb: 2 }} flexWrap="wrap" alignItems="center">
@@ -440,21 +444,23 @@ function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t
                 </ListingTable.Cell>
                 <ListingTable.Cell>{formatTime(t.startTime)}</ListingTable.Cell>
                 <ListingTable.Cell>
-                  <Stack direction="row" gap={0.5}>
-                    <Tooltip title="Retry with original input">
-                      <IconButton size="small" disabled={decide.isPending} onClick={() => runDecision(t.taskId, 'retry')} aria-label="Retry">
-                        <RotateCcw size={16} />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Retry with modified input">
-                      <IconButton size="small" disabled={decide.isPending} onClick={() => setInputTaskId(t.taskId)} aria-label="Retry with input">
-                        <Plus size={16} />
-                      </IconButton>
-                    </Tooltip>
-                    <Button size="small" color="error" disabled={decide.isPending} onClick={() => runDecision(t.taskId, 'fail')}>
-                      Fail
-                    </Button>
-                  </Stack>
+                  <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+                    <Stack direction="row" gap={0.5}>
+                      <Tooltip title="Retry with original input">
+                        <IconButton size="small" disabled={decide.isPending} onClick={() => runDecision(t.taskId, 'retry')} aria-label="Retry">
+                          <RotateCcw size={16} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Retry with modified input">
+                        <IconButton size="small" disabled={decide.isPending} onClick={() => setInputTaskId(t.taskId)} aria-label="Retry with input">
+                          <Plus size={16} />
+                        </IconButton>
+                      </Tooltip>
+                      <Button size="small" color="error" disabled={decide.isPending} onClick={() => runDecision(t.taskId, 'fail')}>
+                        Fail
+                      </Button>
+                    </Stack>
+                  </Authorized>
                 </ListingTable.Cell>
               </ListingTable.Row>
             ))}

@@ -42,6 +42,8 @@ import CodeViewer from '../CodeViewer';
 import { useWorkflowExecutionGraph, useWorkflowHistory, useWorkflowInfo, useWorkflowLifecycle, type WorkflowLifecycleAction } from '../../api/workflows';
 import { extractWorkflowInput, jsonPretty } from './helpers';
 import { StatusChip, type WorkflowScope } from './shared';
+import Authorized from '../Authorized';
+import { Permissions } from '../../constants/permissions';
 
 const drawerSx = { '& .MuiDrawer-paper': { width: '60%', maxWidth: 760, minWidth: 420, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' } };
 const headerSx = { px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' };
@@ -89,21 +91,23 @@ export default function WorkflowDetailDrawer({ scope, workflowId, onClose }: { s
         </IconButton>
       </Stack>
 
-      {/* Lifecycle actions */}
-      <Stack direction="row" gap={1} sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', flexWrap: 'wrap' }}>
-        <Button size="small" variant="outlined" startIcon={<PauseCircle size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('suspend')}>
-          Suspend
-        </Button>
-        <Button size="small" variant="outlined" startIcon={<PlayCircle size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('resume')}>
-          Resume
-        </Button>
-        <Button size="small" variant="outlined" color="warning" startIcon={<Ban size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('cancel')}>
-          Cancel
-        </Button>
-        <Button size="small" variant="outlined" color="error" startIcon={<OctagonX size={14} />} disabled={lifecycle.isPending} onClick={() => setTerminateOpen(true)}>
-          Terminate
-        </Button>
-      </Stack>
+      {/* Lifecycle actions — only for users who can manage workflow executions */}
+      <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+        <Stack direction="row" gap={1} sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', flexWrap: 'wrap' }}>
+          <Button size="small" variant="outlined" startIcon={<PauseCircle size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('suspend')}>
+            Suspend
+          </Button>
+          <Button size="small" variant="outlined" startIcon={<PlayCircle size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('resume')}>
+            Resume
+          </Button>
+          <Button size="small" variant="outlined" color="warning" startIcon={<Ban size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('cancel')}>
+            Cancel
+          </Button>
+          <Button size="small" variant="outlined" color="error" startIcon={<OctagonX size={14} />} disabled={lifecycle.isPending} onClick={() => setTerminateOpen(true)}>
+            Terminate
+          </Button>
+        </Stack>
+      </Authorized>
 
       <Box sx={{ px: 2 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>

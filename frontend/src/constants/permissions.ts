@@ -17,6 +17,12 @@ export const Permissions = {
   OBSERVABILITY_VIEW_LOGS: 'observability_mgt:view_logs',
   OBSERVABILITY_VIEW_INSIGHTS: 'observability_mgt:view_insights',
 
+  // Workflow Management
+  WORKFLOW_VIEW_HUMAN_TASKS: 'workflow_mgt:view_human_tasks',
+  WORKFLOW_MANAGE_HUMAN_TASKS: 'workflow_mgt:manage_human_tasks',
+  WORKFLOW_VIEW_WORKFLOWS: 'workflow_mgt:view_workflows',
+  WORKFLOW_MANAGE_WORKFLOWS: 'workflow_mgt:manage_workflows',
+
   // User Management
   USER_MANAGE_USERS: 'user_mgt:manage_users',
   USER_UPDATE_USERS: 'user_mgt:update_users',

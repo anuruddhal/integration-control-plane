@@ -214,7 +214,8 @@ CREATE TABLE permissions (
         'Environment-Management', 
         'Observability-Management',
         'Project-Management',
-        'User-Management'
+        'User-Management',
+        'Workflow-Management'
     )),
     resource_type VARCHAR(100) NOT NULL,
     action VARCHAR(100) NOT NULL,
@@ -457,6 +458,13 @@ INSERT INTO permissions (permission_id, permission_name, permission_domain, reso
 (gen_random_uuid()::text, 'user_mgt:manage_roles', 'User-Management', 'role', 'manage', 'Create, update, and delete roles'),
 (gen_random_uuid()::text, 'user_mgt:update_group_roles', 'User-Management', 'group-role', 'update', 'Map roles to groups');
 
+-- Workflow Management permissions
+INSERT INTO permissions (permission_id, permission_name, permission_domain, resource_type, action, description) VALUES
+    ('a1f4c2e0-0000-4000-8000-000000000001', 'workflow_mgt:view_human_tasks', 'Workflow-Management', 'human_task', 'view', 'View human tasks'),
+    ('a1f4c2e0-0000-4000-8000-000000000002', 'workflow_mgt:manage_human_tasks', 'Workflow-Management', 'human_task', 'manage', 'Complete, fail and cancel human tasks'),
+    ('a1f4c2e0-0000-4000-8000-000000000003', 'workflow_mgt:view_workflows', 'Workflow-Management', 'workflow', 'view', 'View workflow executions'),
+    ('a1f4c2e0-0000-4000-8000-000000000004', 'workflow_mgt:manage_workflows', 'Workflow-Management', 'workflow', 'manage', 'Start, suspend, resume, cancel and terminate workflow executions');
+
 -- Map Super Admin to ALL permissions
 INSERT INTO role_permission_mapping (role_id, permission_id)
 SELECT 
@@ -512,6 +520,20 @@ WHERE permission_name IN (
     'observability_mgt:view_logs',
     'observability_mgt:view_insights'
 );
+
+-- Map Workflow human-task permissions to operational roles (Super Admin/Admin covered above)
+INSERT INTO role_permission_mapping (role_id, permission_id)
+SELECT r.role_id, p.permission_id
+FROM roles_v2 r, permissions p
+WHERE p.permission_name IN ('workflow_mgt:view_human_tasks', 'workflow_mgt:manage_human_tasks')
+    AND (r.role_name IN ('Developer', 'Project Admin') OR (r.role_name = 'Viewer' AND p.permission_name = 'workflow_mgt:view_human_tasks'));
+
+-- Map Workflow execution permissions to admin roles (Super Admin/Admin covered above)
+INSERT INTO role_permission_mapping (role_id, permission_id)
+SELECT r.role_id, p.permission_id
+FROM roles_v2 r, permissions p
+WHERE (p.permission_name = 'workflow_mgt:view_workflows' AND r.role_name IN ('Developer', 'Project Admin'))
+    OR (p.permission_name = 'workflow_mgt:manage_workflows' AND r.role_name = 'Project Admin');
 
 -- Create default groups
 INSERT INTO user_groups (group_id, group_name, org_uuid, description) VALUES
