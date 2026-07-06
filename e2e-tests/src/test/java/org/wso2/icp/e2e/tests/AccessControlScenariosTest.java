@@ -6,8 +6,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.wso2.icp.e2e.BaseCoreE2ETest;
-import org.wso2.icp.e2e.pages.AppPage;
-import org.wso2.icp.e2e.pages.LoginPage;
 
 import java.util.regex.Pattern;
 
@@ -51,12 +49,5 @@ class AccessControlScenariosTest extends BaseCoreE2ETest {
         page.getByLabel("Search...").fill(query);
         assertThat(page.getByText("No records to display")).isVisible();
         page.getByLabel("Search...").clear();
-    }
-
-    private void signInAsAdmin() {
-        LoginPage login = new LoginPage(page);
-        login.open(config.baseUrl());
-        login.signIn(config.adminUsername(), config.adminPassword());
-        new AppPage(page).assertProjectsVisible();
     }
 }

@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.wso2.icp.e2e.BaseCoreE2ETest;
 import org.wso2.icp.e2e.pages.AppPage;
-import org.wso2.icp.e2e.pages.LoginPage;
 
 import java.util.regex.Pattern;
 
@@ -59,12 +58,5 @@ class ProjectScenariosTest extends BaseCoreE2ETest {
         assertThat(page.getByText("Project not found"))
                 .isVisible(new LocatorAssertions.IsVisibleOptions().setTimeout(15_000));
         assertThat(page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName("Back to Projects"))).isVisible();
-    }
-
-    private void signInAsAdmin() {
-        LoginPage login = new LoginPage(page);
-        login.open(config.baseUrl());
-        login.signIn(config.adminUsername(), config.adminPassword());
-        new AppPage(page).assertProjectsVisible();
     }
 }

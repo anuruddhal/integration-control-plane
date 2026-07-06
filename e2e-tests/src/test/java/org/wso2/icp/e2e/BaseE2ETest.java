@@ -8,6 +8,8 @@ import com.microsoft.playwright.Playwright;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.wso2.icp.e2e.pages.AppPage;
+import org.wso2.icp.e2e.pages.LoginPage;
 
 public abstract class BaseE2ETest {
     protected static E2EConfig config;
@@ -49,5 +51,12 @@ public abstract class BaseE2ETest {
 
     protected void open(String path) {
         page.navigate(config.url(path));
+    }
+
+    protected void signInAsAdmin() {
+        LoginPage login = new LoginPage(page);
+        login.open(config.baseUrl());
+        login.signIn(config.adminUsername(), config.adminPassword());
+        new AppPage(page).assertProjectsVisible();
     }
 }

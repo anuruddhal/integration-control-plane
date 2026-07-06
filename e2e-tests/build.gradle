@@ -45,8 +45,6 @@ def commandOutput(String... args) {
     }
 }
 
-def e2eDockerHost = System.getenv('DOCKER_HOST') ?: dockerContextHost()
-
 dependencies {
     testImplementation 'com.microsoft.playwright:playwright:1.49.0'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.3'
@@ -98,17 +96,6 @@ def configureE2eSuite = { Test task, String suite, List<String> includes ->
     task.useJUnitPlatform()
     includes.each { task.include it }
 
-    // Forward local Docker/Testcontainers config. Docker CLI contexts are not env vars, so pass them explicitly.
-    if (e2eDockerHost) task.environment 'DOCKER_HOST', e2eDockerHost
-    ['TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE', 'TESTCONTAINERS_RYUK_DISABLED'].each { key ->
-        if (System.getenv(key)) task.environment key, System.getenv(key)
-    }
-    if (!System.getenv('TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE') && e2eDockerHost?.startsWith('unix://')) {
-        task.environment 'TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE', '/var/run/docker.sock'
-    }
-    // docker-java negotiates too low an API version for some daemons (e.g. Colima); pin a supported one.
-    if (e2eDockerHost) task.systemProperty 'api.version', System.getenv('DOCKER_API_VERSION') ?: '1.41'
-
     task.dependsOn rootProject.tasks.named('packageICP')
     task.dependsOn tasks.named('resolveMiDistribution')
     task.dependsOn tasks.named('buildBiE2eArtifact')
@@ -121,6 +108,20 @@ def configureE2eSuite = { Test task, String suite, List<String> includes ->
     task.systemProperty 'icp.e2e.distributionZip', rootProject.layout.buildDirectory.file("distribution/wso2-integration-control-plane-${rootProject.version}.zip").get().asFile.absolutePath
     task.systemProperty 'icp.e2e.workDir', layout.buildDirectory.dir("runtime/${suite}").get().asFile.absolutePath
     task.doFirst {
+        // Forward local Docker/Testcontainers config. Docker CLI contexts are not env vars, so pass
+        // them explicitly. Probed here (not at configuration time) so unrelated tasks never shell out.
+        def dockerHost = System.getenv('DOCKER_HOST') ?: dockerContextHost()
+        if (dockerHost) {
+            environment 'DOCKER_HOST', dockerHost
+            // docker-java negotiates too low an API version for some daemons (e.g. Colima); pin a supported one.
+            systemProperty 'api.version', System.getenv('DOCKER_API_VERSION') ?: '1.41'
+        }
+        ['TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE', 'TESTCONTAINERS_RYUK_DISABLED'].each { key ->
+            if (System.getenv(key)) environment key, System.getenv(key)
+        }
+        if (!System.getenv('TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE') && dockerHost?.startsWith('unix://')) {
+            environment 'TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE', '/var/run/docker.sock'
+        }
         systemProperty 'icp.e2e.miZip', configurations.miDistribution.singleFile.absolutePath
         systemProperty 'icp.e2e.biJar', layout.buildDirectory.file('bi/hello-world/target/bin/icp_e2e_hello_world.jar').get().asFile.absolutePath
         systemProperty 'icp.e2e.reportDir', layout.buildDirectory.dir("reports/e2e/${suite}").get().asFile.absolutePath
@@ -184,7 +185,7 @@ tasks.register('combinedCoverageReport', JavaExec) {
         (e2eExecs + [unitExec]).every { path -> def d = file(path); d.exists() && d.length() > 0 }
     }
     // Optional CI gate: -Picp.coverage.min=NN fails the build below that line-coverage percentage.
-    providers.gradleProperty('icp.coverage.min').map { systemProperty 'icp.coverage.min', it }.getOrNull()
+    if (project.hasProperty('icp.coverage.min')) systemProperty 'icp.coverage.min', project.property('icp.coverage.min')
     args([jar,
             rootProject.file('icp_server').absolutePath,
             layout.buildDirectory.dir('reports/combined/coverage').get().asFile.absolutePath] + e2eExecs + [unitExec])

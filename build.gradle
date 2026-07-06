@@ -90,7 +90,7 @@ task run {
 }
 
 task testICP {
-    description = 'Run ICP Ballerina unit tests (self-contained H2) with code coverage'
+    description = 'Run ICP Ballerina unit tests (self-contained H2) with code coverage (skip coverage with -PnoCoverage)'
     // Seed the H2 test databases first so the suite needs no external MySQL.
     dependsOn ':icp_server:initTestH2'
     // When both run, build the jar first: buildICP cleans target, so it must precede the dump.
@@ -99,7 +99,8 @@ task testICP {
         logger.info('Running tests...')
         exec {
             workingDir 'icp_server'
-            commandLine 'bal', 'test', '--code-coverage'
+            // -PnoCoverage speeds up local iterations; the combined coverage report then self-skips.
+            commandLine(['bal', 'test'] + (project.hasProperty('noCoverage') ? [] : ['--code-coverage']))
         }
         logger.info('Tests complete')
     }

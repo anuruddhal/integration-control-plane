@@ -104,8 +104,8 @@ then `bal test --code-coverage`.
 Because JaCoCo keys execution data by class id (a hash of the bytecode), **all
 dumps and the analysed jar must come from the same source built with the same
 Ballerina toolchain**. Otherwise mismatched classes are
-silently dropped and the merged numbers understate coverage. Note the CI unit-test
-container pins a Ballerina version (`build.Dockerfile`); the jar you analyse must
+silently dropped and the merged numbers understate coverage. CI pins the
+Ballerina version in `.github/workflows/pr-check.yml`; the jar you analyse must
 match it.
 
 A normal build already runs all E2E suites and the merge — no MySQL, no extra tasks:
@@ -127,7 +127,7 @@ Or run the pieces yourself:
 `combinedCoverageReport` requires the three default E2E dumps and the unit dump.
 It self-skips if any is missing. That is also why `coverage -PskipE2E` skips it entirely.
 
-CI produces the combined report on every PR: the `e2e` job runs the E2E suites and
+CI produces the combined report on every PR: the `build` job runs the E2E suites and
 `testICP` on the same runner, then `combinedCoverageReport` (see
 `.github/workflows/pr-check.yml`). The report writes `coverage.txt` (the combined
 line-coverage percent) and can gate the build:

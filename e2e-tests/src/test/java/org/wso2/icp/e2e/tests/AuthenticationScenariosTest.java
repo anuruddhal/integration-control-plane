@@ -53,10 +53,7 @@ class AuthenticationScenariosTest extends BaseCoreE2ETest {
     @Test
     @DisplayName("Logout clears state")
     void logoutClearsState() {
-        LoginPage login = new LoginPage(page);
-        login.open(config.baseUrl());
-        login.signIn(config.adminUsername(), config.adminPassword());
-        new AppPage(page).assertProjectsVisible();
+        signInAsAdmin();
 
         new AppPage(page).signOut();
 

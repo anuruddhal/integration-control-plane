@@ -173,8 +173,23 @@ public final class E2EEnvironment implements AutoCloseable {
         return current.startMi(runtimeId, environment, project, component, secret, logMessage);
     }
 
-    public static void get(String url) throws Exception {
+    public static void waitUntilReachable(String url) throws Exception {
         waitForUrl(url, Duration.ofSeconds(30));
+    }
+
+    // Poll OpenSearch until the Fluent Bit pipeline has indexed a log entry containing the message.
+    public static void awaitLogIndexed(String message) throws Exception {
+        if (current == null) throw new IllegalStateException("E2E environment is not running");
+        String query = "{\"size\":1,\"query\":{\"match_phrase\":{\"message\":\"" + message + "\"}}}";
+        Instant deadline = Instant.now().plus(Duration.ofSeconds(120));
+        while (Instant.now().isBefore(deadline)) {
+            try {
+                if (current.openSearchText("/*-application-logs-*/_search", "POST", query).contains(message)) return;
+            } catch (IOException ignored) {
+            }
+            Thread.sleep(1_000);
+        }
+        throw new RuntimeException("Timed out waiting for OpenSearch to index log: " + message);
     }
 
     public static void startLogCollector() throws Exception {

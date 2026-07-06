@@ -124,26 +124,6 @@ task dockerLogs {
     }
 }
 
-task dockerTestUp {
-    description = 'Start Docker containers for testing'
-    doLast {
-        logger.lifecycle('Starting test Docker containers...')
-        exec {
-            commandLine 'docker-compose', '-f', 'docker-compose.test.yml', 'up'
-        }
-    }
-}
-
-task dockerTestDown {
-    description = 'Stop test Docker containers'
-    doLast {
-        logger.lifecycle('Stopping test Docker containers...')
-        exec {
-            commandLine 'docker-compose', '-f', 'docker-compose.test.yml', 'down'
-        }
-    }
-}
-
 // Observability stack
 task observabilityUp {
     description = 'Start observability stack (Prometheus, Grafana, etc.)'

@@ -46,24 +46,23 @@ public record E2EConfig(
     }
 
     public E2EConfig forCoreSuite() {
-        return withFixture(false, false);
+        return copy(baseUrl, false, false);
     }
 
     public E2EConfig forObservabilitySuite() {
-        return withFixture(true, false);
+        return copy(baseUrl, true, false);
     }
 
     public E2EConfig forSsoSuite() {
-        return withFixture(false, true);
+        return copy(baseUrl, false, true);
     }
 
     public E2EConfig withBaseUrl(String baseUrl) {
-        return new E2EConfig(baseUrl, adminUsername, adminPassword, headless, slowMoMs, timeoutMs, observability,
-                coverage, sso, jacocoAgentJar, logsProject, logsBiComponent, logsMiComponent, selfContained, distributionZip,
-                miZip, biJar, workDir, reportDir);
+        return copy(baseUrl, observability, sso);
     }
 
-    private E2EConfig withFixture(boolean observability, boolean sso) {
+    // The only place the full constructor is repeated; every derived config goes through here.
+    private E2EConfig copy(String baseUrl, boolean observability, boolean sso) {
         return new E2EConfig(baseUrl, adminUsername, adminPassword, headless, slowMoMs, timeoutMs, observability,
                 coverage, sso, jacocoAgentJar, logsProject, logsBiComponent, logsMiComponent, selfContained, distributionZip,
                 miZip, biJar, workDir, reportDir);

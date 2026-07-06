@@ -1,6 +1,5 @@
 package org.wso2.icp.e2e.pages;
 
-import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.AriaRole;
 
@@ -22,8 +21,7 @@ public class AppPage {
     }
 
     public void signOut() {
-        Locator headerButtons = page.locator("header button");
-        headerButtons.nth(headerButtons.count() - 1).click();
+        page.locator("[data-testid='user-menu'] button").click();
         page.getByText("Sign Out", new Page.GetByTextOptions().setExact(true)).click();
         page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Sign Out")).last().click();
     }

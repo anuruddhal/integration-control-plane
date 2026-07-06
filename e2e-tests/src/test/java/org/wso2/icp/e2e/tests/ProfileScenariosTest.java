@@ -6,8 +6,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.wso2.icp.e2e.BaseCoreE2ETest;
-import org.wso2.icp.e2e.pages.AppPage;
-import org.wso2.icp.e2e.pages.LoginPage;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 
@@ -18,10 +16,7 @@ class ProfileScenariosTest extends BaseCoreE2ETest {
     @Test
     @DisplayName("Profile details")
     void profileDetails() {
-        LoginPage login = new LoginPage(page);
-        login.open(config.baseUrl());
-        login.signIn(config.adminUsername(), config.adminPassword());
-        new AppPage(page).assertProjectsVisible();
+        signInAsAdmin();
 
         page.navigate(config.url("/profile"));
 

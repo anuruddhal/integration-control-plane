@@ -10,8 +10,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.wso2.icp.e2e.BaseObservabilityE2ETest;
 import org.wso2.icp.e2e.E2EEnvironment;
-import org.wso2.icp.e2e.pages.AppPage;
-import org.wso2.icp.e2e.pages.LoginPage;
 
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -91,11 +89,8 @@ class RuntimeLogsScenariosTest extends BaseObservabilityE2ETest {
         createComponent(biComponent, false);
         createComponent(miComponent, true);
 
-        String biSecret = createRuntimeSecret(biComponent);
-        String miSecret = createRuntimeSecret(miComponent);
-
-        this.biSecret = biSecret;
-        this.miSecret = miSecret;
+        biSecret = createRuntimeSecret(biComponent);
+        miSecret = createRuntimeSecret(miComponent);
     }
 
     private void startRealRuntimesAndEmitLogs() throws Exception {
@@ -104,9 +99,10 @@ class RuntimeLogsScenariosTest extends BaseObservabilityE2ETest {
         E2EEnvironment.RuntimeProcess bi = E2EEnvironment.startBiRuntime(biRuntimeId, environment, project, biComponent, biSecret);
         E2EEnvironment.RuntimeProcess mi = E2EEnvironment.startMiRuntime(miRuntimeId, environment, project, miComponent, miSecret, miLogMessage);
         E2EEnvironment.startLogCollector();
-        E2EEnvironment.get(bi.url());
-        E2EEnvironment.get(mi.url());
-        Thread.sleep(12_000);
+        E2EEnvironment.waitUntilReachable(bi.url());
+        E2EEnvironment.waitUntilReachable(mi.url());
+        E2EEnvironment.awaitLogIndexed(biLogMessage);
+        E2EEnvironment.awaitLogIndexed(miLogMessage);
     }
 
     private void createProject(String handler) {
@@ -140,7 +136,7 @@ class RuntimeLogsScenariosTest extends BaseObservabilityE2ETest {
     private String createRuntimeSecret(String component) {
         page.navigate(config.url("/organizations/default/projects/" + project + "/components/" + component + "/runtimes"));
         assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("Runtime"))).isVisible();
-        page.locator("xpath=//h2[normalize-space()='" + environment + "']/ancestor::*[contains(@class,'MuiCardContent-root')][1]//button[normalize-space()='Add Runtime']").click();
+        environmentCard().getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Add Runtime")).click();
         assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("Add Runtime for " + environment))).isVisible();
         page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Generate Secret")).click();
         Locator pre = page.locator("pre").first();
@@ -263,12 +259,5 @@ class RuntimeLogsScenariosTest extends BaseObservabilityE2ETest {
 
     private void expandFirstLogEntry() {
         page.getByLabel("Expand log entry").first().click();
-    }
-
-    private void signInAsAdmin() {
-        LoginPage login = new LoginPage(page);
-        login.open(config.baseUrl());
-        login.signIn(config.adminUsername(), config.adminPassword());
-        new AppPage(page).assertProjectsVisible();
     }
 }

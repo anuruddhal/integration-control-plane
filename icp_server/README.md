@@ -66,21 +66,16 @@ The ICP Server supports multiple database backends:
 
 ## Running Tests
 
-To run the test suite using Docker Compose:
+The test suite is self-contained: it runs against seeded H2 databases, no external MySQL needed.
 
 ```sh
-docker-compose -f docker-compose.test.yml up --build
+../gradlew testICP
 ```
 
-This will:
-
-- Start a test MySQL database
-- Run all Ballerina tests
-- Execute authentication, runtime, and GraphQL API tests
-
-### Running Tests Locally
+Or run the pieces yourself:
 
 ```sh
+../gradlew initTestH2   # recreate the seeded H2 test databases
 bal test
 ```
 
