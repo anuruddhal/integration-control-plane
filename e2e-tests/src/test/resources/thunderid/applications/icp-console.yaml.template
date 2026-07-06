@@ -4,7 +4,7 @@ name: ICP E2E Console
 url: {{BASE_URL}}
 contacts:
   - admin@example.com
-authFlowHandle: default-basic-flow
+authFlowHandle: default-flow
 isRegistrationFlowEnabled: false
 isRecoveryFlowEnabled: false
 assertion:
@@ -30,10 +30,11 @@ inboundAuthConfig:
       requirePushedAuthorizationRequests: false
       token:
         accessToken:
-          validityPeriod: 3600
-          userAttributes:
-            - email
-            - name
+          userConfig:
+            validityPeriod: 3600
+            attributes:
+              - email
+              - name
         idToken:
           validityPeriod: 3600
           userAttributes:

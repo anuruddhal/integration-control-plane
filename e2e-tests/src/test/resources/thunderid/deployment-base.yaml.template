@@ -2,6 +2,8 @@ server:
   hostname: "0.0.0.0"
   port: 8090
   public_url: "{{THUNDERID_URL}}"
+  security:
+    direct_auth_secret: "file://config/secrets/direct_auth_secret"
 
 gate_client:
   hostname: "localhost"
@@ -14,11 +16,6 @@ jwt:
   preferred_key_id: "default-key"
 
 passkey:
-  allowed_origins:
-    - "{{THUNDERID_URL}}"
-    - "{{BASE_URL}}"
-
-cors:
   allowed_origins:
     - "{{THUNDERID_URL}}"
     - "{{BASE_URL}}"

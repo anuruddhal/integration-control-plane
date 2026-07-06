@@ -99,7 +99,7 @@ def configureE2eSuite = { Test task, String suite, List<String> includes ->
     task.dependsOn rootProject.tasks.named('packageICP')
     task.dependsOn tasks.named('resolveMiDistribution')
     task.dependsOn tasks.named('buildBiE2eArtifact')
-    task.dependsOn 'playwrightInstall'
+    task.dependsOn(project.hasProperty('playwrightWithDeps') ? 'playwrightInstallDeps' : 'playwrightInstall')
 
     task.systemProperties System.getProperties().findAll { key, _ -> key.toString().startsWith('icp.e2e.') }
     def coverageEnabled = System.getProperty('icp.e2e.coverage', 'true')

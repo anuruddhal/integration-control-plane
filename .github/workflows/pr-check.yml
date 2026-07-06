@@ -24,12 +24,16 @@ on:
 jobs:
   build:
     name: Build, test and coverage
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -69,14 +73,11 @@ jobs:
       - name: Raise vm.max_map_count for OpenSearch
         run: sudo sysctl -w vm.max_map_count=262144
 
-      - name: Install Playwright browser and OS dependencies
-        run: ./gradlew --no-daemon :e2e-tests:playwrightInstallDeps
-
       - name: Build (unit on H2 + E2E on MySQL + combined coverage)
         # A single `build` runs the Ballerina unit tests (self-contained H2, no MySQL) and the E2E
         # suite (MySQL via Testcontainers), then emits the combined line-coverage report from both
         # dumps. Add -Picp.coverage.min=<pct> to gate on combined coverage.
-        run: ./gradlew --no-daemon build
+        run: ./gradlew --no-daemon -PplaywrightWithDeps build
 
       - name: Upload combined coverage report
         if: always()

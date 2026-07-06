@@ -26,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.UUID;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import java.util.regex.Matcher;
@@ -246,12 +247,13 @@ public final class E2EEnvironment implements AutoCloseable {
         Path home = runDir.resolve("thunderid");
         Path db = home.resolve("database");
         Path consentDb = home.resolve("consent-database");
-        Files.createDirectories(db);
-        Files.createDirectories(consentDb);
-        // ThunderID's container writes into these bind mounts as its own UID; on CI runners the
-        // runner-owned dirs are otherwise not writable by it ("cp: can't create ...: Permission denied").
-        allowContainerWrites(db);
-        allowContainerWrites(consentDb);
+        Path certs = home.resolve("config/certs");
+        Path secrets = home.resolve("config/secrets");
+        List<Path> writableDirs = List.of(db, consentDb, certs, secrets);
+        for (Path dir : writableDirs) {
+            Files.createDirectories(dir);
+            allowContainerWrites(dir);
+        }
         writeThunderIdConfig(home);
 
         new GenericContainer<>(THUNDERID_IMAGE)
@@ -267,6 +269,8 @@ public final class E2EEnvironment implements AutoCloseable {
                 .withEnv("ADMIN_PASSWORD", "admin")
                 .withFileSystemBind(db.toString(), "/opt/thunderid/database", BindMode.READ_WRITE)
                 .withFileSystemBind(consentDb.toString(), "/opt/thunderid/consent/repository/database", BindMode.READ_WRITE)
+                .withFileSystemBind(certs.toString(), "/opt/thunderid/config/certs", BindMode.READ_WRITE)
+                .withFileSystemBind(secrets.toString(), "/opt/thunderid/config/secrets", BindMode.READ_WRITE)
                 .withFileSystemBind(home.resolve("deployment-setup.yaml").toString(), "/opt/thunderid/deployment.yaml", BindMode.READ_ONLY)
                 .withStartupCheckStrategy(new OneShotStartupCheckStrategy().withTimeout(Duration.ofMinutes(2)))
                 .start();
@@ -276,6 +280,8 @@ public final class E2EEnvironment implements AutoCloseable {
                 .withExposedPorts(THUNDERID_PORT)
                 .withFileSystemBind(db.toString(), "/opt/thunderid/database", BindMode.READ_WRITE)
                 .withFileSystemBind(consentDb.toString(), "/opt/thunderid/consent/repository/database", BindMode.READ_WRITE)
+                .withFileSystemBind(certs.toString(), "/opt/thunderid/config/certs", BindMode.READ_ONLY)
+                .withFileSystemBind(secrets.toString(), "/opt/thunderid/config/secrets", BindMode.READ_ONLY)
                 .withFileSystemBind(home.resolve("deployment.yaml").toString(), "/opt/thunderid/deployment.yaml", BindMode.READ_ONLY)
                 .withFileSystemBind(home.resolve("gate-config.js").toString(), "/opt/thunderid/apps/gate/config.js", BindMode.READ_ONLY)
                 .withFileSystemBind(home.resolve("resources").toString(), "/opt/thunderid/config/resources", BindMode.READ_ONLY)
@@ -681,12 +687,18 @@ public final class E2EEnvironment implements AutoCloseable {
 
     private static String output(ProcessBuilder builder, Duration timeout, String name) throws Exception {
         Process process = builder.redirectErrorStream(true).start();
-        byte[] bytes = process.getInputStream().readAllBytes();
+        CompletableFuture<byte[]> output = CompletableFuture.supplyAsync(() -> {
+            try {
+                return process.getInputStream().readAllBytes();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
         if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
             process.destroyForcibly();
             throw new RuntimeException(name + " timed out");
         }
-        String out = new String(bytes, StandardCharsets.UTF_8).trim();
+        String out = new String(output.get(), StandardCharsets.UTF_8).trim();
         if (process.exitValue() != 0) {
             throw new RuntimeException(name + " failed with exit code " + process.exitValue() + ": " + out);
         }
@@ -798,16 +810,27 @@ public final class E2EEnvironment implements AutoCloseable {
     }
 
     private static void destroyTree(Process process) {
-        process.descendants().forEach(ProcessHandle::destroy);
+        List<ProcessHandle> descendants = process.descendants().toList();
+        descendants.forEach(ProcessHandle::destroy);
         process.destroy();
+        if (waitForExit(process, descendants)) return;
+
+        descendants.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);
+        if (process.isAlive()) process.destroyForcibly();
+        waitForExit(process, descendants);
+    }
+
+    private static boolean waitForExit(Process process, List<ProcessHandle> descendants) {
+        Instant deadline = Instant.now().plusSeconds(10);
         try {
-            if (!process.waitFor(10, TimeUnit.SECONDS)) {
-                process.descendants().forEach(ProcessHandle::destroyForcibly);
-                process.destroyForcibly();
+            while (process.isAlive() || descendants.stream().anyMatch(ProcessHandle::isAlive)) {
+                if (Instant.now().isAfter(deadline)) return false;
+                Thread.sleep(100);
             }
+            return true;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            process.destroyForcibly();
+            return false;
         }
     }
 
