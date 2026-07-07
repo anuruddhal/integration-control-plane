@@ -92,7 +92,7 @@ public isolated function reconcileArtifact(string runtimeId, string componentId,
         check doOptimisticUpdate(runtimeId, componentId, envId, artifact, eligible);
     }
 
-    check doClearConverged(runtimeId, artifact, actions);
+    check doClearConverged(runtimeId, artifact, actions, backoffMap);
     return commands;
 }
 
@@ -170,11 +170,41 @@ isolated function doOptimisticUpdate(string runtimeId, string componentId, strin
     check storage:optimisticUpsertObservedState(runtimeId, componentId, envId, artifact, state);
 }
 
+// Seconds to keep a converged backoff record alive before deleting it.
+// Prevents immediate re-dispatch when an artifact briefly converges and then
+// regresses (e.g. a listener that starts and quickly fails), which would
+// otherwise clear the attempt counter and reset the backoff to zero.
+const int CONVERGENCE_STABILITY_COOLDOWN_SEC = 30;
+
 isolated function doClearConverged(string runtimeId, types:ReconcileArtifactKey artifact,
-        types:ReconcileAction[] currentActions) returns error? {
+        types:ReconcileAction[] currentActions, map<types:ReconcileBackoffRecord> backoffMap) returns error? {
     string[] activeKeys = from types:ReconcileAction a in currentActions
         select a.key;
     log:printDebug("clearConverged", runtimeId = runtimeId,
             artifactName = artifact.artifactName, activeKeyCount = activeKeys.length());
-    check storage:deleteReconcileBackoffConverged(runtimeId, artifact, activeKeys);
+
+    // Build an active-key lookup set for O(1) checks.
+    map<boolean> activeKeySet = {};
+    foreach string k in activeKeys {
+        activeKeySet[k] = true;
+    }
+
+    // For converged keys that had prior dispatch attempts, apply a stability
+    // cooldown instead of immediately deleting the record.  The attempt count
+    // is decremented by one on each convergence; once it reaches zero the next
+    // reconcile cycle deletes the record normally.  This ensures that an
+    // artifact must stay stable for at least (attempt_count × cooldown) seconds
+    // before the backoff is fully cleared, preventing rapid re-dispatch when
+    // the artifact keeps cycling between states.
+    int now = time:utcNow()[0];
+    string[] skipDeleteKeys = activeKeys.clone();
+    foreach var [stateKey, rec] in backoffMap.entries() {
+        if !activeKeySet.hasKey(stateKey) && rec.attempt_count > 0 {
+            int newCount = rec.attempt_count - 1;
+            check storage:upsertReconcileBackoff(runtimeId, artifact, stateKey, newCount, 0, now + CONVERGENCE_STABILITY_COOLDOWN_SEC);
+            skipDeleteKeys.push(stateKey);
+        }
+    }
+
+    check storage:deleteReconcileBackoffConverged(runtimeId, artifact, skipDeleteKeys);
 }
