@@ -189,20 +189,21 @@ isolated function doClearConverged(string runtimeId, types:ReconcileArtifactKey 
         activeKeySet[k] = true;
     }
 
-    // For converged keys that had prior dispatch attempts, apply a stability
-    // cooldown instead of immediately deleting the record.  The attempt count
-    // is decremented by one on each convergence; once it reaches zero the next
-    // reconcile cycle deletes the record normally.  This ensures that an
-    // artifact must stay stable for at least (attempt_count × cooldown) seconds
-    // before the backoff is fully cleared, preventing rapid re-dispatch when
-    // the artifact keeps cycling between states.
+    // For converged keys that had prior dispatch attempts, preserve the backoff
+    // record during the cooldown window and only decrement the attempt count
+    // once the window has expired.  Gating on rec.next_attempt <= now prevents
+    // rapid heartbeat passes from burning through the counter faster than the
+    // cooldown period — e.g. with attempt_count=4 (60 s backoff), six 10 s
+    // heartbeats would otherwise zero the count before a single cooldown fires.
     int now = time:utcNow()[0];
     string[] skipDeleteKeys = activeKeys.clone();
     foreach var [stateKey, rec] in backoffMap.entries() {
         if !activeKeySet.hasKey(stateKey) && rec.attempt_count > 0 {
-            int newCount = rec.attempt_count - 1;
-            check storage:upsertReconcileBackoff(runtimeId, artifact, stateKey, newCount, 0, now + CONVERGENCE_STABILITY_COOLDOWN_SEC);
             skipDeleteKeys.push(stateKey);
+            if rec.next_attempt <= now {
+                int newCount = rec.attempt_count - 1;
+                check storage:upsertReconcileBackoff(runtimeId, artifact, stateKey, newCount, 0, now + CONVERGENCE_STABILITY_COOLDOWN_SEC);
+            }
         }
     }
 
