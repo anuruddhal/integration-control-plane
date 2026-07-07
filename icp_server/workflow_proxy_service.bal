@@ -31,7 +31,10 @@ import ballerina/log;
 //
 // The proxy injects `x-user-id` and `x-user-roles` (the caller's ICP permission
 // scopes, plus a synthetic `admin` role for super-admins) so the workflow
-// service can do its own human-task authorization.
+// service can do its own human-task authorization. It also authenticates to the
+// runtime's management API with `X-API-Key: <keyId>.<keyMaterial>` — the same org
+// secret the runtime registered with (configured as `apiKeyValue` in the runtime's
+// `[ballerina.workflow.management]` section).
 
 // Allow self-signed certs when the callbackUrl is https (suitable for
 // K8s-internal / dev). Set to false in production with a trusted chain.
@@ -64,21 +67,42 @@ isolated function getWorkflowClient(string baseUrl) returns http:Client|error {
     return newClient;
 }
 
+// Reconstructs the runtime's workflow management API key (`<keyId>.<keyMaterial>`) from the
+// org secret the runtime registered with. Returns () when the runtime has no recorded key id
+// or the secret can't be resolved — the request is then sent without an API key (only valid
+// against runtimes that don't enable API-key auth).
+isolated function resolveWorkflowApiKey(string? keyId) returns string? {
+    if keyId is () {
+        return ();
+    }
+    types:OrgSecret|error orgSecret = storage:lookupOrgSecretByKeyId(keyId);
+    if orgSecret is error {
+        log:printWarn(string `Workflow proxy: failed to resolve API key for keyId=${keyId}`, 'error = orgSecret);
+        return ();
+    }
+    return orgSecret.keyId + "." + orgSecret.keyMaterial;
+}
+
 // Fetches workflow definitions live from the runtime's GET /workflow/definitions API for the
 // given component+environment and maps them to the Workflow artifact shape used by the frontend.
 // Returns [] when no running runtime advertises a workflow callback URL. Used by the GraphQL
 // `workflowsByEnvironmentAndComponent` resolver (definitions are no longer carried in heartbeats).
 isolated function fetchWorkflowDefinitions(string componentId, string environmentId) returns types:Workflow[]|error {
-    string?|error callbackUrl = storage:getRuntimeCallbackUrl(componentId, environmentId);
-    if callbackUrl is error {
-        return callbackUrl;
+    types:WorkflowTarget?|error target = storage:getRuntimeWorkflowTarget(componentId, environmentId);
+    if target is error {
+        return target;
     }
-    if callbackUrl is () {
+    if target is () {
         return [];
     }
 
-    http:Client wfClient = check getWorkflowClient(callbackUrl);
-    http:Response resp = check wfClient->get("/workflow/definitions");
+    map<string|string[]> headers = {};
+    string? apiKey = resolveWorkflowApiKey(target.keyId);
+    if apiKey is string {
+        headers["X-API-Key"] = apiKey;
+    }
+    http:Client wfClient = check getWorkflowClient(target.callbackUrl);
+    http:Response resp = check wfClient->get("/workflow/definitions", headers);
     if resp.statusCode != 200 {
         json|error errBody = resp.getJsonPayload();
         return error("Workflow definitions request failed: " + (errBody is json ? errBody.toString() : "status " + resp.statusCode.toString()));
@@ -166,11 +190,11 @@ function proxyWorkflowRequest(string componentId, string environmentId, string[]
     }
 
     // 3. Resolve the runtime workflow service base URL.
-    string?|error callbackUrl = storage:getRuntimeCallbackUrl(componentId, environmentId);
-    if callbackUrl is error {
-        return workflowErrorResponse(500, "Failed to resolve workflow runtime: " + callbackUrl.message());
+    types:WorkflowTarget?|error target = storage:getRuntimeWorkflowTarget(componentId, environmentId);
+    if target is error {
+        return workflowErrorResponse(500, "Failed to resolve workflow runtime: " + target.message());
     }
-    if callbackUrl is () {
+    if target is () {
         return workflowErrorResponse(503, "No running workflow runtime with a callback URL for this environment");
     }
 
@@ -182,7 +206,8 @@ function proxyWorkflowRequest(string componentId, string environmentId, string[]
     string targetPath = "/workflow/" + subPath + query;
 
     // 5. Inject identity headers. Forward the caller's ICP role names so the workflow
-    //    service can match/authorize human tasks by role. Drop ICP's bearer token.
+    //    service can match/authorize human tasks by role. Drop ICP's bearer token and
+    //    authenticate to the runtime's management API with its API key instead.
     string[]|error roleNames = storage:getAllUserRoleNames(userContext.userId);
     if roleNames is error {
         return workflowErrorResponse(500, "Failed to resolve user roles: " + roleNames.message());
@@ -195,9 +220,13 @@ function proxyWorkflowRequest(string componentId, string environmentId, string[]
     req.setHeader("x-user-id", userContext.userId);
     req.setHeader("x-user-roles", roles);
     req.removeHeader("Authorization");
+    string? apiKey = resolveWorkflowApiKey(target.keyId);
+    if apiKey is string {
+        req.setHeader("X-API-Key", apiKey);
+    }
 
     // 6. Forward (method + body preserved) and relay the upstream response.
-    http:Client|error wfClient = getWorkflowClient(callbackUrl);
+    http:Client|error wfClient = getWorkflowClient(target.callbackUrl);
     if wfClient is error {
         return workflowErrorResponse(502, "Failed to connect to workflow runtime: " + wfClient.message());
     }

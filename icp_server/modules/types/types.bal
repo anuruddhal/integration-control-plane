@@ -764,6 +764,14 @@ public type Workflow record {
     ArtifactRuntimeInfo[]? runtimes?;
 };
 
+// Reachable workflow management endpoint of a runtime (callbackUrl from the heartbeat)
+// plus the org-secret key id the runtime authenticated with — used by the workflow proxy
+// to reconstruct the runtime's management API key (`<keyId>.<keyMaterial>`).
+public type WorkflowTarget record {|
+    string callbackUrl;
+    string? keyId;
+|};
+
 public type Automation record {
     @sql:Column {
         name: "package_org"

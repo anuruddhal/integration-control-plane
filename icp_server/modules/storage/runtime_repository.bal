@@ -254,27 +254,34 @@ public isolated function getListenersForRuntime(string runtimeId) returns types:
     return listenerList;
 }
 
-// Resolve the workflow management service base URL (callbackUrl) for a component+environment.
+// Resolve the workflow management service target (callbackUrl) for a component+environment,
+// along with the org-secret key id the runtime registered with — the workflow proxy uses it
+// to reconstruct the runtime's management API key.
 // Prefers a RUNNING runtime; returns () when none of the matching runtimes reported a callbackUrl.
-public isolated function getRuntimeCallbackUrl(string componentId, string environmentId) returns string?|error {
-    stream<record {|string? callback_url; string status;|}, sql:Error?> rs = dbClient->query(`
-        SELECT callback_url, status
+public isolated function getRuntimeWorkflowTarget(string componentId, string environmentId) returns types:WorkflowTarget?|error {
+    stream<record {|string? callback_url; string? key_id; string status;|}, sql:Error?> rs = dbClient->query(`
+        SELECT callback_url, key_id, status
         FROM runtimes
         WHERE component_id = ${componentId} AND environment_id = ${environmentId}
             AND callback_url IS NOT NULL AND callback_url <> ''
     `);
-    record {|string? callback_url; string status;|}[] rows = check from var r in rs
+    record {|string? callback_url; string? key_id; string status;|}[] rows = check from var r in rs
         select r;
     if rows.length() == 0 {
         return ();
     }
     // Prefer a RUNNING runtime's callbackUrl; fall back to the first available.
     foreach var r in rows {
-        if r.status == "RUNNING" && r.callback_url is string {
-            return r.callback_url;
+        string? callbackUrl = r.callback_url;
+        if r.status == "RUNNING" && callbackUrl is string {
+            return {callbackUrl, keyId: r.key_id};
         }
     }
-    return rows[0].callback_url;
+    string? callbackUrl = rows[0].callback_url;
+    if callbackUrl is string {
+        return {callbackUrl, keyId: rows[0].key_id};
+    }
+    return ();
 }
 
 type ApiRecordInDB record {|
