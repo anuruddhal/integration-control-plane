@@ -508,8 +508,9 @@ isolated function writeObservedStateBI(string runtimeId, string componentId, str
         ]);
     }
     // Snapshot previous listener status + optimistic flag before upsert.
-    // We publish a WS event when: (a) state actually changed, OR (b) the previous row
-    // was optimistic (meaning this heartbeat is the runtime confirming a command).
+    // We publish a WS event only when the previous row was confirmed (not optimistic)
+    // AND the state changed.  Skipping optimistic rows prevents spurious notifications
+    // fired by the reconcile engine's in-flight writes between heartbeats.
     map<record {|string status; boolean optimistic;|}> prevListenerRows = {};
     foreach types:Listener 'listener in artifacts.listeners {
         string qualName = types:qualifiedArtifactName('listener.name, 'listener.package);
@@ -535,15 +536,17 @@ isolated function writeObservedStateBI(string runtimeId, string componentId, str
     }
     check batchUpsertReconcileObservedState(runtimeId, componentId, envId, entries);
 
-    // Publish WebSocket events for listeners whose state changed or whose optimistic
-    // row is now being confirmed by the runtime heartbeat.
+    // Publish WebSocket events only when the previous row was confirmed (optimistic=false)
+    // and the runtime reports a different state.  Optimistic rows mean the reconcile
+    // engine has a pending command in flight; we suppress events in that window to avoid
+    // notification noise from automated reconcile cycles.
     string|error envNameResult = getEnvironmentNameById(envId);
     string environmentName = envNameResult is string ? envNameResult : envId;
     foreach types:Listener 'listener in artifacts.listeners {
         string qualName = types:qualifiedArtifactName('listener.name, 'listener.package);
         string newState = 'listener.state.toLowerAscii();
         record {|string status; boolean optimistic;|}? prev = prevListenerRows[qualName];
-        boolean shouldPublish = prev is record {|string status; boolean optimistic;|} && (prev.optimistic || prev.status != newState);
+        boolean shouldPublish = prev is record {|string status; boolean optimistic;|} && !prev.optimistic && prev.status != newState;
         if shouldPublish {
             runtimeBroadcaster.publishListenerStateChange(envId, environmentName, componentId, runtimeId, qualName, 'listener.port, newState);
         }
