@@ -28,12 +28,25 @@ import ballerina/sql;
 final http:Client authBackendClient;
 final readonly & jwt:IssuerSignatureConfig jwtSignatureConfig;
 
+isolated function extractClientIp(http:Request req) returns string? {
+    string|http:HeaderNotFoundError xff = req.getHeader("X-Forwarded-For");
+    if xff is string {
+        return xff;
+    }
+    string|http:HeaderNotFoundError xri = req.getHeader("X-Real-IP");
+    return xri is string ? xri : ();
+}
+
 @http:ServiceConfig {
     cors: {
-        allowOrigins: ["*"]
+        allowOrigins: normalizedCorsAllowedOrigins
     }
 }
 service /auth on httpListener {
+
+    function init() {
+        log:printInfo("Auth service started at " + serverHost + ":" + authServicePort.toString());
+    }
 
     // Returns the user-management operations supported by the active user store.
     // The frontend uses this to show or hide UI features (e.g. create user, change password).
@@ -55,8 +68,13 @@ service /auth on httpListener {
         if ldapUserStoreEnabled {
             caps = ["authenticate"];
         } else {
-            caps = ["authenticate", "password_change", "password_reset",
-                    "unlock_account", "create"];
+            caps = [
+                "authenticate",
+                "password_change",
+                "password_reset",
+                "unlock_account",
+                "create"
+            ];
         }
         return <http:Ok>{body: {capabilities: caps}};
     }
@@ -73,6 +91,9 @@ service /auth on httpListener {
 
         if authResponse.statusCode == 429 {
             log:printWarn("Account locked out by auth backend", username = credentials.username);
+            storage:logAuditEvent(storage:AUDIT_LOGIN_LOCKED, resourceType = storage:AUDIT_RESOURCE_SESSION,
+                    details = string `Account locked after repeated failures for user '${credentials.username}'`,
+                    clientIp = extractClientIp(req));
             json|error lockoutPayload = authResponse.getJsonPayload();
             if lockoutPayload is error {
                 log:printError("Failed to read lockout response payload", lockoutPayload);
@@ -91,6 +112,9 @@ service /auth on httpListener {
 
         if authResponse.statusCode == http:STATUS_UNAUTHORIZED {
             log:printError("Authentication failed for user", username = credentials.username);
+            storage:logAuditEvent(storage:AUDIT_LOGIN_FAILURE, resourceType = storage:AUDIT_RESOURCE_SESSION,
+                    details = string `Login failed — invalid credentials for user '${credentials.username}'`,
+                    clientIp = extractClientIp(req));
             return utils:createUnauthorizedError("Invalid credentials");
         } else if authResponse.statusCode != http:STATUS_OK {
             log:printError("Unexpected status code from authentication backend", statusCode = authResponse.statusCode);
@@ -112,6 +136,9 @@ service /auth on httpListener {
 
         if !authResult.authenticated {
             log:printError("Authentication failed for user", username = credentials.username);
+            storage:logAuditEvent(storage:AUDIT_LOGIN_FAILURE, resourceType = storage:AUDIT_RESOURCE_SESSION,
+                    details = string `Login denied — authentication rejected for user '${credentials.username}'`,
+                    clientIp = extractClientIp(req));
             return utils:createUnauthorizedError("Invalid credentials");
         }
 
@@ -133,7 +160,7 @@ service /auth on httpListener {
                 log:printInfo(string `User ${username} authenticated but not found in users table, creating user record`);
 
                 // If the auth backend signals that this user should be a super-admin
-                // (e.g. because of an LDAP admin role), add them to the built-in
+                // (e.g. because of an external admin role), add them to the built-in
                 // "Super Admins" group on first login.
                 string[] initialGroupIds = [];
                 if authResult?.isSuperAdmin == true {
@@ -144,7 +171,7 @@ service /auth on httpListener {
                         return utils:createInternalServerError("Could not resolve Super Admins group");
                     }
                     initialGroupIds = [superAdminsGroupId];
-                    log:printInfo("Assigning new LDAP user to Super Admins group on first login", username = username);
+                    log:printInfo("Assigning new user to Super Admins group on first login", username = username);
                 }
 
                 json|error? createResult = storage:createUserV2(userId, username, displayName, initialGroupIds);
@@ -225,6 +252,10 @@ service /auth on httpListener {
         }
 
         log:printInfo("Login successful for user", username = username, permissionCount = userPermissions.length());
+        storage:logAuditEvent(storage:AUDIT_LOGIN_SUCCESS, userId = userDetails.userId,
+                resourceType = storage:AUDIT_RESOURCE_SESSION,
+                details = string `User '${username}' logged in successfully`,
+                clientIp = ipAddress, userAgent = userAgent);
         return <http:Ok>{
             body: {
                 userId: userDetails.userId,
@@ -265,6 +296,9 @@ service /auth on httpListener {
         types:OIDCTokenResponse|http:Unauthorized|http:InternalServerError tokenResponse = auth:exchangeCodeForTokens(request.code, ssoConfig);
 
         if tokenResponse is http:Unauthorized|http:InternalServerError {
+            storage:logAuditEvent(storage:AUDIT_OIDC_LOGIN_FAILURE, resourceType = storage:AUDIT_RESOURCE_SESSION,
+                    details = "OIDC login failed — token exchange error",
+                    clientIp = extractClientIp(req));
             return tokenResponse;
         }
 
@@ -370,6 +404,10 @@ service /auth on httpListener {
 
         // Return login response
         log:printInfo("OIDC login successful", username = userInfo.username, permissionCount = userPermissions.length());
+        storage:logAuditEvent(storage:AUDIT_OIDC_LOGIN_SUCCESS, userId = userDetails.userId,
+                resourceType = storage:AUDIT_RESOURCE_SESSION,
+                details = string `OIDC user '${userInfo.username}' logged in successfully`,
+                clientIp = ipAddress, userAgent = userAgent);
         return <http:Ok>{
             body: {
                 userId: userDetails.userId,
@@ -450,6 +488,10 @@ service /auth on httpListener {
         }
 
         log:printInfo("Password changed successfully", userId = userContext.userId, username = userContext.username);
+        storage:logAuditEvent(storage:AUDIT_PASSWORD_CHANGE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_USER, resourceId = userContext.userId,
+                details = string `User '${userContext.username}' changed their password`,
+                clientIp = extractClientIp(req));
         return <http:Ok>{
             body: {
                 message: "Password changed successfully"
@@ -526,6 +568,10 @@ service /auth on httpListener {
         }
 
         log:printInfo("Password force-changed successfully", userId = userContext.userId);
+        storage:logAuditEvent(storage:AUDIT_PASSWORD_FORCED_CHANGE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_USER, resourceId = userContext.userId,
+                details = string `User '${userContext.username}' completed forced password change`,
+                clientIp = extractClientIp(req));
         return <http:Ok>{
             body: {
                 message: "Password changed successfully"
@@ -699,6 +745,10 @@ service /auth on httpListener {
             log:printInfo("Specific refresh token revoked successfully",
                     userId = userContext.userId,
                     username = userContext.username);
+            storage:logAuditEvent(storage:AUDIT_LOGOUT, userId = userContext.userId,
+                    resourceType = storage:AUDIT_RESOURCE_SESSION,
+                    details = string `User '${userContext.username}' logged out (single session)`,
+                    clientIp = extractClientIp(req));
             return <http:Ok>{
                 body: {
                     message: "Refresh token revoked successfully"
@@ -716,6 +766,10 @@ service /auth on httpListener {
         log:printInfo("All refresh tokens revoked successfully for user",
                 userId = userContext.userId,
                 username = userContext.username);
+        storage:logAuditEvent(storage:AUDIT_LOGOUT_ALL, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_SESSION,
+                details = string `User '${userContext.username}' logged out from all devices`,
+                clientIp = extractClientIp(req));
         return <http:Ok>{
             body: {
                 message: "All refresh tokens revoked successfully. You have been logged out from all devices."
@@ -899,6 +953,10 @@ service /auth on httpListener {
         }
 
         log:printInfo("Successfully created group", groupId = groupId, groupName = groupInput.groupName);
+        storage:logAuditEvent(storage:AUDIT_GROUP_CREATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_GROUP, resourceId = groupId,
+                details = string `Group '${groupInput.groupName}' created by user '${userContext.username}'`,
+                clientIp = extractClientIp(req));
         return <http:Created>{
             body: createdGroup
         };
@@ -1022,6 +1080,10 @@ service /auth on httpListener {
         }
 
         log:printInfo("Successfully updated group", groupId = groupId);
+        storage:logAuditEvent(storage:AUDIT_GROUP_UPDATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_GROUP, resourceId = groupId,
+                details = string `Group '${groupInput.groupName}' updated by user '${userContext.username}'`,
+                clientIp = extractClientIp(req));
         return <http:Ok>{
             body: updatedGroup
         };
@@ -1107,6 +1169,10 @@ service /auth on httpListener {
         }
 
         log:printInfo("Successfully deleted group", groupId = groupId);
+        storage:logAuditEvent(storage:AUDIT_GROUP_DELETE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_GROUP, resourceId = groupId,
+                details = string `Group '${groupId}' deleted by user '${userContext.username}'`,
+                clientIp = extractClientIp(req));
         return <http:Ok>{
             body: {
                 message: "Group deleted successfully",
@@ -2044,7 +2110,7 @@ service /auth on httpListener {
         if username.trim().length() == 0 {
             return utils:createBadRequestError("Username is required");
         }
-        if !re`^[a-zA-Z0-9_.]+$`.isFullMatch(username) {
+        if !re `^[a-zA-Z0-9_.]+$`.isFullMatch(username) {
             return utils:createBadRequestError("Username may only contain letters, digits, underscores, and dots");
         }
         if password.trim().length() == 0 {
@@ -2102,11 +2168,15 @@ service /auth on httpListener {
             } else {
                 log:printInfo(string `Successfully cleaned up user from credentials DB`, userId = userId);
             }
-            
+
             return utils:createInternalServerError(string `Failed to create user: ${createdUser.message()}`);
         }
 
         log:printInfo(string `Successfully created user: ${username}`);
+        storage:logAuditEvent(storage:AUDIT_USER_CREATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_USER, resourceId = userId,
+                details = string `User '${username}' created by '${userContext.username}'`,
+                clientIp = extractClientIp(req));
 
         return <http:Created>{
             body: createdUser
@@ -2178,6 +2248,10 @@ service /auth on httpListener {
         }
 
         log:printInfo(string `Successfully deleted user ${userId}`);
+        storage:logAuditEvent(storage:AUDIT_USER_DELETE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_USER, resourceId = userId,
+                details = string `User '${userId}' deleted by '${userContext.username}'`,
+                clientIp = extractClientIp(req));
 
         return <http:NoContent>{};
     }
@@ -2266,6 +2340,10 @@ service /auth on httpListener {
         }
 
         log:printInfo("Password reset successfully by admin", targetUserId = userId, adminUserId = userContext.userId);
+        storage:logAuditEvent(storage:AUDIT_PASSWORD_RESET, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_USER, resourceId = userId,
+                details = string `Password reset for user '${userId}' by admin '${userContext.username}'`,
+                clientIp = extractClientIp(req));
         return <http:Ok>{
             headers: {
                 "Cache-Control": "no-store, no-cache, must-revalidate",
@@ -2328,6 +2406,10 @@ service /auth on httpListener {
         }
 
         log:printInfo("All sessions revoked successfully", targetUserId = userId, adminUserId = userContext.userId);
+        storage:logAuditEvent(storage:AUDIT_USER_SESSIONS_REVOKE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_USER, resourceId = userId,
+                details = string `All sessions revoked for user '${userId}' by admin '${userContext.username}'`,
+                clientIp = extractClientIp(req));
         return <http:Ok>{
             body: {
                 message: "All sessions revoked successfully"
@@ -2442,6 +2524,11 @@ service /auth on httpListener {
             };
         }
 
+        // Validate roleName is not blank
+        if roleInput.roleName.trim().length() == 0 {
+            return utils:createBadRequestError("roleName must not be empty or whitespace");
+        }
+
         // Resolve org handle to org ID
         // TODO: use when multiple tenants are supported
         // int|error orgId = storage:getOrgIdByHandle(orgHandle);
@@ -2485,6 +2572,10 @@ service /auth on httpListener {
         }
 
         log:printInfo("Successfully created role", roleId = roleId, roleName = roleInput.roleName);
+        storage:logAuditEvent(storage:AUDIT_ROLE_CREATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_ROLE, resourceId = roleId,
+                details = string `Role '${roleInput.roleName}' created by user '${userContext.username}'`,
+                clientIp = extractClientIp(req));
         return <http:Created>{
             body: createdRole
         };
@@ -2584,7 +2675,7 @@ service /auth on httpListener {
             }
         ]
     }
-    isolated resource function put orgs/[string orgHandle]/roles/[string roleId](@http:Payload types:RoleV2Input roleInput, http:Request req) returns http:Ok|http:NotFound|http:Unauthorized|http:Forbidden|http:InternalServerError|error {
+    isolated resource function put orgs/[string orgHandle]/roles/[string roleId](@http:Payload types:RoleV2Input roleInput, http:Request req) returns http:Ok|http:BadRequest|http:NotFound|http:Unauthorized|http:Forbidden|http:InternalServerError|error {
         log:printInfo("Updating role", orgHandle = orgHandle, roleId = roleId);
 
         // Permission check: org-level role management
@@ -2604,6 +2695,11 @@ service /auth on httpListener {
                     message: "Insufficient permissions to update roles"
                 }
             };
+        }
+
+        // Validate roleName is not blank
+        if roleInput.roleName.trim().length() == 0 {
+            return utils:createBadRequestError("roleName must not be empty or whitespace");
         }
 
         // Update the role (name, description)
@@ -2677,6 +2773,10 @@ service /auth on httpListener {
         }
 
         log:printInfo("Successfully updated role", roleId = roleId);
+        storage:logAuditEvent(storage:AUDIT_ROLE_UPDATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_ROLE, resourceId = roleId,
+                details = string `Role '${roleInput.roleName}' updated by user '${userContext.username}'`,
+                clientIp = extractClientIp(req));
         return <http:Ok>{
             body: updatedRole
         };
@@ -2748,6 +2848,10 @@ service /auth on httpListener {
         }
 
         log:printInfo("Successfully deleted role", roleId = roleId);
+        storage:logAuditEvent(storage:AUDIT_ROLE_DELETE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_ROLE, resourceId = roleId,
+                details = string `Role '${roleId}' deleted by user '${userContext.username}'`,
+                clientIp = extractClientIp(req));
         return <http:Ok>{
             body: {
                 message: "Role deleted successfully",

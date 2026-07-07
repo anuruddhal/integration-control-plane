@@ -179,7 +179,7 @@ export default function ErrorPage(): JSX.Element {
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               If you continue to experience issues, please contact our support team.
             </Typography>
-            <Button variant="text" size="small">
+            <Button variant="text" size="small" component="a" href="https://wso2.com/support" target="_blank" rel="noreferrer">
               Contact Support
             </Button>
           </CardContent>

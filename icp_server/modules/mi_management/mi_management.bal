@@ -48,7 +48,6 @@ public const string ARTIFACT_TYPE_CONNECTOR = "connector";
 public const string ARTIFACT_TYPE_TEMPLATE = "template";
 public const string ARTIFACT_TYPE_DATA_SERVICE = "data-service";
 public const string ARTIFACT_TYPE_DATA_SOURCE = "data-source";
-public const string ARTIFACT_TYPE_CARBON_APP = "carbon-app";
 
 // ============================================================
 // Artifact-specific fetch functions
@@ -193,10 +192,10 @@ public isolated function fetchDataSourceArtifact(http:Client mgmtClient, string 
     return result;
 }
 
-isolated function fetchCarbonAppArtifact(http:Client mgmtClient, string hmacToken, string carbonAppName) returns types:MgmtCarbonAppInfo|error {
-    string path = string `${MGMT_API_PATH}/applications?carbonAppName=${carbonAppName}`;
+isolated function fetchCompositeAppArtifact(http:Client mgmtClient, string hmacToken, string compositeAppName) returns types:MgmtCompositeAppInfo|error {
+    string path = string `${MGMT_API_PATH}/applications?carbonAppName=${compositeAppName}`;
     log:printDebug("Calling MI management API", path = path);
-    types:MgmtCarbonAppInfo respResult = check mgmtClient->get(path, {
+    types:MgmtCompositeAppInfo respResult = check mgmtClient->get(path, {
         [HEADER_AUTHORIZATION]: string `Bearer ${hmacToken}`,
         [HEADER_ACCEPT]: CONTENT_TYPE_JSON
     });
@@ -229,6 +228,26 @@ public isolated function updateLogger(http:Client mgmtClient, string hmacToken, 
         return respResult;
     } on fail error e {
         log:printError("Failed to update logger via MI management API", loggerName = request.loggerName, errorMessage = e.message());
+        return e;
+    }
+}
+
+// Delete logger via the MI Management API
+public isolated function deleteLogger(http:Client mgmtClient, string hmacToken, string loggerName) returns types:MgmtDeleteLoggerResponse|error {
+    string encodedName = check url:encode(loggerName, "UTF-8");
+    string path = string `${MGMT_API_PATH}/logging?loggerName=${encodedName}`;
+    log:printDebug("Calling MI management API to delete logger", path = path, loggerName = loggerName);
+
+    do {
+        types:MgmtDeleteLoggerResponse respResult = check mgmtClient->delete(path, headers = {
+            [HEADER_AUTHORIZATION]: string `Bearer ${hmacToken}`,
+            [HEADER_ACCEPT]: CONTENT_TYPE_JSON
+        });
+
+        log:printInfo("Successfully deleted logger via MI management API", loggerName = loggerName);
+        return respResult;
+    } on fail error e {
+        log:printError("Failed to delete logger via MI management API", loggerName = loggerName, errorMessage = e.message());
         return e;
     }
 }
@@ -515,6 +534,28 @@ public isolated function fetchRegistryResourceProperties(http:Client mgmtClient,
     }
 
     return {count: respResult.count, properties: props};
+}
+
+// Fetch the fault stack trace for a faulty Composite App from the MI management API
+// GET /management/applications/{appName}/fault
+public isolated function fetchCompositeAppFaultStackTrace(http:Client mgmtClient, string hmacToken, string appName) returns string|error {
+    string encodedAppName = check url:encode(appName, "UTF-8");
+    string path = string `${MGMT_API_PATH}/applications/${encodedAppName}/fault`;
+    log:printDebug("Calling MI management API for Composite App fault stacktrace", path = path);
+    MgmtCompositeAppFaultResponse respResult = check mgmtClient->get(path, {
+        [HEADER_AUTHORIZATION]: string `Bearer ${hmacToken}`,
+        [HEADER_ACCEPT]: CONTENT_TYPE_JSON
+    });
+    string? stackTrace = respResult?.faultStackTrace;
+    if stackTrace is () {
+        log:printWarn("No fault stack trace found for Composite App", appName = appName);
+        return error(string `No fault stack trace available for Composite App: ${appName}`);
+    }
+    if stackTrace.trim().length() == 0 {
+        log:printWarn("Empty fault stack trace found for Composite App", appName = appName);
+        return error(string `No fault stack trace available for Composite App: ${appName}`);
+    }
+    return stackTrace;
 }
 
 public isolated function createRegistryManagementClient(types:Runtime runtime, string runtimeId, boolean allowInsecureTLS) returns types:RegistryApiClient|error {

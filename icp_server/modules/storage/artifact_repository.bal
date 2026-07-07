@@ -317,7 +317,7 @@ public isolated function getAutomationsByEnvironmentAndComponent(string environm
                     packageOrg: row.package_org,
                     packageName: row.package_name,
                     packageVersion: row.package_version,
-                    executionTimestamp: row.execution_timestamp
+                    executionTimestamp: convertDbDateTimeToISO8601(row.execution_timestamp)
                 };
                 automationRuntimeExecutions[key] = {};
             }
@@ -325,8 +325,9 @@ public isolated function getAutomationsByEnvironmentAndComponent(string environm
             // Get or create the runtime executions map for this automation
             map<string[]> runtimeExecs = automationRuntimeExecutions[key] ?: {};
             string[] existingTimestamps = runtimeExecs[row.runtime_id] ?: [];
-            if existingTimestamps.indexOf(row.execution_timestamp) is () {
-                existingTimestamps.push(row.execution_timestamp);
+            string isoTimestamp = convertDbDateTimeToISO8601(row.execution_timestamp);
+            if existingTimestamps.indexOf(isoTimestamp) is () {
+                existingTimestamps.push(isoTimestamp);
             }
             runtimeExecs[row.runtime_id] = existingTimestamps;
             automationRuntimeExecutions[key] = runtimeExecs;
@@ -339,8 +340,9 @@ public isolated function getAutomationsByEnvironmentAndComponent(string environm
             if automationMap.hasKey(key) {
                 map<string[]> runtimeExecs = automationRuntimeExecutions[key] ?: {};
                 string[] existingTimestamps = runtimeExecs[row.runtime_id] ?: [];
-                if existingTimestamps.indexOf(row.execution_timestamp) is () {
-                    existingTimestamps.push(row.execution_timestamp);
+                string isoTimestamp = convertDbDateTimeToISO8601(row.execution_timestamp);
+                if existingTimestamps.indexOf(isoTimestamp) is () {
+                    existingTimestamps.push(isoTimestamp);
                 }
                 runtimeExecs[row.runtime_id] = existingTimestamps;
                 automationRuntimeExecutions[key] = runtimeExecs;
@@ -426,9 +428,9 @@ public isolated function getRestApisByEnvironmentAndComponent(string environment
     return apiList;
 }
 
-// Get Carbon Apps for a specific environment and component
-public isolated function getCarbonAppsByEnvironmentAndComponent(string environmentId, string componentId) returns types:CarbonApp[]|error {
-    map<types:CarbonApp> appMap = {};
+// Get Composite Apps for a specific environment and component
+public isolated function getCompositeAppsByEnvironmentAndComponent(string environmentId, string componentId) returns types:CompositeApp[]|error {
+    map<types:CompositeApp> appMap = {};
     map<string[]> appRuntimeMap = {};
     map<string> appSourceRuntime = {}; // Tracks which runtime provided the artifact
 
@@ -442,10 +444,10 @@ public isolated function getCarbonAppsByEnvironmentAndComponent(string environme
 
     map<types:RuntimeInfo> statusMap = check getRuntimeStatusMap(runtimeIds);
 
-    // Get all Carbon Apps for these runtimes, ensuring uniqueness and prioritizing RUNNING runtimes
+    // Get all Composite Apps for these runtimes, ensuring uniqueness and prioritizing RUNNING runtimes
     foreach string runtimeId in runtimeIds {
-        types:CarbonApp[] runtimeApps = check getCarbonAppsForRuntime(runtimeId);
-        foreach types:CarbonApp app in runtimeApps {
+        types:CompositeApp[] runtimeApps = check getCompositeAppsForRuntime(runtimeId);
+        foreach types:CompositeApp app in runtimeApps {
             string key = app.name;
             if !appRuntimeMap.hasKey(key) {
                 // First time seeing this artifact
@@ -461,7 +463,7 @@ public isolated function getCarbonAppsByEnvironmentAndComponent(string environme
                 // Replace artifact instance if new runtime is RUNNING and existing source is not
                 string sourceRuntimeId = appSourceRuntime[key] ?: "";
                 if shouldReplaceArtifact(runtimeId, sourceRuntimeId, statusMap) {
-                    log:printInfo("Replacing Carbon App artifact from runtime " + sourceRuntimeId + " with runtime " + runtimeId);
+                    log:printInfo("Replacing Composite App artifact from runtime " + sourceRuntimeId + " with runtime " + runtimeId);
                     appMap[key] = app;
                     appSourceRuntime[key] = runtimeId;
                 }
@@ -470,8 +472,8 @@ public isolated function getCarbonAppsByEnvironmentAndComponent(string environme
     }
 
     // Convert map to array and attach runtime info
-    types:CarbonApp[] appList = [];
-    foreach [string, types:CarbonApp] [key, app] in appMap.entries() {
+    types:CompositeApp[] appList = [];
+    foreach [string, types:CompositeApp] [key, app] in appMap.entries() {
         string[] rids = appRuntimeMap[key] ?: [];
         app.runtimeIds = rids;
         types:ArtifactRuntimeInfo[] infos = resolveRuntimeInfos(rids, statusMap);

@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS user_credentials (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_user_credentials_username ON user_credentials (username);
+CREATE INDEX IF NOT EXISTS idx_user_credentials_username ON user_credentials (username);
 
 -- ============================================================================
 -- SAMPLE DATA FOR TESTING, MUST BE CHANGED FOR PRODUCTION
@@ -57,6 +57,6 @@ CREATE TABLE IF NOT EXISTS user_attributes (
     CONSTRAINT uk_user_attr_profile UNIQUE (user_id, attr_name, profile_id)
 );
 
-CREATE INDEX idx_ua_user_id ON user_attributes(user_id);
-CREATE INDEX idx_ua_attr_name ON user_attributes(attr_name);
-CREATE INDEX idx_ua_user_attr ON user_attributes(user_id, attr_name);
+CREATE INDEX IF NOT EXISTS idx_ua_user_id ON user_attributes(user_id);
+CREATE INDEX IF NOT EXISTS idx_ua_attr_name ON user_attributes(attr_name);
+CREATE INDEX IF NOT EXISTS idx_ua_user_attr ON user_attributes(user_id, attr_name);

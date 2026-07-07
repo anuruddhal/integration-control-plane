@@ -83,7 +83,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const triggerTask = useTriggerTask();
   const config = ENTRY_POINT_CONFIG[artifactType];
   const tabProps: TabProps = { artifact, artifactType, envId, componentId, projectId };
-  const carbonApp = artifact.carbonApp?.toString();
+  const compositeApp = artifact.compositeApp?.toString();
   const artifactState = artifact.state?.toString();
   const overviewFields = (config?.overviewFields ?? '').split(', ').filter(Boolean);
   const showTracingToggle = ['RestApi', 'ProxyService', 'InboundEndpoint'].includes(artifactType);
@@ -101,7 +101,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const hasRuntimes = artifact.runtimes && Array.isArray(artifact.runtimes) && artifact.runtimes.length > 0;
 
   // Track if any preceding controls are visible for proper divider placement
-  const hasPrecedingControls = carbonApp || showStatusToggle || showStatusChip || showTracingToggle || showStatisticsToggle || showListenerToggle;
+  const hasPrecedingControls = compositeApp || showStatusToggle || showStatusChip || showTracingToggle || showStatisticsToggle || showListenerToggle;
   const toEnabled = (value: unknown) => {
     if (typeof value === 'boolean') return value;
     const normalized = (value ?? '').toString().toLowerCase();
@@ -281,8 +281,8 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
       <Box sx={{ mt: 2 }}>
         {/* Header row */}
         <Stack direction="row" alignItems="center" gap={1.5} sx={{ px: 2, py: 1.5 }}>
-          {carbonApp && <Chip label={`C-App: ${carbonApp}`} size="small" variant="outlined" sx={{ bgcolor: '#e8eaf6', color: '#3949ab', fontSize: 11 }} />}
-          {carbonApp && <Divider orientation="vertical" flexItem />}
+          {compositeApp && <Chip label={`Composite App: ${compositeApp}`} size="small" variant="outlined" sx={{ bgcolor: '#e8eaf6', color: '#3949ab', fontSize: 11 }} />}
+          {compositeApp && <Divider orientation="vertical" flexItem />}
           {showStatusChip && artifactState && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
@@ -410,20 +410,34 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   );
 }
 
-function EntryPointsList({ envId, componentId, projectId, componentType, onOpenDrawer }: { envId: string; componentId: string; projectId: string; componentType: string; onOpenDrawer: (a: GqlArtifact, type: string, envId: string, tab: string) => void }) {
+function EntryPointsList({
+  envId,
+  componentId,
+  projectId,
+  componentType,
+  isOnline,
+  onOpenDrawer,
+}: {
+  envId: string;
+  componentId: string;
+  projectId: string;
+  componentType: string;
+  isOnline: boolean;
+  onOpenDrawer: (a: GqlArtifact, type: string, envId: string, tab: string) => void;
+}) {
   const [selectedKey, setSelectedKey] = useState('');
   const navigate = useNavigate();
   const scope = useScope();
   const isMI = componentType === 'MI';
 
-  const { data: apis = [], isLoading: loadingApis } = useArtifacts('RestApi', envId, componentId, { enabled: isMI });
-  const { data: proxies = [], isLoading: loadingProxies } = useArtifacts('ProxyService', envId, componentId, { enabled: isMI });
-  const { data: inboundEps = [], isLoading: loadingInbound } = useArtifacts('InboundEndpoint', envId, componentId, { enabled: isMI });
-  const { data: tasks = [], isLoading: loadingTasks } = useArtifacts('Task', envId, componentId, { enabled: isMI });
-  const { data: services = [], isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI });
-  const { data: listeners = [], isLoading: loadingListeners } = useArtifacts('Listener', envId, componentId, { enabled: !isMI });
-  const { data: automations = [], isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI });
-  const { data: workflows = [], isLoading: loadingWorkflows } = useArtifacts('Workflow', envId, componentId, { enabled: !isMI });
+  const { data: apis = [], isLoading: loadingApis } = useArtifacts('RestApi', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: proxies = [], isLoading: loadingProxies } = useArtifacts('ProxyService', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: inboundEps = [], isLoading: loadingInbound } = useArtifacts('InboundEndpoint', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: tasks = [], isLoading: loadingTasks } = useArtifacts('Task', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: services = [], isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: listeners = [], isLoading: loadingListeners } = useArtifacts('Listener', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: automations = [], isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: workflows = [], isLoading: loadingWorkflows } = useArtifacts('Workflow', envId, componentId, { enabled: !isMI, active: isOnline });
 
   const isLoading = isMI ? loadingApis || loadingProxies || loadingInbound || loadingTasks : loadingServices || loadingListeners || loadingAutomations || loadingWorkflows;
 
@@ -431,7 +445,12 @@ function EntryPointsList({ envId, componentId, projectId, componentType, onOpenD
     () =>
       isMI
         ? [...apis.map((a) => ({ artifact: a, type: 'RestApi' })), ...proxies.map((a) => ({ artifact: a, type: 'ProxyService' })), ...inboundEps.map((a) => ({ artifact: a, type: 'InboundEndpoint' })), ...tasks.map((a) => ({ artifact: a, type: 'Task' }))]
-        : [...services.map((a) => ({ artifact: a, type: 'Service' })), ...listeners.map((a) => ({ artifact: a, type: 'Listener' })), ...workflows.map((a) => ({ artifact: a, type: 'Workflow' })), ...automations.map((a) => ({ artifact: a, type: 'Automation' }))],
+        : [
+            ...services.map((a) => ({ artifact: a, type: 'Service' })),
+            ...listeners.map((a) => ({ artifact: a, type: 'Listener' })),
+            ...workflows.map((a) => ({ artifact: a, type: 'Workflow' })),
+            ...automations.map((a) => ({ artifact: a, type: 'Automation' })),
+          ],
     [isMI, apis, proxies, inboundEps, tasks, services, listeners, workflows, automations],
   );
 
@@ -870,7 +889,7 @@ export default function Environment({
             </Stack>
           </Stack>
         )}
-        {(componentType !== 'MI' || viewMode === 'entryPoints') && <EntryPointsList envId={env.id} componentId={componentId} projectId={projectId} componentType={componentType} onOpenDrawer={onOpenDrawerForTab} />}
+        {(componentType !== 'MI' || viewMode === 'entryPoints') && <EntryPointsList envId={env.id} componentId={componentId} projectId={projectId} componentType={componentType} isOnline={isOnline} onOpenDrawer={onOpenDrawerForTab} />}
         {componentType === 'MI' && viewMode === 'allArtifacts' && <ArtifactTypeSelector envId={env.id} componentId={componentId} onSelectArtifact={onSelectArtifact} />}
       </CardContent>
     </Card>

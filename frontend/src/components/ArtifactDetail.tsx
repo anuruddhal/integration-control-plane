@@ -40,11 +40,12 @@ import {
   Tabs,
   Typography,
 } from '@wso2/oxygen-ui';
-import { ChevronRight, Maximize2, X } from '@wso2/oxygen-ui-icons-react';
-import { useEffect, useState } from 'react';
-import { useArtifactTypes, useArtifacts, ARTIFACT_QUERY_MAP, type GqlArtifact } from '../api/queries';
+import { ChevronDown, ChevronRight, Maximize2, X } from '@wso2/oxygen-ui-icons-react';
+import { useEffect, useRef, useState } from 'react';
+import { useArtifactTypes, useArtifactPage, ARTIFACT_QUERY_MAP, type GqlArtifact } from '../api/queries';
 import { useUpdateArtifactStatus, useUpdateListenerState } from '../api/mutations';
 import { useUpdateArtifactTracingStatus, useUpdateArtifactStatisticsStatus } from '../api/artifactToggleMutations';
+import { gql } from '../api/graphql';
 import SearchField from './SearchField';
 import SyncSwitch from './SyncSwitch';
 import {
@@ -97,9 +98,31 @@ function ListenerConfirmDialog({ open, action, listenerName, onConfirm, onCancel
   );
 }
 
-function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, query, onSelect }: { artifacts: GqlArtifact[]; artifactType: string; envId: string; componentId: string; query: string; onSelect: (a: GqlArtifact) => void }) {
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
+function SelectedTypeArtifacts({
+  artifacts,
+  artifactType,
+  envId,
+  componentId,
+  query,
+  onSelect,
+  serverTotal,
+  page,
+  rowsPerPage,
+  onPageChange,
+  onRowsPerPageChange,
+}: {
+  artifacts: GqlArtifact[];
+  artifactType: string;
+  envId: string;
+  componentId: string;
+  query: string;
+  onSelect: (a: GqlArtifact) => void;
+  serverTotal?: number;
+  page: number;
+  rowsPerPage: number;
+  onPageChange: (p: number) => void;
+  onRowsPerPageChange: (rpp: number) => void;
+}) {
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; artifact: GqlArtifact | null; action: 'START' | 'STOP' } | null>(null);
   const qc = useQueryClient();
   const toggleStatus = useUpdateArtifactStatus();
@@ -124,10 +147,14 @@ function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, qu
     return a.name?.toString().toLowerCase().includes(searchQuery);
   });
   const supportsToggle = ['Endpoint', 'Listener', 'MessageProcessor'].includes(artifactType);
-  const hasStateField = ['Connector'].includes(artifactType);
-  const maxPage = Math.max(0, Math.ceil(filtered.length / rowsPerPage) - 1);
+  const hasStateField = ['Connector', 'CompositeApp'].includes(artifactType);
+  // When search is active: filter client-side from server-fetched full list and slice locally.
+  // When no search (serverTotal provided): artifacts already come pre-sliced from the backend.
+  const isSearching = query.length > 0;
+  const totalCount = isSearching ? filtered.length : (serverTotal ?? artifacts.length);
+  const maxPage = Math.max(0, Math.ceil(totalCount / rowsPerPage) - 1);
   const safePage = Math.min(page, maxPage);
-  const paginatedArtifacts = filtered.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
+  const paginatedArtifacts = isSearching ? filtered.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage) : artifacts;
 
   // Calculate max toggle columns across all artifacts (for consistent sizing)
   const maxToggleColumns = (() => {
@@ -182,7 +209,7 @@ function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, qu
       {
         onSettled: () => {
           // Invalidate and refetch the artifact list to sync with server
-          qc.invalidateQueries({ queryKey: ['artifacts', artifactType, envId, componentId] });
+          qc.invalidateQueries({ queryKey: ['artifacts-page', artifactType, envId, componentId] });
         },
       },
     );
@@ -201,7 +228,7 @@ function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, qu
       {
         onSettled: () => {
           // Invalidate and refetch the artifact list to sync with server
-          qc.invalidateQueries({ queryKey: ['artifacts', artifactType, envId, componentId] });
+          qc.invalidateQueries({ queryKey: ['artifacts-page', artifactType, envId, componentId] });
         },
       },
     );
@@ -259,7 +286,13 @@ function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, qu
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                         State
                       </Typography>
-                      <Chip label={(a.state ?? '—').toString().charAt(0).toUpperCase() + (a.state ?? '—').toString().slice(1).toLowerCase()} size="small" variant="outlined" color={enabled ? 'success' : 'default'} sx={{ fontSize: '0.875rem' }} />
+                      <Chip
+                        label={(a.state ?? '—').toString().charAt(0).toUpperCase() + (a.state ?? '—').toString().slice(1).toLowerCase()}
+                        size="small"
+                        variant="outlined"
+                        color={artifactType === 'CompositeApp' ? ((a.state ?? '').toString() === 'Active' ? 'success' : (a.state ?? '').toString() === 'Faulty' ? 'error' : 'default') : enabled ? 'success' : 'default'}
+                        sx={{ fontSize: '0.875rem' }}
+                      />
                     </Grid>
                   )}
                   {supportsToggle && (
@@ -303,16 +336,16 @@ function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, qu
           );
         })}
       </Stack>
-      {filtered.length > rowsPerPage && (
+      {totalCount > 0 && (
         <TablePagination
           component="div"
-          count={filtered.length}
+          count={totalCount}
           page={safePage}
-          onPageChange={(_, p) => setPage(p)}
+          onPageChange={(_, p) => onPageChange(p)}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={(e) => {
-            setRowsPerPage(parseInt(e.target.value, 10));
-            setPage(0);
+            onRowsPerPageChange(parseInt(e.target.value, 10));
+            onPageChange(0);
           }}
           rowsPerPageOptions={[5, 10, 25]}
           sx={{ mt: 1 }}
@@ -329,10 +362,15 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
   const { data: allTypes = [], isLoading } = useArtifactTypes(componentId, envId);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const types = allTypes.filter((t) => !ENTRY_POINT_TYPE_SET.has(t.artifactType));
   const selectedArtifactType = selectedType ?? types[0]?.artifactType ?? '';
-  const { data: artifacts = [], isLoading: loadingArtifacts } = useArtifacts(selectedArtifactType, envId, componentId);
+  const isSearching = query.length > 0;
+  // When searching, fetch all items (no limit/offset) so client-side filter works across all pages.
+  // When not searching, use server-side pagination.
+  const { data: pagedResult, isLoading: loadingArtifacts } = useArtifactPage(selectedArtifactType, envId, componentId, isSearching ? 10000 : rowsPerPage, isSearching ? 0 : page * rowsPerPage);
 
   if (isLoading) return <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />;
   if (types.length === 0)
@@ -353,6 +391,7 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
               onClick={() => {
                 setSelectedType(t.artifactType);
                 setQuery('');
+                setPage(0);
               }}
               sx={{ borderRadius: 1, mb: 0.5 }}>
               {ARTIFACT_ICONS[t.artifactType] && <ListItemIcon sx={{ minWidth: 32 }}>{ARTIFACT_ICONS[t.artifactType]}</ListItemIcon>}
@@ -365,11 +404,35 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
         <Typography variant="overline" sx={{ mb: 1, display: 'block' }}>
           {typePlural(selectedArtifactType)}
         </Typography>
-        <SearchField value={query} onChange={setQuery} placeholder={`Search ${typePlural(selectedArtifactType)} by name`} fullWidth sx={{ mb: 2 }} />
+        <SearchField
+          value={query}
+          onChange={(v) => {
+            setQuery(v);
+            setPage(0);
+          }}
+          placeholder={`Search ${typePlural(selectedArtifactType)} by name`}
+          fullWidth
+          sx={{ mb: 2 }}
+        />
         {loadingArtifacts ? (
           <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
         ) : (
-          <SelectedTypeArtifacts artifacts={artifacts} artifactType={selectedArtifactType} envId={envId} componentId={componentId} query={query} onSelect={(a) => onSelectArtifact(a, selectedArtifactType, envId)} />
+          <SelectedTypeArtifacts
+            artifacts={pagedResult?.items ?? []}
+            artifactType={selectedArtifactType}
+            envId={envId}
+            componentId={componentId}
+            query={query}
+            onSelect={(a) => onSelectArtifact(a, selectedArtifactType, envId)}
+            serverTotal={pagedResult?.total}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={setPage}
+            onRowsPerPageChange={(rpp) => {
+              setRowsPerPage(rpp);
+              setPage(0);
+            }}
+          />
         )}
       </Grid>
     </Grid>
@@ -378,9 +441,22 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
 
 const drawerSx = { '& .MuiDrawer-paper': { width: '60%', maxWidth: 700, minWidth: 400, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' } };
 const headerSx = { px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' };
+const COMPOSITE_APP_FAULT_STACKTRACE_QUERY = `
+  query GetCompositeAppFaultStackTrace($runtimeId: String!, $appName: String!) {
+    compositeAppFaultStackTrace(runtimeId: $runtimeId, appName: $appName) {
+      faultStackTrace
+    }
+  }
+`;
 
 export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifact | null; onClose: () => void }) {
   const [activeTabIndex, setActiveTabIndex] = useState(0);
+  const [stacktraceExpanded, setStacktraceExpanded] = useState(false);
+  const [stacktraceLoading, setStacktraceLoading] = useState(false);
+  const [stacktrace, setStacktrace] = useState<string | null>(null);
+  const [stacktraceError, setStacktraceError] = useState<string | null>(null);
+  const [stacktraceLoadedFor, setStacktraceLoadedFor] = useState<string | null>(null);
+  const stacktraceRequestRef = useRef<string | null>(null);
   const artifactKey = selected ? `${selected.artifactType}-${selected.artifact.name}` : '';
   useEffect(() => {
     if (selected?.initialTab) {
@@ -390,6 +466,13 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
     } else {
       setActiveTabIndex(0);
     }
+
+    setStacktraceExpanded(false);
+    setStacktraceLoading(false);
+    setStacktrace(null);
+    setStacktraceError(null);
+    setStacktraceLoadedFor(null);
+    stacktraceRequestRef.current = null;
   }, [artifactKey, selected?.artifactType, selected?.initialTab]);
 
   if (!selected) return null;
@@ -447,6 +530,62 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
     }
   };
 
+  const isFaultyCompositeApp = artifactType === 'CompositeApp' && artifact.state?.toString() === 'Faulty';
+  const errorMessage = isFaultyCompositeApp ? artifact.errorMessage?.toString() : null;
+  const stacktracePanelId = `stacktrace-panel-${artifactType}-${displayName.replace(/\s+/g, '-').toLowerCase()}`;
+  const errorLines = errorMessage
+    ? errorMessage
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+    : [];
+
+  const loadStacktrace = async () => {
+    const runtimeId = (artifact.runtimes as Array<{ runtimeId: string }> | undefined)?.[0]?.runtimeId;
+    const appName = artifact.name?.toString();
+
+    if (!runtimeId || !appName) {
+      setStacktraceError('No stacktrace available. Missing runtime or Composite App name.');
+      return;
+    }
+
+    const requestToken = `${runtimeId}::${appName}`;
+    if (stacktraceLoadedFor === requestToken || stacktraceLoading) return;
+
+    stacktraceRequestRef.current = requestToken;
+    setStacktraceLoading(true);
+    setStacktraceError(null);
+
+    try {
+      const result = await gql<{ compositeAppFaultStackTrace: { faultStackTrace: string } }>(COMPOSITE_APP_FAULT_STACKTRACE_QUERY, {
+        runtimeId,
+        appName,
+      });
+
+      if (stacktraceRequestRef.current !== requestToken) return;
+
+      setStacktrace(result.compositeAppFaultStackTrace?.faultStackTrace || null);
+      setStacktraceLoadedFor(requestToken);
+    } catch (error) {
+      console.error('Error fetching composite app stacktrace:', error);
+      if (stacktraceRequestRef.current === requestToken) {
+        setStacktraceError('Failed to load stacktrace.');
+      }
+    } finally {
+      if (stacktraceRequestRef.current === requestToken) {
+        setStacktraceLoading(false);
+      }
+    }
+  };
+
+  const handleStacktraceToggle = async () => {
+    const expanded = !stacktraceExpanded;
+    setStacktraceExpanded(expanded);
+    if (expanded) {
+      await loadStacktrace();
+    }
+  };
+
   return (
     <Drawer anchor="right" open onClose={onClose} variant="persistent" sx={drawerSx}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={headerSx}>
@@ -462,6 +601,87 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
           </IconButton>
         </Stack>
       </Stack>
+      {isFaultyCompositeApp && (
+        <Box sx={{ px: 2, pt: 1.5, pb: 3, backgroundColor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Stack spacing={0} alignItems="flex-start">
+            <Chip label="Faulty" size="small" color="error" sx={{ mt: 0.5 }} />
+            <Stack spacing={1.5} sx={{ width: '100%', minWidth: 0, mt: 3 }}>
+              {errorMessage && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, display: 'block', mb: 0.75, color: 'text.primary' }}>
+                    Error Message
+                  </Typography>
+                  <Box sx={{ m: 0 }}>
+                    {(errorLines.length > 0 ? errorLines : [errorMessage]).map((line, idx) => (
+                      <Typography key={`${line}-${idx}`} variant="body2" sx={{ lineHeight: 1.5, color: 'text.primary' }}>
+                        {line}
+                      </Typography>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              <Box>
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={handleStacktraceToggle}
+                  aria-expanded={stacktraceExpanded}
+                  aria-controls={stacktracePanelId}
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    cursor: 'pointer',
+                    py: 0.5,
+                    px: 0,
+                    border: 0,
+                    background: 'none',
+                    color: 'inherit',
+                    textAlign: 'left',
+                  }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                    Stacktrace
+                  </Typography>
+                  <ChevronDown size={16} style={{ transform: stacktraceExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 120ms ease' }} />
+                </Box>
+                {stacktraceExpanded &&
+                  (stacktraceLoading ? (
+                    <Typography id={stacktracePanelId} variant="body2" color="text.secondary" sx={{ p: 1 }}>
+                      Loading stacktrace...
+                    </Typography>
+                  ) : stacktraceError ? (
+                    <Typography id={stacktracePanelId} variant="body2" color="error" sx={{ p: 1 }}>
+                      {stacktraceError}
+                    </Typography>
+                  ) : (
+                    <Box
+                      id={stacktracePanelId}
+                      component="pre"
+                      sx={{
+                        m: 0,
+                        p: 1,
+                        fontSize: '0.75rem',
+                        lineHeight: 1.4,
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
+                        bgcolor: 'background.paper',
+                        borderRadius: 1,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        color: 'text.primary',
+                      }}>
+                      <Box component="code" sx={{ fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit' }}>
+                        {stacktrace ?? 'No stacktrace available.'}
+                      </Box>
+                    </Box>
+                  ))}
+              </Box>
+            </Stack>
+          </Stack>
+        </Box>
+      )}
       <Box sx={{ px: 2 }}>
         {tabs.length > 0 && (
           <>

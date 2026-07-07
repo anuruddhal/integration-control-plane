@@ -8,7 +8,7 @@ export function loginUrl(): string {
 }
 
 export function oidcCallbackUrl(): string {
-  return '/auth/callback';
+  return '/sso/callback';
 }
 
 export function profileUrl(): string {
@@ -35,6 +35,10 @@ export function forceChangePasswordUrl(): string {
 
 export function rootUrl(): string {
   return '/';
+}
+
+export function errorUrl(type?: string): string {
+  return type ? `/error?type=${encodeURIComponent(type)}` : '/error';
 }
 
 export function orgUrl(orgHandler: string): string {

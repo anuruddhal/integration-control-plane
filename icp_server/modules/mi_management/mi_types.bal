@@ -39,3 +39,10 @@ type MgmtRegistryPropertiesResponse record {
     int count;
     MgmtRegistryProperty[] list;
 };
+
+type MgmtCompositeAppFaultResponse record {
+    string name;
+    string version?;
+    string errorMessage?;
+    string faultStackTrace?;
+};

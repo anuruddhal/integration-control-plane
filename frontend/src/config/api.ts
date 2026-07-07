@@ -27,7 +27,9 @@ interface RuntimeConfig {
   VITE_AUTH_BASE_URL?: string;
   VITE_OBSERVABILITY_URL?: string;
   VITE_WORKFLOW_URL?: string;
+  VITE_WS_URL?: string;
   VITE_SSO_ENABLED?: boolean;
+  VITE_ICP_VERSION?: string;
 }
 
 export interface ApiConfig {
@@ -35,7 +37,9 @@ export interface ApiConfig {
   authBaseUrl: string;
   observabilityUrl: string;
   workflowUrl: string;
+  wsUrl: string;
   ssoEnabled: boolean;
+  version: string;
 }
 
 // Extend window interface
@@ -51,7 +55,9 @@ const DEFAULT_CONFIG: ApiConfig = {
   authBaseUrl: 'https://localhost:9446/auth',
   observabilityUrl: 'https://localhost:9446/icp/observability',
   workflowUrl: 'https://localhost:9446/icp/workflow',
+  wsUrl: 'wss://localhost:9446/runtime-status',
   ssoEnabled: false,
+  version: '',
 };
 
 /**
@@ -72,7 +78,9 @@ export async function loadConfig(): Promise<void> {
       authBaseUrl: config.VITE_AUTH_BASE_URL || DEFAULT_CONFIG.authBaseUrl,
       observabilityUrl: config.VITE_OBSERVABILITY_URL || DEFAULT_CONFIG.observabilityUrl,
       workflowUrl: config.VITE_WORKFLOW_URL || DEFAULT_CONFIG.workflowUrl,
+      wsUrl: config.VITE_WS_URL || DEFAULT_CONFIG.wsUrl,
       ssoEnabled: config.VITE_SSO_ENABLED ?? DEFAULT_CONFIG.ssoEnabled,
+      version: config.VITE_ICP_VERSION || DEFAULT_CONFIG.version,
     };
 
     console.info('✓ Runtime configuration loaded from config.json');
@@ -105,10 +113,10 @@ export const oidcCallbackApiUrl = (): string => `${window.API_CONFIG.authBaseUrl
 export const changePasswordApiUrl = (): string => `${window.API_CONFIG.authBaseUrl}/change-password`;
 export const forceChangePasswordApiUrl = (): string => `${window.API_CONFIG.authBaseUrl}/force-change-password`;
 export const isSsoEnabled = (): boolean => window.API_CONFIG.ssoEnabled;
+export const getIcpVersion = (): string => window.API_CONFIG.version;
 
 /**
  * Builds a URL to the workflow management proxy for a given component+environment.
  * `subpath` is the runtime-side workflow API path (e.g. "workflows?status=RUNNING").
  */
-export const workflowApiUrl = (componentId: string, environmentId: string, subpath: string): string =>
-  `${window.API_CONFIG.workflowUrl}/${encodeURIComponent(componentId)}/${encodeURIComponent(environmentId)}/${subpath}`;
+export const workflowApiUrl = (componentId: string, environmentId: string, subpath: string): string => `${window.API_CONFIG.workflowUrl}/${encodeURIComponent(componentId)}/${encodeURIComponent(environmentId)}/${subpath}`;

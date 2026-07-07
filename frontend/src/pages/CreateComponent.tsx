@@ -140,7 +140,7 @@ export default function CreateComponent(scope: ProjectScope): JSX.Element {
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
           <TextField label="Integration Type" select value={componentType} onChange={(e) => setComponentType(e.target.value as 'BI' | 'MI')} fullWidth slotProps={{ htmlInput: { 'aria-label': 'Integration Type' } }}>
-            <MenuItem value="BI">BI</MenuItem>
+            <MenuItem value="BI">Default</MenuItem>
             <MenuItem value="MI">MI</MenuItem>
           </TextField>
         </Grid>

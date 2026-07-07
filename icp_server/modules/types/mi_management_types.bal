@@ -202,7 +202,7 @@ public type MgmtDataSourceInfo record {
 };
 
 // GET /management/applications?carbonAppName={name}
-public type MgmtCarbonAppInfo record {
+public type MgmtCompositeAppInfo record {
     string name;
     string version?;
     json artifacts?;
@@ -241,6 +241,11 @@ public type MgmtUpdateLoggerRequest record {
 
 // PATCH /management/logging - Response
 public type MgmtUpdateLoggerResponse record {
+    string message;
+};
+
+// DELETE /management/logging?loggerName=<name> - Response
+public type MgmtDeleteLoggerResponse record {
     string message;
 };
 

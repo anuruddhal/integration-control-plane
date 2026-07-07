@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import icp_server.auth;
 import icp_server.storage as storage;
 import icp_server.types as types;
 
@@ -121,6 +122,31 @@ isolated function initObservabilityClient() returns http:Client? {
     return httpClient;
 }
 
+// Caller must run after HTTP JWT validation (Authorization present and signature verified).
+isolated function extractUserFromObservabilityRequest(http:Request request) returns types:UserContextV2|error {
+    string|http:HeaderNotFoundError authHeader = request.getHeader("Authorization");
+    if authHeader is http:HeaderNotFoundError {
+        return error("Authorization header missing");
+    }
+    return auth:extractUserContextV2(authHeader);
+}
+
+// Restrict resolved runtimes to those the user may access (integration + environment scope).
+isolated function filterRuntimeIdsForUser(string userId, string[] runtimeIds) returns string[]|error {
+    log:printDebug("Filtering runtime IDs for user", userId = userId, runtimeCount = runtimeIds.length());
+    string[] filtered = [];
+    foreach string rid in runtimeIds {
+        boolean|error allowed = storage:hasAccessToRuntime(userId, rid);
+        if allowed is error {
+            return allowed;
+        }
+        if allowed {
+            filtered.push(rid);
+        }
+    }
+    return filtered;
+}
+
 @http:ServiceConfig {
     auth: [
         {
@@ -134,7 +160,7 @@ isolated function initObservabilityClient() returns http:Client? {
         }
     ],
     cors: {
-        allowOrigins: ["*"],
+        allowOrigins: normalizedCorsAllowedOrigins,
         allowHeaders: ["Content-Type", "Authorization"]
     }
 }
@@ -155,6 +181,10 @@ service /icp/observability on httpListener {
                                                              environmentList: logRequest.environmentList
                                                          });
 
+        types:UserContextV2 userContext = check extractUserFromObservabilityRequest(request);
+        log:printInfo("Processing logs request", userId = userContext.userId);
+        runtimeIdList = check filterRuntimeIdsForUser(userContext.userId, runtimeIdList);
+
         // If component/environment filters were provided but no runtimes found, return empty result
         boolean hasFilters = logRequest.componentId is string ||
                             (logRequest.componentIdList is string[] && (<string[]>logRequest.componentIdList).length() > 0) ||
@@ -163,6 +193,15 @@ service /icp/observability on httpListener {
 
         if (hasFilters && runtimeIdList.length() == 0) {
             log:printDebug("No runtimes found for the given component/environment filters. Returning empty result.");
+            return {
+                columns: [],
+                rows: []
+            };
+        }
+
+        // Guard: an empty runtimeIdList with no filters would produce an unscoped OpenSearch query
+        // returning data across all runtimes. Return empty instead.
+        if runtimeIdList.length() == 0 {
             return {
                 columns: [],
                 rows: []
@@ -238,6 +277,10 @@ service /icp/observability on httpListener {
                                                              environmentList: metricRequest.environmentList
                                                          });
 
+        types:UserContextV2 userContext = check extractUserFromObservabilityRequest(request);
+        log:printInfo("Processing metrics request", userId = userContext.userId);
+        runtimeIdList = check filterRuntimeIdsForUser(userContext.userId, runtimeIdList);
+
         // If component/environment filters were provided but no runtimes found, return empty result
         boolean hasFilters = metricRequest.componentId is string ||
                             (metricRequest.componentIdList is string[] && (<string[]>metricRequest.componentIdList).length() > 0) ||
@@ -246,6 +289,15 @@ service /icp/observability on httpListener {
 
         if (hasFilters && runtimeIdList.length() == 0) {
             log:printDebug("No runtimes found for the given component/environment filters. Returning empty result.");
+            return {
+                inboundMetrics: [],
+                outboundMetrics: []
+            };
+        }
+
+        // Guard: an empty runtimeIdList with no filters would produce an unscoped OpenSearch query
+        // returning data across all runtimes. Return empty instead.
+        if runtimeIdList.length() == 0 {
             return {
                 inboundMetrics: [],
                 outboundMetrics: []

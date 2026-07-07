@@ -749,8 +749,8 @@ export function AutomationExecutions({ artifact }: TabProps) {
   // Sort by selected column
   const sorted = [...filtered].sort((a, b) => {
     const { key, direction } = sort;
-    let aValue = a[key];
-    let bValue = b[key];
+    const aValue = a[key];
+    const bValue = b[key];
     if (key === 'timestamp') {
       // Compare as numbers (date ms) if sorting by timestamp
       const aTime = new Date(a.timestamp).getTime();
@@ -835,7 +835,7 @@ export function AutomationExecutions({ artifact }: TabProps) {
             sorted.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((exec, i) => (
               <ListingTable.Row key={i}>
                 <ListingTable.Cell>
-                  <Typography variant="body2">{exec.timestamp}</Typography>
+                  <Typography variant="body2">{new Date(exec.timestamp).toLocaleString()}</Typography>
                 </ListingTable.Cell>
                 <ListingTable.Cell>
                   <Typography sx={{ fontFamily: 'monospace', fontSize: 12 }}>{exec.runtimeName || exec.runtimeId}</Typography>

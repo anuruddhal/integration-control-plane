@@ -65,7 +65,7 @@ public enum ArtifactType {
     MESSAGEPROCESSOR = "MessageProcessor",
     LOCALENTRY = "LocalEntry",
     DATASERVICE = "DataService",
-    CARBONAPP = "CarbonApp",
+    COMPOSITEAPP = "CompositeApp",
     DATASOURCE = "DataSource",
     CONNECTOR = "Connector",
     REGISTRYRESOURCE = "RegistryResource"
@@ -128,6 +128,143 @@ public type LogFile record {
 public type LogFilesResponse record {
     int count;
     LogFile[] files;
+    PageInfo pageInfo;
+};
+
+public type PageInfo record {
+    int total;
+    int 'limit;
+    int offset;
+};
+
+public type ComponentsPage record {
+    Component[] items;
+    PageInfo pageInfo;
+};
+
+public type RuntimesPage record {
+    Runtime[] items;
+    PageInfo pageInfo;
+};
+
+public type ProjectsPage record {
+    Project[] items;
+    PageInfo pageInfo;
+};
+
+public type OrgSecretsPage record {
+    OrgSecretListEntry[] items;
+    PageInfo pageInfo;
+};
+
+public type ServicesPage record {
+    Service[] items;
+    PageInfo pageInfo;
+};
+
+public type ListenersPage record {
+    Listener[] items;
+    PageInfo pageInfo;
+};
+
+public type RestApisPage record {
+    RestApi[] items;
+    PageInfo pageInfo;
+};
+
+public type ProxyServicesPage record {
+    ProxyService[] items;
+    PageInfo pageInfo;
+};
+
+public type EndpointsPage record {
+    Endpoint[] items;
+    PageInfo pageInfo;
+};
+
+public type InboundEndpointsPage record {
+    InboundEndpoint[] items;
+    PageInfo pageInfo;
+};
+
+public type SequencesPage record {
+    Sequence[] items;
+    PageInfo pageInfo;
+};
+
+public type TasksPage record {
+    Task[] items;
+    PageInfo pageInfo;
+};
+
+public type TemplatesPage record {
+    Template[] items;
+    PageInfo pageInfo;
+};
+
+public type MessageStoresPage record {
+    MessageStore[] items;
+    PageInfo pageInfo;
+};
+
+public type MessageProcessorsPage record {
+    MessageProcessor[] items;
+    PageInfo pageInfo;
+};
+
+public type LocalEntriesPage record {
+    LocalEntry[] items;
+    PageInfo pageInfo;
+};
+
+public type DataServicesPage record {
+    DataService[] items;
+    PageInfo pageInfo;
+};
+
+public type DataSourcesPage record {
+    DataSource[] items;
+    PageInfo pageInfo;
+};
+
+public type CompositeAppsPage record {
+    CompositeApp[] items;
+    PageInfo pageInfo;
+};
+
+public type ConnectorsPage record {
+    Connector[] items;
+    PageInfo pageInfo;
+};
+
+public type RegistryResourcesPage record {
+    RegistryResource[] items;
+    PageInfo pageInfo;
+};
+
+public type LoggerGroupsPage record {
+    LoggerGroup[] items;
+    PageInfo pageInfo;
+};
+
+public type AutomationsPage record {
+    Automation[] items;
+    PageInfo pageInfo;
+};
+
+public type LoggersPage record {
+    Logger[] items;
+    PageInfo pageInfo;
+};
+
+public type BoundSecretsPage record {
+    BoundSecretEntry[] items;
+    PageInfo pageInfo;
+};
+
+public type EnvironmentsPage record {
+    Environment[] items;
+    PageInfo pageInfo;
 };
 
 public type Main record {
@@ -152,7 +289,7 @@ public type Artifacts record {
     MessageProcessor[] messageProcessors = [];
     LocalEntry[] localEntries = [];
     DataService[] dataServices = [];
-    CarbonApp[] carbonApps = [];
+    CompositeApp[] carbonApps = [];
     DataSource[] dataSources = [];
     Connector[] connectors = [];
     RegistryResource[] registryResources = [];
@@ -576,7 +713,7 @@ public type ProxyServiceRecordInDB record {
     ArtifactState state;
     string tracing;
     string statistics = "disabled";
-    string? carbon_app;
+    string? composite_app;
 };
 
 public type EndpointRecordInDB record {
@@ -585,7 +722,7 @@ public type EndpointRecordInDB record {
     ArtifactState state;
     string tracing;
     string statistics = "disabled";
-    string? carbon_app;
+    string? composite_app;
 };
 
 public type RestApiRecordInDB record {
@@ -597,7 +734,7 @@ public type RestApiRecordInDB record {
     ArtifactState state;
     string tracing;
     string statistics = "disabled";
-    string? carbon_app;
+    string? composite_app;
 };
 
 public type SequenceRecordInDB record {
@@ -607,7 +744,7 @@ public type SequenceRecordInDB record {
     ArtifactState state;
     string tracing;
     string statistics = "disabled";
-    string? carbon_app;
+    string? composite_app;
 };
 
 public type TaskRecordInDB record {
@@ -615,14 +752,14 @@ public type TaskRecordInDB record {
     string task_class?;
     string task_group?;
     ArtifactState state;
-    string? carbon_app;
+    string? composite_app;
 };
 
 public type MessageStoreRecordInDB record {
     string store_name;
     string store_type;
     int size;
-    string? carbon_app;
+    string? composite_app;
 };
 
 public type MessageProcessorRecordInDB record {
@@ -630,7 +767,7 @@ public type MessageProcessorRecordInDB record {
     string processor_type;
     string processor_class?;
     ArtifactState state;
-    string? carbon_app;
+    string? composite_app;
 };
 
 public type LocalEntryRecordInDB record {
@@ -638,13 +775,14 @@ public type LocalEntryRecordInDB record {
     string entry_type;
     string entry_value?;
     ArtifactState state;
-    string? carbon_app;
+    string? composite_app;
 };
 
-public type CarbonAppRecordInDB record {
+public type CompositeAppRecordInDB record {
     string app_name;
     string version = "";
     ArtifactState state;
+    string? error_message?;
 };
 
 public type RegistryResourceRecordInDB record {
@@ -813,9 +951,9 @@ public type RestApi record {
     string statistics = "disabled";
     boolean? statisticsInSync = ();
     @sql:Column {
-        name: "carbon_app"
+        name: "composite_app"
     }
-    string carbonApp?;
+    string compositeApp?;
     ApiResource[] resources = [];
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
@@ -845,9 +983,9 @@ public type ProxyService record {
     string statistics = "disabled";
     boolean? statisticsInSync = ();
     @sql:Column {
-        name: "carbon_app"
+        name: "composite_app"
     }
-    string carbonApp?;
+    string compositeApp?;
     string[] endpoints?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
@@ -869,9 +1007,9 @@ public type Endpoint record {
     string statistics = "disabled";
     boolean? statisticsInSync = ();
     @sql:Column {
-        name: "carbon_app"
+        name: "composite_app"
     }
-    string carbonApp?;
+    string compositeApp?;
     EndpointAttribute[]? attributes?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
@@ -913,9 +1051,9 @@ public type InboundEndpoint record {
     string tracing = "disabled";
     boolean? tracingInSync = ();
     @sql:Column {
-        name: "carbon_app"
+        name: "composite_app"
     }
-    string carbonApp?;
+    string compositeApp?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };
@@ -937,9 +1075,9 @@ public type Sequence record {
     string statistics = "disabled";
     boolean? statisticsInSync = ();
     @sql:Column {
-        name: "carbon_app"
+        name: "composite_app"
     }
-    string carbonApp?;
+    string compositeApp?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };
@@ -957,9 +1095,9 @@ public type Task record {
     ArtifactState state = "enabled";
     boolean? stateInSync = ();
     @sql:Column {
-        name: "carbon_app"
+        name: "composite_app"
     }
-    string carbonApp?;
+    string compositeApp?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };
@@ -976,9 +1114,9 @@ public type Template record {
     string tracing = "disabled"; // "enabled", "disabled"
     string statistics = "disabled"; // "enabled", "disabled"
     @sql:Column {
-        name: "carbon_app"
+        name: "composite_app"
     }
-    string carbonApp?;
+    string compositeApp?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };
@@ -996,9 +1134,9 @@ public type MessageStore record {
     ArtifactState state = "enabled";
     boolean? stateInSync = ();
     @sql:Column {
-        name: "carbon_app"
+        name: "composite_app"
     }
-    string carbonApp?;
+    string compositeApp?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };
@@ -1016,9 +1154,9 @@ public type MessageProcessor record {
     ArtifactState state = "enabled";
     boolean? stateInSync = ();
     @sql:Column {
-        name: "carbon_app"
+        name: "composite_app"
     }
-    string carbonApp?;
+    string compositeApp?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };
@@ -1036,9 +1174,9 @@ public type LocalEntry record {
     ArtifactState state = "enabled";
     boolean? stateInSync = ();
     @sql:Column {
-        name: "carbon_app"
+        name: "composite_app"
     }
-    string carbonApp?;
+    string compositeApp?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };
@@ -1056,14 +1194,14 @@ public type DataService record {
     ArtifactState state = "enabled";
     boolean? stateInSync = ();
     @sql:Column {
-        name: "carbon_app"
+        name: "composite_app"
     }
-    string carbonApp?;
+    string compositeApp?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };
 
-public type CarbonApp record {
+public type CompositeApp record {
     @sql:Column {
         name: "app_name"
     }
@@ -1074,16 +1212,28 @@ public type CarbonApp record {
         name: "app_state"
     }
     string state = "Active"; // "Active", "Faulty"
-    // Artifacts packaged within the Carbon App (from heartbeat payload)
-    CarbonAppArtifact[] artifacts?;
+    string status?;
+    @sql:Column {
+        name: "error_message"
+    }
+    string? errorMessage?;
+    // Artifacts packaged within the Composite App (from heartbeat payload)
+    CompositeAppArtifact[] artifacts?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };
 
-// Artifact shape used inside CarbonApp
-public type CarbonAppArtifact record {
+// Artifact shape used inside CompositeApp
+public type CompositeAppArtifact record {
     string name;
     string 'type; // e.g., "api", "endpoint"
+};
+
+// Response type for Composite App fault stack trace query
+public type CompositeAppFaultStackTrace record {
+    string runtimeId;
+    string appName;
+    string faultStackTrace;
 };
 
 public type DataSource record {
@@ -2098,6 +2248,8 @@ public type UserContextV2 record {
     string username;
     string displayName;
     string[] permissions; // Flat list of permission names from JWT
+    string? clientIp = ();
+    string? userAgent = ();
 };
 
 // Database role record type
@@ -2411,6 +2563,16 @@ public type UpdateLogLevelResponse record {|
     string[] commandIds; // For BI: command IDs, For MI: empty array (immediate update)
 |};
 
+public type DeleteLoggerInput record {|
+    string[] runtimeIds;
+    string loggerName;
+|};
+
+public type DeleteLoggerResponse record {|
+    boolean success;
+    string message;
+|};
+
 // ============================================================
 // MI Runtime User Management Types
 // ============================================================
@@ -2425,13 +2587,22 @@ public type MIUsersResponse record {|
     MIUser[] users;
 |};
 
-public type MIUserOperationResponse record {|
+public type MIUsersPage record {
+    MIUser[] items;
+    PageInfo pageInfo;
+};
+
+public type MIUserOperationResponse record {
     string username;
     string status;
-|};
+};
 
 public type ValidatedRuntime record {|
     string runtimeId;
     string componentId;
     Runtime runtime;
+|};
+
+public type SystemInfo record {|
+    string version;
 |};

@@ -1224,7 +1224,7 @@ CREATE TABLE mi_api_artifacts (
     ),
     tracing NVARCHAR (20) NOT NULL DEFAULT 'disabled',
     [statistics] NVARCHAR (20) NOT NULL DEFAULT 'disabled',
-    carbon_app NVARCHAR (200) NULL,
+    composite_app NVARCHAR (200) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, api_name),
@@ -1297,7 +1297,7 @@ CREATE TABLE mi_proxy_service_artifacts (
     ),
     tracing NVARCHAR (20) NOT NULL DEFAULT 'disabled',
     [statistics] NVARCHAR (20) NOT NULL DEFAULT 'disabled',
-    carbon_app NVARCHAR(200) NULL,
+    composite_app NVARCHAR(200) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, proxy_name),
@@ -1370,7 +1370,7 @@ CREATE TABLE mi_endpoint_artifacts (
     ),
     tracing NVARCHAR (20) NOT NULL DEFAULT 'disabled',
     [statistics] NVARCHAR (20) NOT NULL DEFAULT 'disabled',
-    carbon_app NVARCHAR(200) NULL,
+    composite_app NVARCHAR(200) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, endpoint_name),
@@ -1448,7 +1448,7 @@ CREATE TABLE mi_inbound_endpoint_artifacts (
         )
     ),
     tracing NVARCHAR (20) NOT NULL DEFAULT 'disabled',
-    carbon_app NVARCHAR(200) NULL,
+    composite_app NVARCHAR(200) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, inbound_name),
@@ -1490,7 +1490,7 @@ CREATE TABLE mi_sequence_artifacts (
     ),
     tracing NVARCHAR (20) NOT NULL DEFAULT 'disabled',
     [statistics] NVARCHAR (20) NOT NULL DEFAULT 'disabled',
-    carbon_app NVARCHAR(200) NULL,
+    composite_app NVARCHAR(200) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, sequence_name),
@@ -1530,7 +1530,7 @@ CREATE TABLE mi_task_artifacts (
             'disabled'
         )
     ),  
-    carbon_app NVARCHAR(200) NULL,
+    composite_app NVARCHAR(200) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, task_name),
@@ -1563,7 +1563,7 @@ CREATE TABLE mi_template_artifacts (
     template_type NVARCHAR (100) NOT NULL,
     tracing NVARCHAR (20) NOT NULL DEFAULT 'disabled',
     [statistics] NVARCHAR (20) NOT NULL DEFAULT 'disabled',
-    carbon_app NVARCHAR(200) NULL,
+    composite_app NVARCHAR(200) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, template_name),
@@ -1594,7 +1594,7 @@ CREATE TABLE mi_message_store_artifacts (
     store_name NVARCHAR (200) NOT NULL,
     store_type NVARCHAR (100) NOT NULL,
     size BIGINT NOT NULL DEFAULT 0,
-    carbon_app NVARCHAR(200) NULL,
+    composite_app NVARCHAR(200) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, store_name),
@@ -1632,7 +1632,7 @@ CREATE TABLE mi_message_processor_artifacts (
             'disabled'
         )
     ),
-    carbon_app NVARCHAR(200) NULL,
+    composite_app NVARCHAR(200) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, processor_name),
@@ -1672,7 +1672,7 @@ CREATE TABLE mi_local_entry_artifacts (
             'disabled'
         )
     ),
-    carbon_app NVARCHAR(200) NULL,
+    composite_app NVARCHAR(200) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, entry_name),
@@ -1712,7 +1712,7 @@ CREATE TABLE mi_data_service_artifacts (
             'disabled'
         )
     ),
-    carbon_app NVARCHAR(200) NULL,
+    composite_app NVARCHAR(200) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, service_name),
@@ -1738,32 +1738,33 @@ BEGIN
 END;
 GO
 
--- Carbon Apps (MI)
-CREATE TABLE mi_carbon_app_artifacts (
+-- Composite Apps (MI)
+CREATE TABLE mi_composite_app_artifacts (
     runtime_id CHAR(36) NOT NULL,
     app_name NVARCHAR (200) NOT NULL,
     version NVARCHAR (50) NULL,
     state NVARCHAR (20) NOT NULL DEFAULT 'Active' CHECK (state IN ('Active', 'Faulty')),
+    error_message NVARCHAR (MAX) NULL, -- Error message when state is Faulty
     artifacts NVARCHAR (4000) NULL, -- JSON array serialized as string
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     PRIMARY KEY (runtime_id, app_name),
-    CONSTRAINT fk_mi_carbon_app_artifacts_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE,
+    CONSTRAINT fk_mi_composite_app_artifacts_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE,
     INDEX idx_runtime_id (runtime_id),
     INDEX idx_app_name (app_name),
     INDEX idx_state (state)
 );
 GO
 
-CREATE TRIGGER trg_mi_carbon_app_artifacts_updated_at
-ON mi_carbon_app_artifacts
+CREATE TRIGGER trg_mi_composite_app_artifacts_updated_at
+ON mi_composite_app_artifacts
 AFTER UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
-    UPDATE mi_carbon_app_artifacts
+    UPDATE mi_composite_app_artifacts
     SET updated_at = GETDATE()
-    FROM mi_carbon_app_artifacts rca
+    FROM mi_composite_app_artifacts rca
     INNER JOIN inserted i ON rca.runtime_id = i.runtime_id 
         AND rca.app_name = i.app_name;
 END;

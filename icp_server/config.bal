@@ -18,6 +18,9 @@ import icp_server.types;
 
 import ballerina/file;
 
+// ICP version
+configurable string icpVersion = "2.0.0-SNAPSHOT";
+
 // Server configuration
 configurable int serverPort = 9446;
 configurable int defaultOpensearchAdaptorPort = 9449;
@@ -31,7 +34,7 @@ configurable string keystorePassword = "wso2carbon";
 configurable string truststorePath = check file:joinPath("..", "conf", "security", "client-truststore.jks");
 configurable string truststorePassword = "wso2carbon";
 
-configurable int schedulerIntervalSeconds = 600;
+configurable int schedulerIntervalSeconds = 60;
 configurable int refreshTokenCleanupIntervalSeconds = 86400; // 24 hours (in seconds)
 
 // Runtime auth configuration (runtime and server communication)
@@ -53,10 +56,38 @@ configurable decimal userServiceJwtClockSkewSeconds = 0;
 
 configurable int defaultTokenExpiryTime = 3600; // 1 hour (in seconds)
 
+// CORS configuration — restrict to known origins; default matches the local dev server
+configurable string[] corsAllowedOrigins = ["https://localhost:9446", "http://localhost:5173"];
+
+// Normalize a CORS origin by removing trailing slashes to ensure consistent matching
+public isolated function normalizeCorsOrigin(string origin) returns string {
+    return origin.endsWith("/") ? origin.substring(0, origin.length() - 1) : origin;
+}
+
+// Normalize CORS origins by removing trailing slashes to ensure consistent matching
+final string[] normalizedCorsAllowedOrigins = from string origin in corsAllowedOrigins
+    select normalizeCorsOrigin(origin);
+
+// TLS cipher suites — GCM and ChaCha20 only; CBC ciphers excluded (BEAST/POODLE/Lucky13)
+configurable string[] tlsCiphers = [
+    "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+    "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256",
+    "TLS_AES_256_GCM_SHA384",
+    "TLS_CHACHA20_POLY1305_SHA256",
+    "TLS_AES_128_GCM_SHA256"
+];
+
 //Backend URLs for the frontend to call
 configurable string backendGraphqlEndpoint = "https://localhost:9446/graphql";
 configurable string backendAuthBaseUrl = "https://localhost:9446/auth";
 configurable string backendObservabilityEndpoint = "https://localhost:9446/icp/observability";
+
+// WebSocket endpoint — shares the main HTTPS port so no separate cert trust is needed
+configurable string backendWsUrl = "wss://localhost:9446/runtime-status";
 
 // Refresh token configuration
 configurable int refreshTokenExpiryTime = 86400; // 1 day (in seconds)
@@ -83,6 +114,7 @@ configurable boolean ssoAllowInsecureTLS = false; // Set true for local/self-sig
 // Logging configuration
 configurable string logLevel = "INFO"; // DEBUG, INFO, WARN, ERROR
 configurable boolean enableAuditLogging = true;
+configurable string auditLogFilePath = "../logs/audit.log";
 configurable boolean enableMetrics = true;
 
 // Observability Adapter configuration
@@ -119,8 +151,6 @@ final string resolvedObservabilityJwtHMACSecret = check resolveSecret(observabil
 final string resolvedObservabilityTruststorePassword = check resolveSecret(observabilityTruststorePassword);
 final string resolvedOpensearchUsername = check resolveSecret(opensearchUsername);
 final string resolvedOpensearchPassword = check resolveSecret(opensearchPassword);
-final string resolvedCredDbUser = check resolveSecret(credentialsDbUser);
-final string resolvedCredDbPassword = check resolveSecret(credentialsDbPassword);
 
 // Build SSO configuration from configurable values
 public isolated function getSSOConfig() returns types:SSOConfig => {
