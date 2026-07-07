@@ -36,27 +36,12 @@ public type LogLevelChangeEvent record {|
     string logLevel;
 |};
 
-// Payload pushed when a listener's state changes as confirmed by a runtime heartbeat.
-public type ListenerStateChangeEvent record {|
-    string eventType = "LISTENER_STATE_CHANGE";
-    string environmentId;
-    string environmentName;
-    string componentId;
-    string runtimeId;
-    string listenerName;
-    int? port;
-    string state;
-|};
-
 // Fan-out broadcaster over plain WebSocket connections.
 // Each subscriber is identified by a unique clientId and is associated with
 // a specific environmentId.  publish() writes a JSON message to every live
 // caller for that environment; dead callers are pruned inline.
 public isolated class RuntimeBroadcaster {
     private map<map<websocket:Caller>> topics = {};
-    // Tracks the last published state per (runtimeId + ":" + listenerName) to suppress
-    // duplicate consecutive events caused by the reconcile engine's optimistic writes.
-    private map<string> lastListenerState = {};
 
     // Called by the WebSocket upgrade handler when a client connects.
     // Returns the clientId that must be passed to unsubscribe() on close.
@@ -160,53 +145,6 @@ public isolated class RuntimeBroadcaster {
         }
     }
 
-    // Called from heartbeat processing when a listener's confirmed state changes.
-    // Uses the same lock-snapshot-I/O pattern as publish().
-    public isolated function publishListenerStateChange(string environmentId, string environmentName, string componentId, string runtimeId, string listenerName, int? port, string state) {
-        string payload;
-        map<websocket:Caller> snapshot = {};
-        lock {
-            // Deduplicate: skip if this (runtime, listener) pair last published the same state.
-            // This prevents spurious repeat events fired by the reconcile engine's optimistic writes.
-            string stateKey = runtimeId + ":" + listenerName;
-            string? prev = self.lastListenerState[stateKey];
-            if prev == state {
-                log:printDebug("Skipping duplicate listener state change event", runtimeId = runtimeId, listenerName = listenerName, state = state);
-                return;
-            }
-            self.lastListenerState[stateKey] = state;
-
-            map<websocket:Caller>? callers = self.topics[environmentId];
-            if callers is () || callers.length() == 0 {
-                log:printDebug("No WS subscribers for listener state change event", environmentId = environmentId, listenerName = listenerName, state = state);
-                return;
-            }
-            ListenerStateChangeEvent event = {environmentId, environmentName, componentId, runtimeId, listenerName, port, state};
-            payload = event.toJson().toJsonString();
-            foreach var [clientId, caller] in callers.entries() {
-                snapshot[clientId] = caller;
-            }
-        }
-
-        string[] dead = [];
-        foreach var [clientId, caller] in snapshot.entries() {
-            websocket:Error? err = caller->writeTextMessage(payload);
-            if err is websocket:Error {
-                dead.push(clientId);
-            }
-        }
-
-        string[] & readonly deadSnapshot = dead.cloneReadOnly();
-        lock {
-            map<websocket:Caller>? callers = self.topics[environmentId];
-            if callers is map<websocket:Caller> {
-                foreach string clientId in deadSnapshot {
-                    _ = callers.remove(clientId);
-                }
-                log:printInfo("Published listener state change event", environmentId = environmentId, environmentName = environmentName, componentId = componentId, runtimeId = runtimeId, listenerName = listenerName, port = port, state = state, subscribers = callers.length());
-            }
-        }
-    }
 }
 
 // Module-level singleton shared by all call sites in the storage module.

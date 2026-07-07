@@ -507,20 +507,8 @@ isolated function writeObservedStateBI(string runtimeId, string componentId, str
             {"status": svc.state.toLowerAscii()}
         ]);
     }
-    // Snapshot previous listener status + optimistic flag before upsert.
-    // We publish a WS event only when the previous row was confirmed (not optimistic)
-    // AND the state changed.  Skipping optimistic rows prevents spurious notifications
-    // fired by the reconcile engine's in-flight writes between heartbeats.
-    map<record {|string status; boolean optimistic;|}> prevListenerRows = {};
     foreach types:Listener 'listener in artifacts.listeners {
         string qualName = types:qualifiedArtifactName('listener.name, 'listener.package);
-        record {|string status; boolean optimistic;|}|error? prev = readListenerObservedStatus(runtimeId, qualName);
-        if prev is record {|string status; boolean optimistic;|} {
-            prevListenerRows[qualName] = prev;
-        } else if prev is error {
-            log:printWarn("Failed to read previous listener observed status; notification for this listener may be skipped",
-                runtimeId = runtimeId, listenerName = qualName, err = prev.message());
-        }
         entries.push([
             {artifactName: qualName, artifactType: "listener"},
             {"status": 'listener.state.toLowerAscii()}
@@ -535,22 +523,6 @@ isolated function writeObservedStateBI(string runtimeId, string componentId, str
         }
     }
     check batchUpsertReconcileObservedState(runtimeId, componentId, envId, entries);
-
-    // Publish WebSocket events only when the previous row was confirmed (optimistic=false)
-    // and the runtime reports a different state.  Optimistic rows mean the reconcile
-    // engine has a pending command in flight; we suppress events in that window to avoid
-    // notification noise from automated reconcile cycles.
-    string|error envNameResult = getEnvironmentNameById(envId);
-    string environmentName = envNameResult is string ? envNameResult : envId;
-    foreach types:Listener 'listener in artifacts.listeners {
-        string qualName = types:qualifiedArtifactName('listener.name, 'listener.package);
-        string newState = 'listener.state.toLowerAscii();
-        record {|string status; boolean optimistic;|}? prev = prevListenerRows[qualName];
-        boolean shouldPublish = prev is record {|string status; boolean optimistic;|} && !prev.optimistic && prev.status != newState;
-        if shouldPublish {
-            runtimeBroadcaster.publishListenerStateChange(envId, environmentName, componentId, runtimeId, qualName, 'listener.port, newState);
-        }
-    }
 }
 
 // Upsert runtime record
