@@ -1,6 +1,61 @@
+# ICP Database Migration Scripts
+
+This directory contains two kinds of SQL scripts:
+
+1. **In-place v2 schema upgrades** (`add_workflow_feature_<engine>.sql`) — bring an existing ICP v2 database up to the current schema.
+2. **ICP v1 → v2 user migration** (`v1_to_v2_<engine>.sql`) — migrate user accounts, credentials, and role assignments from ICP v1.
+
+---
+
+## Upgrading an existing ICP v2 deployment: workflow feature
+
+Deployments whose database was initialised **before the workflow management feature** (v2.0.0-beta2 and earlier) must run the workflow upgrade script once against the **main ICP DB**. Fresh installs do not need it — the `*_init.sql` scripts already contain everything.
+
+Without it, the new server version starts normally but workflow views fail with `Column "CALLBACK_URL" not found`, and no Workflow-Management permissions appear in Access Control (even for Super Admin).
+
+Pick the script matching your database engine:
+
+| Engine | Script |
+|---|---|
+| H2 | `add_workflow_feature_h2.sql` |
+| MySQL / MariaDB | `add_workflow_feature_mysql.sql` |
+| PostgreSQL | `add_workflow_feature_postgresql.sql` |
+| Microsoft SQL Server | `add_workflow_feature_mssql.sql` |
+
+Each script applies, in order:
+
+1. `runtimes.callback_url` — workflow management service base URL reported via the runtime heartbeat
+2. The `Workflow-Management` permission domain (widens the domain constraint / ENUM)
+3. The four `workflow_mgt:*` permissions (human tasks + workflow executions)
+4. Role grants — Super Admin / Admin / Project Admin: view + manage both; Developer: manage human tasks, view workflows; Viewer: view human tasks only
+
+The scripts are **idempotent** — safe to re-run, including after a partial failure. After running, restart the ICP server (or have users re-login) so sessions pick up the new permissions.
+
+Example (H2, server may stay running thanks to `AUTO_SERVER`):
+
+```bash
+java -cp <path-to-h2.jar> org.h2.tools.RunScript \
+  -url "jdbc:h2:file:./database/icp_db;MODE=MySQL;AUTO_SERVER=TRUE" \
+  -user <db_user> -password <db_password> \
+  -script add_workflow_feature_h2.sql
+```
+
+```bash
+# MySQL
+mysql -u <admin_user> -p <icp_db_name> < add_workflow_feature_mysql.sql
+
+# PostgreSQL
+psql -U <admin_user> -d <icp_db_name> -f add_workflow_feature_postgresql.sql
+
+# Microsoft SQL Server
+sqlcmd -S <server> -U <user> -P <password> -d <icp_db_name> -i add_workflow_feature_mssql.sql
+```
+
+---
+
 # ICP v1 → v2 User Migration
 
-This directory contains SQL scripts for migrating user accounts, credentials, and role assignments from **ICP v1** to **ICP v2**.
+The following scripts migrate user accounts, credentials, and role assignments from **ICP v1** to **ICP v2**.
 
 Scripts are provided for **MySQL / MariaDB** and **Microsoft SQL Server**. The script requires the old and new databases to be on the same server instance, using cross-database references to read from the old schema and write to both new schemas in a single session.
 
