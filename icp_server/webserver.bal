@@ -30,7 +30,8 @@ service / on httpListener {
 
         log:printInfo("Starting console on " + serverHost + ":" + serverPort.toString());
         log:printInfo("--------------------------------");
-        log:printInfo("WSO2 Integrator: ICP Console started at https://localhost:" + serverPort.toString());
+        string scheme = sslEnabled ? "https" : "http";
+        log:printInfo("WSO2 Integrator: ICP Console started at " + scheme + "://localhost:" + serverPort.toString());
         log:printInfo("--------------------------------");
     }
 
@@ -141,12 +142,13 @@ function getContentType(string filePath) returns string {
 // Update frontend config.json with runtime backend URLs
 function updateFrontendConfig() returns error? {
     string configPath = "../www/config.json";
+    string scheme = sslEnabled ? "https" : "http";
 
     // Create config JSON with runtime values
     json configJson = {
-        "VITE_GRAPHQL_URL": backendGraphqlEndpoint,
-        "VITE_AUTH_BASE_URL": backendAuthBaseUrl,
-        "VITE_OBSERVABILITY_URL": backendObservabilityEndpoint,
+        "VITE_GRAPHQL_URL": applyScheme(backendGraphqlEndpoint, scheme),
+        "VITE_AUTH_BASE_URL": applyScheme(backendAuthBaseUrl, scheme),
+        "VITE_OBSERVABILITY_URL": applyScheme(backendObservabilityEndpoint, scheme),
         "VITE_SSO_ENABLED": ssoEnabled,
         "VITE_ICP_VERSION": icpVersion
     };
@@ -154,4 +156,14 @@ function updateFrontendConfig() returns error? {
     // Write to config.json
     check io:fileWriteJson(configPath, configJson);
     log:printInfo("Updated frontend config.json with backend URLs");
+}
+
+isolated function applyScheme(string url, string scheme) returns string {
+    if url.startsWith("https://") {
+        return scheme + "://" + url.substring(8);
+    }
+    if url.startsWith("http://") {
+        return scheme + "://" + url.substring(7);
+    }
+    return url;
 }

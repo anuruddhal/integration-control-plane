@@ -26,12 +26,12 @@ import ballerina/log;
 listener http:Listener httpListener = new (serverPort,
     config = {
         host: serverHost,
-        secureSocket: {
+        secureSocket: sslEnabled ? {
             key: {
                 path: keystorePath,
                 password: resolvedKeystorePassword
             }
-        }
+        } : ()
     }
 );
 
@@ -39,12 +39,12 @@ listener http:Listener httpListener = new (serverPort,
 listener http:Listener runtimeListener = new (runtimeListenerPort,
     config = {
         host: serverHost,
-        secureSocket: {
+        secureSocket: sslEnabled ? {
             key: {
                 path: keystorePath,
                 password: resolvedKeystorePassword
             }
-        }
+        } : ()
     }
 );
 

@@ -103,12 +103,12 @@ final http:Client? opensearchClient;
 listener http:Listener openSerachObservabilityListener = new (defaultOpensearchAdaptorPort,
     config = {
         host: serverHost,
-        secureSocket: {
+        secureSocket: sslEnabled ? {
             key: {
                 path: keystorePath,
                 password: resolvedKeystorePassword
             }
-        }
+        } : ()
     }
 );
 

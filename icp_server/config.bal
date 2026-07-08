@@ -19,7 +19,7 @@ import icp_server.types;
 import ballerina/file;
 
 // ICP version
-configurable string icpVersion = "2.0.0-SNAPSHOT";
+configurable string icpVersion = "2.0.0";
 
 // Server configuration
 configurable int serverPort = 9446;
@@ -29,6 +29,7 @@ configurable int runtimeListenerPort = 9445;
 configurable string serverHost = "0.0.0.0";
 configurable string organization = "WSO2 Inc.";
 
+configurable boolean sslEnabled = true;
 configurable string keystorePath = check file:joinPath("..", "conf", "security", "wso2carbon.jks");
 configurable string keystorePassword = "wso2carbon";
 configurable string truststorePath = check file:joinPath("..", "conf", "security", "client-truststore.jks");
