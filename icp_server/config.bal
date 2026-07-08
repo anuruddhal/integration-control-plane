@@ -29,6 +29,7 @@ configurable int runtimeListenerPort = 9445;
 configurable string serverHost = "0.0.0.0";
 configurable string organization = "WSO2 Inc.";
 
+configurable boolean sslEnabled = true;
 configurable string keystorePath = check file:joinPath("..", "conf", "security", "wso2carbon.jks");
 configurable string keystorePassword = "wso2carbon";
 configurable string truststorePath = check file:joinPath("..", "conf", "security", "client-truststore.jks");
