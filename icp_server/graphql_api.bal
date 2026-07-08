@@ -763,7 +763,7 @@ service /graphql on graphqlListener {
         }
 
         [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(allRuntimes.length(), pagination);
-        log:printInfo("Fetching runtimes page", total = allRuntimes.length(), 'limit = pageInfo.'limit, offset = pageInfo.offset);
+        log:printDebug("Fetching runtimes page", total = allRuntimes.length(), 'limit = pageInfo.'limit, offset = pageInfo.offset);
         return {items: allRuntimes.slice(sliceFrom, sliceTo), pageInfo};
     }
 
@@ -1930,9 +1930,11 @@ service /graphql on graphqlListener {
             }
         }
 
+        int? listenerPort = input.port;
+        string portSuffix = listenerPort is int ? string ` (port ${listenerPort})` : "";
         storage:logAuditEvent(storage:AUDIT_LISTENER_STATE_CHANGE, userId = userContext.userId,
                 resourceType = storage:AUDIT_RESOURCE_LISTENER, resourceId = input.listenerName,
-                details = string `Listener '${input.listenerName}' state changed to '${input.action}' by '${userContext.username}'`,
+                details = string `Listener '${input.listenerName}'${portSuffix} state changed to '${input.action}' by '${userContext.username}'`,
                 clientIp = userContext.clientIp, userAgent = userContext.userAgent);
         return {
             success: true,
