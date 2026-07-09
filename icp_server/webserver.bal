@@ -168,35 +168,16 @@ function getContentType(string filePath) returns string {
 // Update frontend config.json with runtime backend URLs
 function updateFrontendConfig() returns error? {
     string configPath = "../www/config.json";
-    string scheme = sslEnabled ? "https" : "http";
 
-    // Create config JSON with runtime values
     json configJson = {
-        "VITE_GRAPHQL_URL": applyScheme(backendGraphqlEndpoint, scheme),
-        "VITE_AUTH_BASE_URL": applyScheme(backendAuthBaseUrl, scheme),
-        "VITE_OBSERVABILITY_URL": applyScheme(backendObservabilityEndpoint, scheme),
-        "VITE_WS_URL": applyScheme(backendWsUrl, scheme),
+        "VITE_GRAPHQL_URL": backendGraphqlEndpoint,
+        "VITE_AUTH_BASE_URL": backendAuthBaseUrl,
+        "VITE_OBSERVABILITY_URL": backendObservabilityEndpoint,
+        "VITE_WS_URL": backendWsUrl,
         "VITE_SSO_ENABLED": ssoEnabled,
         "VITE_ICP_VERSION": icpVersion
     };
 
-    // Write to config.json
     check io:fileWriteJson(configPath, configJson);
     log:printInfo("Updated frontend config.json with backend URLs");
-}
-
-isolated function applyScheme(string url, string scheme) returns string {
-    if url.startsWith("https://") {
-        return scheme + "://" + url.substring(8);
-    }
-    if url.startsWith("http://") {
-        return scheme + "://" + url.substring(7);
-    }
-    if url.startsWith("wss://") {
-        return (scheme == "https" ? "wss" : "ws") + "://" + url.substring(6);
-    }
-    if url.startsWith("ws://") {
-        return (scheme == "https" ? "wss" : "ws") + "://" + url.substring(5);
-    }
-    return url;
 }
