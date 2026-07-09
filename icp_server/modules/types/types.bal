@@ -252,6 +252,11 @@ public type AutomationsPage record {
     PageInfo pageInfo;
 };
 
+public type WorkflowsPage record {
+    Workflow[] items;
+    PageInfo pageInfo;
+};
+
 public type LoggersPage record {
     Logger[] items;
     PageInfo pageInfo;

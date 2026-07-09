@@ -967,7 +967,7 @@ service /graphql on graphqlListener {
     // Get workflow definitions for a specific environment and component.
     // Definitions are fetched live from the runtime's /workflow/definitions API
     // (via its workflowCallbackUrl) rather than from the heartbeat/DB.
-    isolated resource function get workflowsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:Workflow[]|error {
+    isolated resource function get workflowsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:WorkflowsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -984,10 +984,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component workflows without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
-        return check fetchWorkflowDefinitions(componentId, environmentId);
+        types:Workflow[] result = check fetchWorkflowDefinitions(componentId, environmentId);
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get automation artifacts for a specific environment and component
