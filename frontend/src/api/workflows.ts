@@ -48,13 +48,19 @@ export interface Page<T> {
 export interface HumanTask {
   taskId: string;
   taskName?: string;
+  title?: string;
+  description?: string;
+  payload?: Record<string, unknown>;
+  formSchema?: Record<string, unknown> | string;
   parentWorkflowId?: string;
   parentWorkflowType?: string;
   status?: string;
   startTime?: string;
   closeTime?: string;
   userRoles?: string[];
+  eligibleRoles?: string[];
   canComplete?: boolean;
+  result?: unknown;
   [key: string]: unknown;
 }
 
@@ -181,8 +187,7 @@ export function useWorkflowExecutionGraph(s: Scope, workflowId: string | null) {
 export function useStartWorkflow(s: Scope) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { workflowType: string; input?: unknown; workflowId?: string; timeoutSeconds?: number }) =>
-      wfRequest<WorkflowInstance>(s.componentId, s.environmentId, 'workflows', jsonBody({ method: 'POST' }, body)),
+    mutationFn: (body: { workflowType: string; input?: unknown; workflowId?: string; timeoutSeconds?: number }) => wfRequest<WorkflowInstance>(s.componentId, s.environmentId, 'workflows', jsonBody({ method: 'POST' }, body)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['wf', 'instances', s.componentId, s.environmentId] }),
   });
 }
@@ -210,7 +215,6 @@ export interface HumanTaskFilters {
   parentWorkflowId?: string;
   parentWorkflowType?: string;
   taskName?: string;
-  onlyMyTasks?: boolean;
   limit?: number;
   pageToken?: string;
 }
@@ -232,10 +236,17 @@ export function usePendingTaskCount(s: Scope) {
   });
 }
 
+// Query options for one task's detail; shared by useHumanTask and useQueries-based batch fetches.
+export function humanTaskQueryOptions(s: Scope, taskId: string) {
+  return {
+    queryKey: ['wf', 'human-task', s.componentId, s.environmentId, taskId] as const,
+    queryFn: () => wfRequest<HumanTask>(s.componentId, s.environmentId, `human-tasks/${encodeURIComponent(taskId)}`),
+  };
+}
+
 export function useHumanTask(s: Scope, taskId: string | null) {
   return useQuery({
-    queryKey: ['wf', 'human-task', s.componentId, s.environmentId, taskId],
-    queryFn: () => wfRequest<HumanTask>(s.componentId, s.environmentId, `human-tasks/${encodeURIComponent(taskId!)}`),
+    ...humanTaskQueryOptions(s, taskId ?? ''),
     enabled: enabledFor(s) && !!taskId,
   });
 }
@@ -248,8 +259,7 @@ function invalidateHumanTasks(qc: ReturnType<typeof useQueryClient>, s: Scope) {
 export function useCompleteHumanTask(s: Scope) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ taskId, result }: { taskId: string; result: unknown }) =>
-      wfRequest<unknown>(s.componentId, s.environmentId, `human-tasks/${encodeURIComponent(taskId)}/complete`, jsonBody({ method: 'POST' }, { result })),
+    mutationFn: ({ taskId, result }: { taskId: string; result: unknown }) => wfRequest<unknown>(s.componentId, s.environmentId, `human-tasks/${encodeURIComponent(taskId)}/complete`, jsonBody({ method: 'POST' }, { result })),
     onSuccess: () => invalidateHumanTasks(qc, s),
   });
 }
@@ -257,17 +267,7 @@ export function useCompleteHumanTask(s: Scope) {
 export function useFailHumanTask(s: Scope) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ taskId, reason, details }: { taskId: string; reason: string; details?: unknown }) =>
-      wfRequest<unknown>(s.componentId, s.environmentId, `human-tasks/${encodeURIComponent(taskId)}/fail`, jsonBody({ method: 'POST' }, { reason, details })),
-    onSuccess: () => invalidateHumanTasks(qc, s),
-  });
-}
-
-export function useCancelHumanTask(s: Scope) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ taskId }: { taskId: string }) =>
-      wfRequest<unknown>(s.componentId, s.environmentId, `human-tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST' }),
+    mutationFn: ({ taskId, reason, details }: { taskId: string; reason: string; details?: unknown }) => wfRequest<unknown>(s.componentId, s.environmentId, `human-tasks/${encodeURIComponent(taskId)}/fail`, jsonBody({ method: 'POST' }, { reason, details })),
     onSuccess: () => invalidateHumanTasks(qc, s),
   });
 }

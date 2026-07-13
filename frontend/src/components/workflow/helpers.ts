@@ -36,6 +36,101 @@ export function jsonPretty(value: unknown): string {
   }
 }
 
+/** Shared heading style for workflow cards, sections, and form/dialog titles: bold, muted gray. */
+export const sectionTitleSx = { fontWeight: 700, color: 'text.secondary' } as const;
+
+/** Converts a key like `orderId` or `error_code` to a display label like `Order Id`. */
+export function humanizeKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** A flat form field derived from a JSON schema property, for generated forms. */
+export interface FormField {
+  name: string;
+  type: string;
+  label: string;
+  required: boolean;
+  description?: string;
+  enumValues?: string[];
+}
+
+/**
+ * Parses a JSON schema (an object, or a JSON string of one) into a flat field list for form
+ * rendering. Returns null when absent or not an object schema with properties.
+ */
+export function parseFormSchema(schema: unknown): FormField[] | null {
+  let s: unknown = schema;
+  if (typeof s === 'string') {
+    try {
+      s = JSON.parse(s);
+    } catch {
+      return null;
+    }
+  }
+  if (s === null || typeof s !== 'object' || Array.isArray(s)) return null;
+  const obj = s as Record<string, unknown>;
+  const props = obj.properties;
+  if (props === null || typeof props !== 'object' || Array.isArray(props)) return null;
+  const required = new Set(Array.isArray(obj.required) ? obj.required.filter((r): r is string => typeof r === 'string') : []);
+  const fields = Object.entries(props as Record<string, unknown>).map(([name, def]): FormField => {
+    const d = (def !== null && typeof def === 'object' ? def : {}) as Record<string, unknown>;
+    return {
+      name,
+      type: typeof d.type === 'string' ? d.type : 'string',
+      label: typeof d.title === 'string' ? d.title : humanizeKey(name),
+      required: required.has(name),
+      description: typeof d.description === 'string' ? d.description : undefined,
+      enumValues: Array.isArray(d.enum) ? d.enum.map(String) : undefined,
+    };
+  });
+  return fields.length > 0 ? fields : null;
+}
+
+/**
+ * Validates generated-form values against their fields and coerces them to schema types.
+ * Returns the coerced result object plus per-field error messages (empty when valid).
+ */
+export function buildFormResult(fields: FormField[], values: Record<string, string | boolean>): { result: Record<string, unknown>; errors: Record<string, string> } {
+  const result: Record<string, unknown> = {};
+  const errors: Record<string, string> = {};
+  for (const f of fields) {
+    if (f.type === 'boolean') {
+      const v = values[f.name];
+      if (typeof v === 'boolean') result[f.name] = v;
+      else if (f.required) errors[f.name] = `${f.label} is required.`;
+      continue;
+    }
+    const raw = values[f.name];
+    const text = typeof raw === 'string' ? raw.trim() : '';
+    if (!text) {
+      if (f.required) errors[f.name] = `${f.label} is required.`;
+      continue;
+    }
+    if (f.type === 'number' || f.type === 'integer') {
+      const n = Number(text);
+      if (Number.isNaN(n) || (f.type === 'integer' && !Number.isInteger(n))) {
+        errors[f.name] = f.type === 'integer' ? `${f.label} must be an integer.` : `${f.label} must be a number.`;
+        continue;
+      }
+      result[f.name] = n;
+    } else if (f.type === 'object' || f.type === 'array') {
+      try {
+        result[f.name] = JSON.parse(text);
+      } catch {
+        errors[f.name] = `${f.label} must be valid JSON.`;
+      }
+    } else {
+      result[f.name] = text;
+    }
+  }
+  return { result, errors };
+}
+
 /** Formats an ISO-8601 timestamp for compact display; passes through on failure. */
 export function formatTime(value?: string): string {
   if (!value) return '—';

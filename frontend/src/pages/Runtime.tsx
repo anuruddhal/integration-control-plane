@@ -89,7 +89,8 @@ project = "${projectHandle}"
 integration = "${integrationHandle}"
 runtime = "<unique id for the runtime>"
 secret = "${secret}"
-# serverUrl="https://<hostname>:9445"`;
+# serverUrl="https://<hostname>:9445"
+# runtimeBaseUrl="http://<hostname>"`;
   if (!workflowMgt) return base;
   return `${base}
 

@@ -16,43 +16,17 @@
  * under the License.
  */
 
-import {
-  Alert,
-  Autocomplete,
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-  ListingTable,
-  MenuItem,
-  Select,
-  Snackbar,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@wso2/oxygen-ui';
+import { Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListingTable, MenuItem, Select, Snackbar, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
 import { Eye, Play, RefreshCw, RotateCcw, Plus } from '@wso2/oxygen-ui-icons-react';
 import { useMemo, useState } from 'react';
 import SearchField from '../SearchField';
+import SchemaFormFields from './SchemaFormFields';
 import WorkflowDetailDrawer from './WorkflowDetailDrawer';
-import { formatTime } from './helpers';
+import { buildFormResult, formatTime, parseFormSchema, sectionTitleSx } from './helpers';
 import { SchemaDisclosure, StatusChip, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
-import {
-  useRetryDecision,
-  useRetryTasks,
-  useStartWorkflow,
-  useWorkflowDefinitions,
-  useWorkflowInstances,
-  type RetryDecision,
-  type WorkflowDefinition,
-} from '../../api/workflows';
+import { useRetryDecision, useRetryTasks, useStartWorkflow, useWorkflowDefinitions, useWorkflowInstances, type RetryDecision, type WorkflowDefinition } from '../../api/workflows';
 
 const WORKFLOW_STATUSES = ['All', 'RUNNING', 'COMPLETED', 'FAILED', 'TERMINATED', 'CANCELED', 'TIMED_OUT'];
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const;
@@ -171,16 +145,7 @@ function WorkflowsAdmin({ scope, onToast, initialWorkflowType }: { scope: Workfl
       </Stack>
 
       <Stack direction="row" gap={1.5} sx={{ mb: 2 }} flexWrap="wrap" alignItems="center">
-        <Autocomplete
-          size="small"
-          sx={{ width: 180 }}
-          options={WORKFLOW_STATUSES}
-          value={status}
-          disableClearable
-          getOptionLabel={statusLabel}
-          onChange={(_, v) => setStatus(v ?? 'All')}
-          renderInput={(params) => <TextField {...params} label="Status" />}
-        />
+        <Autocomplete size="small" sx={{ width: 180 }} options={WORKFLOW_STATUSES} value={status} disableClearable getOptionLabel={statusLabel} onChange={(_, v) => setStatus(v ?? 'All')} renderInput={(params) => <TextField {...params} label="Status" />} />
         <Autocomplete
           size="small"
           sx={{ width: 240 }}
@@ -189,7 +154,7 @@ function WorkflowsAdmin({ scope, onToast, initialWorkflowType }: { scope: Workfl
           getOptionLabel={(d) => d.workflowType}
           isOptionEqualToValue={(a, b) => a.workflowType === b.workflowType}
           onChange={(_, v) => setSelectedType(v)}
-          renderInput={(params) => <TextField {...params} label="Type" placeholder="All types" />}
+          renderInput={(params) => <TextField {...params} label="Workflow name" placeholder="All workflows" />}
         />
         <Select
           size="small"
@@ -244,7 +209,7 @@ function WorkflowsAdmin({ scope, onToast, initialWorkflowType }: { scope: Workfl
             <ListingTable.Head>
               <ListingTable.Row>
                 <ListingTable.Cell>Workflow ID</ListingTable.Cell>
-                <ListingTable.Cell>Type</ListingTable.Cell>
+                <ListingTable.Cell>Name</ListingTable.Cell>
                 <ListingTable.Cell>Status</ListingTable.Cell>
                 <ListingTable.Cell>Started</ListingTable.Cell>
                 <ListingTable.Cell>Actions</ListingTable.Cell>
@@ -290,21 +255,34 @@ function StartWorkflowDialog({ scope, onClose, onToast }: { scope: WorkflowScope
   const { data: definitions = [] } = useWorkflowDefinitions(scope);
   const start = useStartWorkflow(scope);
   const [type, setType] = useState<WorkflowDefinition | null>(null);
-  const [input, setInput] = useState('');
   const [workflowId, setWorkflowId] = useState('');
   const [timeout, setTimeoutVal] = useState('');
-  const [inputError, setInputError] = useState('');
+  const [formValues, setFormValues] = useState<Record<string, string | boolean>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // When the input schema parses into fields, a generated form replaces the raw JSON input.
+  const formFields = type ? parseFormSchema(type.inputSchema) : null;
+
+  const setFormValue = (name: string, value: string | boolean) => {
+    setFormValues((prev) => ({ ...prev, [name]: value }));
+    setFieldErrors((prev) => {
+      if (!(name in prev)) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  };
 
   const submit = () => {
     if (!type) return;
     let parsedInput: unknown;
-    if (input.trim()) {
-      try {
-        parsedInput = JSON.parse(input);
-      } catch {
-        setInputError('Input must be valid JSON.');
+    if (formFields) {
+      const { result, errors } = buildFormResult(formFields, formValues);
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors);
         return;
       }
+      parsedInput = Object.keys(result).length > 0 ? result : undefined;
     }
     start.mutate(
       {
@@ -325,7 +303,7 @@ function StartWorkflowDialog({ scope, onClose, onToast }: { scope: WorkflowScope
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Start Workflow</DialogTitle>
+      <DialogTitle sx={sectionTitleSx}>Start Workflow</DialogTitle>
       <DialogContent>
         <Stack gap={2} sx={{ mt: 1 }}>
           <Autocomplete
@@ -333,43 +311,28 @@ function StartWorkflowDialog({ scope, onClose, onToast }: { scope: WorkflowScope
             getOptionLabel={(d) => d.workflowType}
             value={type}
             isOptionEqualToValue={(a, b) => a.workflowType === b.workflowType}
-            onChange={(_, v) => setType(v)}
-            renderInput={(params) => <TextField {...params} label="Workflow type" required placeholder="Select a definition" />}
-          />
-          <TextField
-            label="Input (JSON)"
-            fullWidth
-            multiline
-            minRows={4}
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              setInputError('');
+            onChange={(_, v) => {
+              setType(v);
+              setFormValues({});
+              setFieldErrors({});
             }}
-            error={!!inputError}
-            helperText={inputError || 'Optional JSON payload passed to the workflow.'}
-            slotProps={{ input: { sx: { fontFamily: 'monospace', fontSize: 13 } } }}
+            renderInput={(params) => <TextField {...params} label="Workflow name" required placeholder="Select a workflow" />}
           />
-          {type &&
+          {formFields ? (
+            <SchemaFormFields fields={formFields} values={formValues} errors={fieldErrors} onChange={setFormValue} />
+          ) : (
+            type &&
             (type.inputSchema ? (
               <SchemaDisclosure schema={type.inputSchema} />
             ) : (
               <Typography variant="caption" color="text.secondary">
                 No input schema defined for this workflow.
               </Typography>
-            ))}
+            ))
+          )}
           <Stack direction="row" gap={2}>
             <TextField label="Workflow ID (optional)" fullWidth size="small" value={workflowId} onChange={(e) => setWorkflowId(e.target.value)} />
-            <TextField
-              label="Timeout (seconds)"
-              type="number"
-              size="small"
-              sx={{ width: 200 }}
-              value={timeout}
-              onChange={(e) => setTimeoutVal(e.target.value)}
-              placeholder="e.g. 300"
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
+            <TextField label="Timeout (seconds)" type="number" size="small" sx={{ width: 200 }} value={timeout} onChange={(e) => setTimeoutVal(e.target.value)} placeholder="e.g. 300" slotProps={{ inputLabel: { shrink: true } }} />
           </Stack>
         </Stack>
       </DialogContent>

@@ -16,26 +16,7 @@
  * under the License.
  */
 
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Drawer,
-  IconButton,
-  ListingTable,
-  Snackbar,
-  Stack,
-  Tab,
-  Tabs,
-  TextField,
-  Typography,
-} from '@wso2/oxygen-ui';
+import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Drawer, IconButton, ListingTable, Snackbar, Stack, Tab, Tabs, TextField, Typography } from '@wso2/oxygen-ui';
 import { Ban, OctagonX, PauseCircle, PlayCircle, X } from '@wso2/oxygen-ui-icons-react';
 import { useState } from 'react';
 import CodeViewer from '../CodeViewer';

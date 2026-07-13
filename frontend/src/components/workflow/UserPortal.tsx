@@ -16,45 +16,27 @@
  * under the License.
  */
 
-import {
-  Alert,
-  Box,
-  Button,
-  Checkbox,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  IconButton,
-  ListingTable,
-  Snackbar,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@wso2/oxygen-ui';
+import { Alert, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, ListingTable, Snackbar, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
 import { Eye, RefreshCw } from '@wso2/oxygen-ui-icons-react';
-import { useState } from 'react';
-import CodeViewer from '../CodeViewer';
-import { formatTime, jsonPretty } from './helpers';
+import { useState, type ReactNode } from 'react';
+import SchemaFormFields from './SchemaFormFields';
+import { buildFormResult, formatTime, humanizeKey, parseFormSchema, sectionTitleSx } from './helpers';
 import { StatusChip, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
-import {
-  useCancelHumanTask,
-  useCompleteHumanTask,
-  useFailHumanTask,
-  useHumanTask,
-  useHumanTasks,
-  usePendingTaskCount,
-  type HumanTask,
-} from '../../api/workflows';
+import { useQueries } from '@tanstack/react-query';
+import { humanTaskQueryOptions, useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, usePendingTaskCount, type HumanTask } from '../../api/workflows';
 
-const HISTORY_STATUSES = ['COMPLETED', 'FAILED', 'CANCELED'];
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const;
+
+/** Maps a runtime human-task status to its display status (TERMINATED shows as REJECTED). */
+const taskDisplayStatus = (s?: string) => (s === 'TERMINATED' ? 'REJECTED' : s);
+
+/** True when the task's completion result is the rejection sentinel sent by the Reject action. */
+function isRejectedTask(task?: HumanTask): boolean {
+  const r = task?.result;
+  return typeof r === 'object' && r !== null && (r as Record<string, unknown>).__rejected === true;
+}
 
 type Toast = { severity: 'success' | 'error'; message: string } | null;
 
@@ -96,7 +78,7 @@ function TaskTable({ tasks, onOpen, showActionable }: { tasks: HumanTask[]; onOp
       <ListingTable.Head>
         <ListingTable.Row>
           <ListingTable.Cell>Task</ListingTable.Cell>
-          <ListingTable.Cell>Parent Workflow</ListingTable.Cell>
+          <ListingTable.Cell>Workflow Name</ListingTable.Cell>
           <ListingTable.Cell>Status</ListingTable.Cell>
           <ListingTable.Cell>Started</ListingTable.Cell>
           <ListingTable.Cell>{showActionable ? 'Open' : 'View'}</ListingTable.Cell>
@@ -107,7 +89,7 @@ function TaskTable({ tasks, onOpen, showActionable }: { tasks: HumanTask[]; onOp
           <ListingTable.Row key={t.taskId}>
             <ListingTable.Cell>
               <Stack direction="row" alignItems="center" gap={1}>
-                <Typography variant="body2">{t.taskName ?? t.taskId}</Typography>
+                <Typography variant="body2">{t.title ?? t.taskName ?? t.taskId}</Typography>
                 {showActionable && t.canComplete === false && (
                   <Tooltip title="You do not have a matching role to complete this task">
                     <Chip label="Read-only" size="small" variant="outlined" sx={{ fontSize: 10, height: 18 }} />
@@ -116,10 +98,10 @@ function TaskTable({ tasks, onOpen, showActionable }: { tasks: HumanTask[]; onOp
               </Stack>
             </ListingTable.Cell>
             <ListingTable.Cell>
-              <Typography sx={{ fontFamily: 'monospace', fontSize: 12 }}>{t.parentWorkflowId ?? '—'}</Typography>
+              <Typography variant="body2">{t.parentWorkflowType ?? '—'}</Typography>
             </ListingTable.Cell>
             <ListingTable.Cell>
-              <StatusChip status={t.status} />
+              <StatusChip status={taskDisplayStatus(t.status)} />
             </ListingTable.Cell>
             <ListingTable.Cell>{formatTime(t.startTime)}</ListingTable.Cell>
             <ListingTable.Cell>
@@ -137,15 +119,13 @@ function TaskTable({ tasks, onOpen, showActionable }: { tasks: HumanTask[]; onOp
 }
 
 function MyTasks({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast) => void }) {
-  const [onlyMine, setOnlyMine] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
-  const { data: page, isLoading, error, refetch, isFetching } = useHumanTasks(scope, { status: 'PENDING', onlyMyTasks: onlyMine, limit: 50 });
+  const { data: page, isLoading, error, refetch, isFetching } = useHumanTasks(scope, { status: 'PENDING', limit: 50 });
   const tasks = page?.items ?? [];
 
   return (
     <>
       <Stack direction="row" alignItems="center" gap={1.5} sx={{ mb: 2 }}>
-        <FormControlLabel control={<Checkbox size="small" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />} label="Only my tasks" />
         <Box sx={{ flex: 1 }} />
         <Tooltip title="Refresh">
           <IconButton size="small" onClick={() => refetch()} aria-label="Refresh">
@@ -170,16 +150,27 @@ function MyTasks({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast)
 }
 
 function TaskHistory({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast) => void }) {
-  const [status, setStatus] = useState('COMPLETED');
+  const [tab, setTab] = useState<'Completed' | 'Rejected'>('Completed');
   const [openId, setOpenId] = useState<string | null>(null);
-  const { data: page, isLoading, error } = useHumanTasks(scope, { status, limit: 50 });
-  const tasks = page?.items ?? [];
+  // A rejected task closes as COMPLETED with a rejection result — the list API cannot
+  // distinguish it, so fetch each completed task's detail and classify by result.__rejected.
+  // TERMINATED tasks (cancelled/terminated externally) are also grouped under Rejected.
+  const completedQuery = useHumanTasks(scope, { status: 'COMPLETED', limit: 50 });
+  const terminatedQuery = useHumanTasks(scope, { status: 'TERMINATED', limit: 50 });
+  const completedItems = completedQuery.data?.items ?? [];
+  const detailQueries = useQueries({ queries: completedItems.map((t) => humanTaskQueryOptions(scope, t.taskId)) });
+
+  const isLoading = completedQuery.isLoading || terminatedQuery.isLoading || detailQueries.some((q) => q.isLoading);
+  const error = completedQuery.error ?? terminatedQuery.error;
+
+  const rejectedFlags = detailQueries.map((q) => isRejectedTask(q.data));
+  const tasks = tab === 'Completed' ? completedItems.filter((_, i) => !rejectedFlags[i]) : [...completedItems.filter((_, i) => rejectedFlags[i]).map((t) => ({ ...t, status: 'REJECTED' })), ...(terminatedQuery.data?.items ?? [])];
 
   return (
     <>
       <Stack direction="row" gap={1} sx={{ mb: 2 }} flexWrap="wrap">
-        {HISTORY_STATUSES.map((s) => (
-          <Chip key={s} label={s.charAt(0) + s.slice(1).toLowerCase()} size="small" color={status === s ? 'primary' : 'default'} variant={status === s ? 'filled' : 'outlined'} onClick={() => setStatus(s)} />
+        {(['Completed', 'Rejected'] as const).map((t) => (
+          <Chip key={t} label={t} size="small" color={tab === t ? 'primary' : 'default'} variant={tab === t ? 'filled' : 'outlined'} onClick={() => setTab(t)} />
         ))}
       </Stack>
 
@@ -198,27 +189,59 @@ function TaskHistory({ scope, onToast }: { scope: WorkflowScope; onToast: (t: To
   );
 }
 
+/** Extracts key/value pairs from the task's `payload` JSON object; null when absent or empty. */
+function payloadDetailEntries(payload: unknown): Array<[string, string]> | null {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const entries = Object.entries(payload as Record<string, unknown>);
+  if (entries.length === 0) return null;
+  return entries.map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)]);
+}
+
+function DetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Stack direction="row" gap={2}>
+      <Typography variant="body2" sx={{ width: 140, flexShrink: 0, fontWeight: 600, color: 'text.disabled' }}>
+        {label}
+      </Typography>
+      {typeof children === 'string' ? (
+        <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+          {children}
+        </Typography>
+      ) : (
+        children
+      )}
+    </Stack>
+  );
+}
+
 function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { scope: WorkflowScope; taskId: string; actionable?: boolean; onClose: () => void; onToast: (t: Toast) => void }) {
   const { data: task, isLoading } = useHumanTask(scope, taskId);
   const complete = useCompleteHumanTask(scope);
   const fail = useFailHumanTask(scope);
-  const cancel = useCancelHumanTask(scope);
   const [mode, setMode] = useState<'view' | 'complete' | 'fail'>('view');
   const [resultText, setResultText] = useState('{}');
   const [reason, setReason] = useState('');
   const [err, setErr] = useState('');
+  const [formValues, setFormValues] = useState<Record<string, string | boolean>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const busy = complete.isPending || fail.isPending || cancel.isPending;
+  const busy = complete.isPending || fail.isPending;
   const canComplete = task?.canComplete !== false;
+  const eligibleRoles = task?.eligibleRoles ?? (Array.isArray(task?.roles) ? (task.roles as string[]) : undefined) ?? task?.userRoles;
+  const payloadDetails = payloadDetailEntries(task?.payload);
+  const formFields = parseFormSchema(task?.formSchema);
 
-  const submitComplete = () => {
-    let result: unknown;
-    try {
-      result = resultText.trim() ? JSON.parse(resultText) : {};
-    } catch {
-      setErr('Result must be valid JSON.');
-      return;
-    }
+  const setFormValue = (name: string, value: string | boolean) => {
+    setFormValues((prev) => ({ ...prev, [name]: value }));
+    setFieldErrors((prev) => {
+      if (!(name in prev)) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  };
+
+  const mutateComplete = (result: unknown) => {
     complete.mutate(
       { taskId, result },
       {
@@ -229,6 +252,28 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
         onError: (e) => onToast({ severity: 'error', message: e instanceof Error ? e.message : 'Failed to complete task.' }),
       },
     );
+  };
+
+  const submitComplete = () => {
+    // With a form schema, build the result from the generated form; otherwise fall back to raw JSON.
+    if (formFields) {
+      const { result, errors } = buildFormResult(formFields, formValues);
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors);
+        return;
+      }
+      mutateComplete(result);
+      return;
+    }
+
+    let result: unknown;
+    try {
+      result = resultText.trim() ? JSON.parse(resultText) : {};
+    } catch {
+      setErr('Result must be valid JSON.');
+      return;
+    }
+    mutateComplete(result);
   };
 
   const submitFail = () => {
@@ -248,25 +293,19 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
     );
   };
 
-  const submitCancel = () => {
-    cancel.mutate(
-      { taskId },
-      {
-        onSuccess: () => {
-          onToast({ severity: 'success', message: 'Task cancelled.' });
-          onClose();
-        },
-        onError: (e) => onToast({ severity: 'error', message: e instanceof Error ? e.message : 'Failed to cancel task.' }),
-      },
-    );
+  // Returns to the initial view, keeping entered values but clearing validation errors.
+  const backToView = () => {
+    setMode('view');
+    setErr('');
+    setFieldErrors({});
   };
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
+      <DialogTitle sx={sectionTitleSx}>
         <Stack direction="row" alignItems="center" gap={1.5}>
-          <span>{task?.taskName ?? taskId}</span>
-          {task?.status && <StatusChip status={task.status} />}
+          <span>{task?.title ?? task?.taskName ?? taskId}</span>
+          {task?.status && <StatusChip status={isRejectedTask(task) ? 'REJECTED' : taskDisplayStatus(task.status)} />}
         </Stack>
       </DialogTitle>
       <DialogContent>
@@ -274,24 +313,63 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
           <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
         ) : (
           <Stack gap={2} sx={{ mt: 1 }}>
-            <CodeViewer code={jsonPretty(task)} language="json" title="Task details" maxHeight="40vh" showLineNumbers={false} />
-
-            {mode === 'complete' && (
-              <TextField
-                label="Result (JSON)"
-                fullWidth
-                multiline
-                minRows={4}
-                value={resultText}
-                onChange={(e) => {
-                  setResultText(e.target.value);
-                  setErr('');
-                }}
-                error={!!err}
-                helperText={err || 'Payload submitted as the task result.'}
-                slotProps={{ input: { sx: { fontFamily: 'monospace', fontSize: 13 } } }}
-              />
+            {task?.description && (
+              <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
+                <Typography variant="subtitle2" sx={{ px: 2, py: 1.5, ...sectionTitleSx }}>
+                  Description
+                </Typography>
+                <Divider />
+                <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2 }}>
+                  {task.description}
+                </Typography>
+              </Card>
             )}
+
+            <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
+              <Typography variant="subtitle2" sx={{ px: 2, py: 1.5, ...sectionTitleSx }}>
+                Task Detail
+              </Typography>
+              <Divider />
+              <Stack gap={1.25} sx={{ px: 2, py: 2 }}>
+                <DetailRow label="Created">{formatTime(task?.startTime)}</DetailRow>
+                <DetailRow label="Eligible Roles">
+                  {eligibleRoles?.length ? (
+                    <Stack direction="row" gap={0.5} flexWrap="wrap">
+                      {eligibleRoles.map((role) => (
+                        <Chip key={role} label={role} size="small" variant="outlined" />
+                      ))}
+                    </Stack>
+                  ) : (
+                    '—'
+                  )}
+                </DetailRow>
+                {payloadDetails?.map(([key, value]) => (
+                  <DetailRow key={key} label={humanizeKey(key)}>
+                    {value}
+                  </DetailRow>
+                ))}
+              </Stack>
+            </Card>
+
+            {mode === 'complete' &&
+              (formFields ? (
+                <SchemaFormFields fields={formFields} values={formValues} errors={fieldErrors} onChange={setFormValue} />
+              ) : (
+                <TextField
+                  label="Result (JSON)"
+                  fullWidth
+                  multiline
+                  minRows={4}
+                  value={resultText}
+                  onChange={(e) => {
+                    setResultText(e.target.value);
+                    setErr('');
+                  }}
+                  error={!!err}
+                  helperText={err || 'Payload submitted as the task result.'}
+                  slotProps={{ input: { sx: { fontFamily: 'monospace', fontSize: 13 } } }}
+                />
+              ))}
             {mode === 'fail' && (
               <TextField
                 label="Reason"
@@ -315,9 +393,6 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
         <Authorized permissions={[Permissions.WORKFLOW_MANAGE_HUMAN_TASKS]}>
           {actionable && mode === 'view' && (
             <>
-              <Button color="error" disabled={busy} onClick={submitCancel}>
-                Cancel Task
-              </Button>
               <Button color="warning" disabled={busy} onClick={() => setMode('fail')}>
                 Reject
               </Button>
@@ -329,6 +404,11 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
                 </span>
               </Tooltip>
             </>
+          )}
+          {mode !== 'view' && (
+            <Button disabled={busy} onClick={backToView}>
+              Back
+            </Button>
           )}
           {mode === 'complete' && (
             <Button variant="contained" disabled={busy} onClick={submitComplete}>

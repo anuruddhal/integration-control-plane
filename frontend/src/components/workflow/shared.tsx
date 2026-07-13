@@ -40,6 +40,7 @@ const STATUS_COLORS: Record<string, ChipColor> = {
   SUSPENDED: 'warning',
   PENDING: 'info',
   OPEN: 'info',
+  REJECTED: 'error',
 };
 
 /** Renders a status string as a colour-coded chip. */
@@ -55,12 +56,7 @@ export function SchemaDisclosure({ schema, label = 'Click to see Input Schema' }
   const [open, setOpen] = useState(false);
   return (
     <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-      <Stack
-        direction="row"
-        alignItems="center"
-        gap={0.5}
-        onClick={() => setOpen((o) => !o)}
-        sx={{ px: 1.5, py: 1, cursor: 'pointer', userSelect: 'none', bgcolor: 'action.hover', '&:hover': { bgcolor: 'action.selected' } }}>
+      <Stack direction="row" alignItems="center" gap={0.5} onClick={() => setOpen((o) => !o)} sx={{ px: 1.5, py: 1, cursor: 'pointer', userSelect: 'none', bgcolor: 'action.hover', '&:hover': { bgcolor: 'action.selected' } }}>
         <ChevronRight size={16} style={{ transition: 'transform 0.15s', transform: open ? 'rotate(90deg)' : 'none', flexShrink: 0 }} />
         <Typography variant="body2" sx={{ fontWeight: 500 }}>
           {label}
