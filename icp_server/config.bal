@@ -29,6 +29,10 @@ configurable int runtimeListenerPort = 9445;
 configurable string serverHost = "0.0.0.0";
 configurable string organization = "WSO2 Inc.";
 
+// Publicly reachable base URL of the ICP server (scheme + host + port, no trailing slash).
+// Frontend-facing backend URLs and the CORS allowlist are derived from this by default.
+configurable string publicBaseUrl = "https://localhost:9446";
+
 configurable boolean sslEnabled = true;
 configurable string keystorePath = check file:joinPath("..", "conf", "security", "wso2carbon.jks");
 configurable string keystorePassword = "wso2carbon";
@@ -58,7 +62,7 @@ configurable decimal userServiceJwtClockSkewSeconds = 0;
 configurable int defaultTokenExpiryTime = 3600; // 1 hour (in seconds)
 
 // CORS configuration — restrict to known origins; default matches the local dev server
-configurable string[] corsAllowedOrigins = ["https://localhost:9446", "http://localhost:5173"];
+configurable string[] corsAllowedOrigins = [publicBaseUrl, "http://localhost:5173"];
 
 // Normalize a CORS origin by removing trailing slashes to ensure consistent matching
 public isolated function normalizeCorsOrigin(string origin) returns string {
@@ -83,12 +87,23 @@ configurable string[] tlsCiphers = [
 ];
 
 //Backend URLs for the frontend to call
-configurable string backendGraphqlEndpoint = "https://localhost:9446/graphql";
-configurable string backendAuthBaseUrl = "https://localhost:9446/auth";
-configurable string backendObservabilityEndpoint = "https://localhost:9446/icp/observability";
+configurable string backendGraphqlEndpoint = publicBaseUrl + "/graphql";
+configurable string backendAuthBaseUrl = publicBaseUrl + "/auth";
+configurable string backendObservabilityEndpoint = publicBaseUrl + "/icp/observability";
 
 // WebSocket endpoint — shares the main HTTPS port so no separate cert trust is needed
-configurable string backendWsUrl = "wss://localhost:9446/runtime-status";
+configurable string backendWsUrl = toWsScheme(publicBaseUrl) + "/runtime-status";
+
+// Map an http(s) base URL to its ws(s) equivalent
+isolated function toWsScheme(string baseUrl) returns string {
+    if baseUrl.startsWith("https://") {
+        return "wss://" + baseUrl.substring(8);
+    }
+    if baseUrl.startsWith("http://") {
+        return "ws://" + baseUrl.substring(7);
+    }
+    return baseUrl;
+}
 
 // Refresh token configuration
 configurable int refreshTokenExpiryTime = 86400; // 1 day (in seconds)
