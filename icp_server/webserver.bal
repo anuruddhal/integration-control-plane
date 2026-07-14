@@ -30,7 +30,8 @@ service / on httpListener {
 
         log:printInfo("Starting console on " + serverHost + ":" + serverPort.toString());
         log:printInfo("--------------------------------");
-        log:printInfo("WSO2 Integrator: ICP Console started at https://localhost:" + serverPort.toString());
+        string scheme = sslEnabled ? "https" : "http";
+        log:printInfo("WSO2 Integrator: ICP Console started at " + scheme + "://localhost:" + serverPort.toString());
         log:printInfo("--------------------------------");
     }
 
@@ -168,7 +169,6 @@ function getContentType(string filePath) returns string {
 function updateFrontendConfig() returns error? {
     string configPath = "../www/config.json";
 
-    // Create config JSON with runtime values
     json configJson = {
         "VITE_GRAPHQL_URL": backendGraphqlEndpoint,
         "VITE_AUTH_BASE_URL": backendAuthBaseUrl,
@@ -178,7 +178,6 @@ function updateFrontendConfig() returns error? {
         "VITE_ICP_VERSION": icpVersion
     };
 
-    // Write to config.json
     check io:fileWriteJson(configPath, configJson);
     log:printInfo("Updated frontend config.json with backend URLs");
 }
