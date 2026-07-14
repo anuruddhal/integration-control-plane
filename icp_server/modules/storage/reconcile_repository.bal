@@ -99,6 +99,15 @@ type ObservedStateRow record {|
     boolean optimistic;
 |};
 
+// Oracle: NUMBER(1) cannot map to a boolean field — read as int and convert
+type OracleObservedStateRow record {|
+    string artifact_name;
+    string artifact_type;
+    string state_key;
+    string? state_value;
+    int optimistic;
+|};
+
 // Returns reconcile-derived state for all artifacts in a component+environment.
 // Keyed by "artifactName|artifactType" -> stateKey -> {value, inSync}.
 public isolated function queryArtifactState(string componentId, string envId)
@@ -106,29 +115,48 @@ public isolated function queryArtifactState(string componentId, string envId)
     log:printDebug("queryArtifactState", componentId = componentId, envId = envId);
 
     // 1. Read observed state (only RUNNING runtimes)
-    stream<ObservedStateRow, sql:Error?> obsRows = dbClient->query(`
+    sql:ParameterizedQuery obsQuery = `
         SELECT os.artifact_name, os.artifact_type, os.state_key, os.state_value, os.optimistic
         FROM reconcile_observed_state os
         JOIN runtimes r ON r.runtime_id = os.runtime_id AND r.status = 'RUNNING'
         WHERE os.component_id = ${componentId} AND os.env_id = ${envId}
-    `);
+    `;
 
     // Group: (artifactKey, stateKey) -> list of {value, optimistic}
     map<map<[string, boolean][]>> groups = {};
-    check from ObservedStateRow row in obsRows
-        do {
-            string artKey = string `${row.artifact_name}|${row.artifact_type}`;
-            string val = row.state_value ?: "";
-            if !groups.hasKey(artKey) {
-                groups[artKey] = {};
-            }
-            map<[string, boolean][]> keyMap = <map<[string, boolean][]>>groups[artKey];
-            if !keyMap.hasKey(row.state_key) {
-                keyMap[row.state_key] = [];
-            }
-            [string, boolean][] entries = <[string, boolean][]>keyMap[row.state_key];
-            entries.push([val, row.optimistic]);
-        };
+    if isOracle() {
+        stream<OracleObservedStateRow, sql:Error?> obsRows = dbClient->query(obsQuery);
+        check from OracleObservedStateRow row in obsRows
+            do {
+                string artKey = string `${row.artifact_name}|${row.artifact_type}`;
+                string val = row.state_value ?: "";
+                if !groups.hasKey(artKey) {
+                    groups[artKey] = {};
+                }
+                map<[string, boolean][]> keyMap = <map<[string, boolean][]>>groups[artKey];
+                if !keyMap.hasKey(row.state_key) {
+                    keyMap[row.state_key] = [];
+                }
+                [string, boolean][] entries = <[string, boolean][]>keyMap[row.state_key];
+                entries.push([val, row.optimistic == 1]);
+            };
+    } else {
+        stream<ObservedStateRow, sql:Error?> obsRows = dbClient->query(obsQuery);
+        check from ObservedStateRow row in obsRows
+            do {
+                string artKey = string `${row.artifact_name}|${row.artifact_type}`;
+                string val = row.state_value ?: "";
+                if !groups.hasKey(artKey) {
+                    groups[artKey] = {};
+                }
+                map<[string, boolean][]> keyMap = <map<[string, boolean][]>>groups[artKey];
+                if !keyMap.hasKey(row.state_key) {
+                    keyMap[row.state_key] = [];
+                }
+                [string, boolean][] entries = <[string, boolean][]>keyMap[row.state_key];
+                entries.push([val, row.optimistic]);
+            };
+    }
 
     // 2. Read desired state for same scope
     stream<record {|string artifact_name; string artifact_type; string state_key; string? state_value;|}, sql:Error?> desRows = dbClient->query(`

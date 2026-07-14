@@ -148,16 +148,28 @@ public isolated function getGroupsWithCountsByOrgId(int orgId) returns types:Gro
     log:printDebug(string `Fetching groups with counts for orgId: ${orgId}`);
 
     types:GroupResponse[] groups = [];
-    stream<types:GroupResponse, sql:Error?> groupStream = dbClient->query(
-        `SELECT ug.group_id, ug.group_name, ug.org_uuid, ug.description, ug.created_at, ug.updated_at,
+    sql:ParameterizedQuery groupsQuery;
+    if isOracle() {
+        // Oracle cannot GROUP BY a CLOB column — group by its VARCHAR2 projection
+        groupsQuery = `SELECT ug.group_id, ug.group_name, ug.org_uuid, TO_CHAR(ug.description) AS description, ug.created_at, ug.updated_at,
                 COUNT(DISTINCT gum.user_uuid) AS user_count,
                 COUNT(DISTINCT grm.id) AS role_count
          FROM user_groups ug
          LEFT JOIN group_user_mapping gum ON ug.group_id = gum.group_id
          LEFT JOIN group_role_mapping grm ON ug.group_id = grm.group_id
          WHERE ug.org_uuid = ${orgId}
-         GROUP BY ug.group_id, ug.group_name, ug.org_uuid, ug.description, ug.created_at, ug.updated_at`
-    );
+         GROUP BY ug.group_id, ug.group_name, ug.org_uuid, TO_CHAR(ug.description), ug.created_at, ug.updated_at`;
+    } else {
+        groupsQuery = `SELECT ug.group_id, ug.group_name, ug.org_uuid, ug.description, ug.created_at, ug.updated_at,
+                COUNT(DISTINCT gum.user_uuid) AS user_count,
+                COUNT(DISTINCT grm.id) AS role_count
+         FROM user_groups ug
+         LEFT JOIN group_user_mapping gum ON ug.group_id = gum.group_id
+         LEFT JOIN group_role_mapping grm ON ug.group_id = grm.group_id
+         WHERE ug.org_uuid = ${orgId}
+         GROUP BY ug.group_id, ug.group_name, ug.org_uuid, ug.description, ug.created_at, ug.updated_at`;
+    }
+    stream<types:GroupResponse, sql:Error?> groupStream = dbClient->query(groupsQuery);
 
     check from types:GroupResponse group in groupStream
         do {
@@ -322,8 +334,20 @@ public isolated function getRolesWithCountsByOrgId(int orgId) returns types:Role
     log:printDebug(string `Fetching roles with counts for orgId: ${orgId}`);
 
     types:RoleResponse[] roles = [];
-    stream<types:RoleResponse, sql:Error?> roleStream = dbClient->query(
-        `SELECT r.role_id, r.role_name, r.org_id, r.description, r.created_at, r.updated_at,
+    sql:ParameterizedQuery rolesQuery;
+    if isOracle() {
+        // Oracle cannot GROUP BY a CLOB column — group by its VARCHAR2 projection
+        rolesQuery = `SELECT r.role_id, r.role_name, r.org_id, TO_CHAR(r.description) AS description, r.created_at, r.updated_at,
+                COUNT(DISTINCT grm.group_id) AS group_count,
+                COUNT(DISTINCT gum.user_uuid) AS user_count
+         FROM roles_v2 r
+         LEFT JOIN group_role_mapping grm ON r.role_id = grm.role_id
+         LEFT JOIN group_user_mapping gum ON grm.group_id = gum.group_id
+         WHERE r.org_id = ${orgId}
+         GROUP BY r.role_id, r.role_name, r.org_id, TO_CHAR(r.description), r.created_at, r.updated_at
+         ORDER BY r.role_name`;
+    } else {
+        rolesQuery = `SELECT r.role_id, r.role_name, r.org_id, r.description, r.created_at, r.updated_at,
                 COUNT(DISTINCT grm.group_id) AS group_count,
                 COUNT(DISTINCT gum.user_uuid) AS user_count
          FROM roles_v2 r
@@ -331,8 +355,9 @@ public isolated function getRolesWithCountsByOrgId(int orgId) returns types:Role
          LEFT JOIN group_user_mapping gum ON grm.group_id = gum.group_id
          WHERE r.org_id = ${orgId}
          GROUP BY r.role_id, r.role_name, r.org_id, r.description, r.created_at, r.updated_at
-         ORDER BY r.role_name`
-    );
+         ORDER BY r.role_name`;
+    }
+    stream<types:RoleResponse, sql:Error?> roleStream = dbClient->query(rolesQuery);
 
     check from types:RoleResponse role in roleStream
         do {

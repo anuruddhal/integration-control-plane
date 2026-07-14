@@ -38,7 +38,7 @@ public client class DatabaseConnectionManager {
     private final sql:Client dbClient;
     private final string dbType;
 
-    public function init(string dbType, string dbHost, int dbPort, string dbName, string dbUser, string dbPassword) returns error? {
+    public function init(string dbType, string dbHost, int dbPort, string dbName, string dbUser, string dbPassword, boolean useTLS = false) returns error? {
         self.dbType = dbType;
         sql:ConnectionPool pool = {
             maxOpenConnections: maxOpenConnections,
@@ -62,8 +62,11 @@ public client class DatabaseConnectionManager {
             log:printInfo("PostgreSQL Database initialized successfully.");
         } else if dbType == ORACLE {
             log:printInfo("Initializing Oracle Database...");
-            log:printInfo(string `Connecting to Oracle: ${dbHost}:${dbPort}/${dbName}`);
-            self.dbClient = check new oracledb:Client(host = dbHost, user = dbUser, password = dbPassword, database = dbName, port = dbPort, connectionPool = pool);
+            log:printInfo(string `Connecting to Oracle: ${dbHost}:${dbPort}/${dbName} (TLS: ${useTLS})`);
+            // With useTLS the connector switches the protocol to TCPS (required e.g. for
+            // Oracle Autonomous Database); the JDK default truststore validates the server cert.
+            oracledb:Options? oracleOptions = useTLS ? {ssl: {}} : ();
+            self.dbClient = check new oracledb:Client(host = dbHost, user = dbUser, password = dbPassword, database = dbName, port = dbPort, options = oracleOptions, connectionPool = pool);
             log:printInfo("Oracle Database initialized successfully.");
         } else {
             log:printInfo("Initializing H2 Database...");

@@ -249,6 +249,7 @@ frontendJwtHMACSecret = "default-secret-key-at-least-32-characters-long-for-hs25
 # dbName = "ORCLPDB1"   # Oracle service name (PDB)
 # dbUser = "icp_user"
 # dbPassword = "my-secret-pw"
+# dbUseTLS = false      # set true for TCPS endpoints, e.g. Oracle Autonomous Database
 # maxOpenConnections = 10
 # minIdleConnections = 5
 # maxConnectionLifeTime = 1800.0

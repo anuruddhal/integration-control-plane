@@ -19,9 +19,47 @@ import icp_server.types as types;
 import ballerina/log;
 import ballerina/sql;
 
+// Oracle stores booleans as NUMBER(1), which the connector cannot map to
+// Ballerina boolean fields — read flags as int and convert.
+type OracleUserRow record {
+    string user_id;
+    string username;
+    string display_name;
+    int is_super_admin;
+    int is_project_author;
+    int is_oidc_user;
+    int require_password_change;
+    string? created_at;
+    string? updated_at;
+};
+
+isolated function oracleRowToUser(OracleUserRow row) returns types:User => {
+    userId: row.user_id,
+    username: row.username,
+    displayName: row.display_name,
+    isSuperAdmin: row.is_super_admin == 1,
+    isProjectAuthor: row.is_project_author == 1,
+    isOidcUser: row.is_oidc_user == 1,
+    requirePasswordChange: row.require_password_change == 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+};
+
 // Get user details by user ID
 public isolated function getUserDetailsById(string userId) returns types:User|error {
     log:printDebug(string `Fetching user details for userId: ${userId}`);
+    if isOracle() {
+        OracleUserRow|sql:Error row = dbClient->queryRow(
+            `SELECT user_id, username, display_name, is_super_admin, is_project_author, is_oidc_user, require_password_change, created_at, updated_at
+             FROM users
+             WHERE user_id = ${userId}`
+            );
+        if row is sql:Error {
+            log:printError(string `Failed to get user details for ${userId}`, row);
+            return row;
+        }
+        return oracleRowToUser(row);
+    }
     types:User|sql:Error user = dbClient->queryRow(
         `SELECT user_id, username, display_name, is_super_admin, is_project_author, is_oidc_user, require_password_change, created_at, updated_at
          FROM users
@@ -73,15 +111,26 @@ public isolated function getAllUsersV2() returns json[]|error {
     log:printDebug("Fetching all users with group memberships (RBAC v2)");
 
     // Get all users
-    stream<types:User, sql:Error?> userStream = dbClient->query(
-        `SELECT user_id, username, display_name, is_super_admin, is_project_author, is_oidc_user, require_password_change, created_at, updated_at
-         FROM users
-         ORDER BY username ASC`
-    );
+    types:User[] users;
+    if isOracle() {
+        stream<OracleUserRow, sql:Error?> oraStream = dbClient->query(
+            `SELECT user_id, username, display_name, is_super_admin, is_project_author, is_oidc_user, require_password_change, created_at, updated_at
+             FROM users
+             ORDER BY username ASC`
+        );
+        users = check from OracleUserRow row in oraStream
+            select oracleRowToUser(row);
+    } else {
+        stream<types:User, sql:Error?> userStream = dbClient->query(
+            `SELECT user_id, username, display_name, is_super_admin, is_project_author, is_oidc_user, require_password_change, created_at, updated_at
+             FROM users
+             ORDER BY username ASC`
+        );
 
-    // Collect all users first
-    types:User[] users = check from types:User user in userStream
-        select user;
+        // Collect all users first
+        users = check from types:User user in userStream
+            select user;
+    }
 
     // Build users with groups
     json[] usersWithGroups = from var user in users
