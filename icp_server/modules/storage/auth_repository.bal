@@ -539,6 +539,25 @@ public isolated function assignRoleToGroup(types:AssignRoleToGroupInput input) r
         return result;
     }
 
+    if dbType == ORACLE {
+        // Oracle returns the ROWID (not the identity value) as lastInsertId,
+        // so read the id back via the unique mapping tuple. NVL sentinels make
+        // the nullable scope columns comparable.
+        int|error mappingId = dbClient->queryRow(`
+            SELECT id FROM group_role_mapping
+            WHERE group_id = ${input.groupId} AND role_id = ${input.roleId} AND org_uuid = ${orgId}
+              AND NVL(project_uuid, '~') = NVL(${input.projectUuid}, '~')
+              AND NVL(env_uuid, '~') = NVL(${input.envUuid}, '~')
+              AND NVL(integration_uuid, '~') = NVL(${input.integrationUuid}, '~')
+        `);
+        if mappingId is int {
+            log:printInfo(string `Successfully assigned role ${input.roleId} to group ${input.groupId}`, mappingId = mappingId);
+            return mappingId;
+        }
+        log:printWarn(string `Failed to read back mapping ID for role assignment of role ${input.roleId} to group ${input.groupId}`);
+        return error("Failed to retrieve mapping ID after role assignment");
+    }
+
     int|string? lastInsertId = result.lastInsertId;
     if lastInsertId is int {
         log:printInfo(string `Successfully assigned role ${input.roleId} to group ${input.groupId}`, mappingId = lastInsertId);

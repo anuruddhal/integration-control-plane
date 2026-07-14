@@ -371,7 +371,7 @@ modules = [
 [[package]]
 org = "ballerina"
 name = "sql"
-version = "1.18.0"
+version = "1.19.0"
 dependencies = [
 	{org = "ballerina", name = "io"},
 	{org = "ballerina", name = "jballerina.java"},
@@ -584,6 +584,29 @@ modules = [
 
 [[package]]
 org = "ballerinax"
+name = "oracledb"
+version = "1.16.0"
+dependencies = [
+	{org = "ballerina", name = "crypto"},
+	{org = "ballerina", name = "io"},
+	{org = "ballerina", name = "jballerina.java"},
+	{org = "ballerina", name = "sql"},
+	{org = "ballerina", name = "time"}
+]
+modules = [
+	{org = "ballerinax", packageName = "oracledb", moduleName = "oracledb"}
+]
+
+[[package]]
+org = "ballerinax"
+name = "oracledb.driver"
+version = "1.5.1"
+modules = [
+	{org = "ballerinax", packageName = "oracledb.driver", moduleName = "oracledb.driver"}
+]
+
+[[package]]
+org = "ballerinax"
 name = "postgresql"
 version = "1.17.0"
 dependencies = [
@@ -639,6 +662,8 @@ dependencies = [
 	{org = "ballerinax", name = "mssql.driver"},
 	{org = "ballerinax", name = "mysql"},
 	{org = "ballerinax", name = "mysql.driver"},
+	{org = "ballerinax", name = "oracledb"},
+	{org = "ballerinax", name = "oracledb.driver"},
 	{org = "ballerinax", name = "postgresql"},
 	{org = "ballerinax", name = "postgresql.driver"}
 ]

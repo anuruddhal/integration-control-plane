@@ -360,6 +360,31 @@ public isolated function insertMIControlCommand(
                 VALUES (source.runtime_id, source.component_id, source.artifact_name, source.artifact_type, source.action, source.status, source.issued_by,
                         CASE WHEN source.status = 'sent' THEN CURRENT_TIMESTAMP ELSE NULL END);
         `);
+    } else if dbType == ORACLE {
+        _ = check dbClient->execute(`
+            MERGE INTO mi_runtime_control_commands target
+            USING (SELECT ${runtimeId} AS runtime_id, ${componentId} AS component_id, ${artifactName} AS artifact_name,
+                          ${artifactType} AS artifact_type, ${actionStr} AS action, ${status} AS status, ${issuedBy} AS issued_by
+                   FROM dual) source
+            ON (target.runtime_id = source.runtime_id
+                AND target.component_id = source.component_id
+                AND target.artifact_name = source.artifact_name
+                AND target.artifact_type = source.artifact_type)
+            WHEN MATCHED THEN
+                UPDATE SET action = source.action,
+                           status = source.status,
+                           issued_at = CURRENT_TIMESTAMP,
+                           issued_by = source.issued_by,
+                           sent_at = CASE WHEN source.status = 'sent' THEN CURRENT_TIMESTAMP ELSE NULL END,
+                           acknowledged_at = NULL,
+                           completed_at = NULL,
+                           error_message = NULL,
+                           updated_at = CURRENT_TIMESTAMP
+            WHEN NOT MATCHED THEN
+                INSERT (runtime_id, component_id, artifact_name, artifact_type, action, status, issued_by, sent_at)
+                VALUES (source.runtime_id, source.component_id, source.artifact_name, source.artifact_type, source.action, source.status, source.issued_by,
+                        CASE WHEN source.status = 'sent' THEN CURRENT_TIMESTAMP ELSE NULL END)
+        `);
     } else if dbType == POSTGRESQL {
         _ = check dbClient->execute(`
             INSERT INTO mi_runtime_control_commands (

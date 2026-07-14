@@ -28,7 +28,7 @@ enum SqlErrorCategory {
 
 // Classifies a raw sql:Error into a high-level category by inspecting
 // the error message for well-known database error patterns
-// (PostgreSQL, MySQL, MSSQL).
+// (PostgreSQL, MySQL, MSSQL, Oracle).
 //
 // The classifier has NO knowledge of entities, constraint names, or
 // user-facing messages — that belongs to the call site.
@@ -38,18 +38,24 @@ isolated function classifySqlError(sql:Error err) returns SqlErrorCategory {
     // "duplicate key" / "duplicate entry"  — MySQL, MSSQL, PostgreSQL
     // "unique constraint" / "unique_violation"  — PostgreSQL
     // "unique index or primary key violation"   — H2 (used in tests and local dev)
+    // "ora-00001" ("unique constraint ... violated") — Oracle
     if msg.includes("duplicate key") || msg.includes("duplicate entry") ||
             msg.includes("unique constraint") || msg.includes("unique_violation") ||
-            msg.includes("unique index or primary key violation") {
+            msg.includes("unique index or primary key violation") ||
+            msg.includes("ora-00001") {
         return DUPLICATE_KEY;
     }
 
+    // "ora-12899" ("value too large for column") — Oracle
     if msg.includes("value too long") || msg.includes("data too long") ||
-            msg.includes("string or binary data would be truncated") {
+            msg.includes("string or binary data would be truncated") ||
+            msg.includes("value too large") || msg.includes("ora-12899") {
         return VALUE_TOO_LONG;
     }
 
-    if msg.includes("foreign key") || msg.includes("violates foreign key") {
+    // "ora-02291" (parent key not found) / "ora-02292" (child record found) — Oracle
+    if msg.includes("foreign key") || msg.includes("violates foreign key") ||
+            msg.includes("ora-02291") || msg.includes("ora-02292") {
         return FOREIGN_KEY_VIOLATION;
     }
 

@@ -21,6 +21,8 @@ import ballerinax/mssql;
 import ballerinax/mssql.driver as _;
 import ballerinax/mysql;
 import ballerinax/mysql.driver as _;
+import ballerinax/oracledb;
+import ballerinax/oracledb.driver as _;
 import ballerinax/postgresql;
 import ballerinax/postgresql.driver as _;
 
@@ -28,7 +30,8 @@ public enum DatabaseType {
     MYSQL = "mysql",
     H2 = "h2",
     MSSQL = "mssql",
-    POSTGRESQL = "postgresql"
+    POSTGRESQL = "postgresql",
+    ORACLE = "oracle"
 }
 
 public client class DatabaseConnectionManager {
@@ -57,6 +60,11 @@ public client class DatabaseConnectionManager {
             log:printInfo(string `Connecting to PostgreSQL: ${dbHost}:${dbPort}/${dbName}`);
             self.dbClient = check new postgresql:Client(host = dbHost, username = dbUser, password = dbPassword, database = dbName, port = dbPort, connectionPool = pool);
             log:printInfo("PostgreSQL Database initialized successfully.");
+        } else if dbType == ORACLE {
+            log:printInfo("Initializing Oracle Database...");
+            log:printInfo(string `Connecting to Oracle: ${dbHost}:${dbPort}/${dbName}`);
+            self.dbClient = check new oracledb:Client(host = dbHost, user = dbUser, password = dbPassword, database = dbName, port = dbPort, connectionPool = pool);
+            log:printInfo("Oracle Database initialized successfully.");
         } else {
             log:printInfo("Initializing H2 Database...");
             self.dbClient = check new jdbc:Client(string `jdbc:h2:file:./database/${dbName};MODE=MySQL;AUTO_SERVER=TRUE`, dbUser, dbPassword);

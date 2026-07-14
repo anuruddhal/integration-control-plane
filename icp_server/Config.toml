@@ -63,7 +63,7 @@ frontendJwtHMACSecret = "default-secret-key-at-least-32-characters-long-for-hs25
 # Set credentialsDbType to the database type used for credential storage (independent of the main database).
 # For PostgreSQL, credentials are stored in a "credentials" schema within the same database.
 # For H2, credentials are stored in a separate file (./database/credentials).
-# credentialsDbType = "h2"          # Options: h2, postgresql, mysql, mssql
+# credentialsDbType = "h2"          # Options: h2, postgresql, mysql, mssql, oracle
 # credentialsDbHost = "localhost"   # Not used for H2
 # credentialsDbPort = 5432          # Not used for H2
 # credentialsDbName = "credentials_db"
@@ -208,7 +208,7 @@ frontendJwtHMACSecret = "default-secret-key-at-least-32-characters-long-for-hs25
 # heartbeatTimeoutSeconds = 30
 # artifactsApiAllowInsecureTLS = true  # set false in production with proper trust
 # Primary database connection settings
-# Database type: h2 (in-memory), mysql, mssql, or postgresql. Default is h2
+# Database type: h2 (in-memory), mysql, mssql, postgresql, or oracle. Default is h2
 
 # MySQL Configuration
 # dbHost = "mysql-db"
@@ -242,6 +242,17 @@ frontendJwtHMACSecret = "default-secret-key-at-least-32-characters-long-for-hs25
 # minIdleConnections = 5
 # maxConnectionLifeTime = 1800.0
 # dbType = "mssql"
+
+# Oracle Database Configuration (19c+)
+# dbHost = "localhost"
+# dbPort = 1521
+# dbName = "ORCLPDB1"   # Oracle service name (PDB)
+# dbUser = "icp_user"
+# dbPassword = "my-secret-pw"
+# maxOpenConnections = 10
+# minIdleConnections = 5
+# maxConnectionLifeTime = 1800.0
+# dbType = "oracle"
 
 # =============================================================================
 # DATABASE SECRETS ALIAS CONFIGURATION
