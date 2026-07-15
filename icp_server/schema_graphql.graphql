@@ -574,7 +574,7 @@ type EndpointAttribute {
 # ============================================
 type InboundEndpoint {
   name: String!
-  protocol: String!
+  protocol: String
   sequence: String
   state: ArtifactState!
   statistics: String
