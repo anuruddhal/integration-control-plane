@@ -1000,7 +1000,7 @@ public type InboundEndpoint record {
         name: "inbound_name"
     }
     string name;
-    string protocol;
+    string? protocol;
     string sequence?;
     @sql:Column {
         name: "statistics"

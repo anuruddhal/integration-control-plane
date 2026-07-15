@@ -57,6 +57,21 @@ function buildHeartbeat(string runtimeId, string? runtimeName) returns types:Hea
     };
 }
 
+function buildMIHeartbeat(string runtimeId) returns types:Heartbeat {
+    types:Heartbeat heartbeat = buildHeartbeat(runtimeId, ());
+    heartbeat.runtimeType = "MI";
+    heartbeat.nodeInfo.platformName = "wso2-mi";
+    heartbeat.artifacts.inboundEndpoints = [{
+        name: "CustomInboundEP",
+        protocol: (),
+        sequence: "main",
+        state: "enabled",
+        tracing: "disabled"
+    }];
+    heartbeat.runtimeHash = "test-hash-mi-" + runtimeId;
+    return heartbeat;
+}
+
 function cleanupRuntime(string runtimeId) {
     error? result = storage:deleteRuntime(runtimeId);
     if result is error {
@@ -170,4 +185,22 @@ function testVmRestartCleansUpOfflineRecord() returns error? {
     test:assertNotEquals(newRuntime, (), "New runtime must be registered");
 
     cleanupRuntime(HB_RESTART_NEW_ID);
+}
+
+@test:Config {
+    groups: ["heartbeat", "mi-artifacts"]
+}
+function testMIInboundEndpointAcceptsNullProtocol() returns error? {
+    string runtimeId = "aa000001-test-test-test-000000000009";
+    cleanupRuntime(runtimeId);
+
+    types:HeartbeatResponse resp = check storage:processHeartbeat(
+            buildMIHeartbeat(runtimeId), preResolved = true);
+    test:assertTrue(resp.acknowledged, "MI heartbeat with custom inbound endpoint should be acknowledged");
+
+    types:InboundEndpoint[] inboundEndpoints = check storage:getInboundEndpointsForRuntime(runtimeId);
+    test:assertEquals(inboundEndpoints.length(), 1, "Expected one inbound endpoint to be stored");
+    test:assertEquals(inboundEndpoints[0].protocol, (), "Custom inbound endpoint protocol should remain null");
+
+    cleanupRuntime(runtimeId);
 }

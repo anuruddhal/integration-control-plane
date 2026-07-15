@@ -857,7 +857,7 @@ CREATE TRIGGER update_mi_endpoint_attribute_artifacts_updated_at BEFORE UPDATE O
 CREATE TABLE mi_inbound_endpoint_artifacts (
     runtime_id CHAR(36) NOT NULL,
     inbound_name VARCHAR(200) NOT NULL,
-    protocol VARCHAR(50) NOT NULL,
+    protocol VARCHAR(50),
     sequence VARCHAR(200) NULL,
     statistics VARCHAR(20) NULL,
     on_error VARCHAR(200) NULL,
