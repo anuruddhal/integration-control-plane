@@ -425,7 +425,9 @@ public isolated function getProxyServicesForRuntime(string runtimeId) returns ty
 type EndpointAttrRecordInDB record {|
     string endpoint_name;
     string attribute_name;
-    string attribute_value;
+    // Nullable: the column allows NULL, and Oracle additionally stores
+    // empty-string attribute values as NULL.
+    string? attribute_value;
 |};
 
 public isolated function getEndpointsForRuntime(string runtimeId) returns types:Endpoint[]|error {
@@ -458,7 +460,7 @@ public isolated function getEndpointsForRuntime(string runtimeId) returns types:
     map<types:EndpointAttribute[]> attrMap = {};
     foreach EndpointAttrRecordInDB a in attrRecords {
         types:EndpointAttribute[] existing = attrMap[a.endpoint_name] ?: [];
-        existing.push({name: a.attribute_name, value: a.attribute_value});
+        existing.push({name: a.attribute_name, value: a.attribute_value ?: ""});
         attrMap[a.endpoint_name] = existing;
     }
     log:printDebug(string `getEndpointsForRuntime(${runtimeId}): ${records.length()} endpoints, ${attrRecords.length()} attributes`);
