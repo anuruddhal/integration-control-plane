@@ -29,8 +29,25 @@ import { humanTaskQueryOptions, useCompleteHumanTask, useFailHumanTask, useHuman
 
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const;
 
-/** Maps a runtime human-task status to its display status (TERMINATED shows as REJECTED). */
-const taskDisplayStatus = (s?: string) => (s === 'TERMINATED' ? 'REJECTED' : s);
+/**
+ * Maps a runtime human-task status to its display status: a pending task's child workflow
+ * reports RUNNING (shown as PENDING), and TERMINATED shows as REJECTED.
+ */
+const taskDisplayStatus = (s?: string) => (s === 'RUNNING' ? 'PENDING' : s === 'TERMINATED' ? 'REJECTED' : s);
+
+/**
+ * Display name for a human task: the title when set, else the task name with its
+ * `<workflowType>.` qualifier stripped (runtime reports names as e.g. `placeOrderWorkflow.approveOrder`).
+ */
+function taskDisplayName(t?: HumanTask): string {
+  if (!t) return '';
+  if (t.title) return t.title;
+  if (t.taskName) {
+    const prefix = t.parentWorkflowType ? `${t.parentWorkflowType}.` : '';
+    return prefix && t.taskName.startsWith(prefix) ? t.taskName.slice(prefix.length) : t.taskName;
+  }
+  return t.taskId;
+}
 
 /** True when the task's completion result is the rejection sentinel sent by the Reject action. */
 function isRejectedTask(task?: HumanTask): boolean {
@@ -79,6 +96,7 @@ function TaskTable({ tasks, onOpen, showActionable }: { tasks: HumanTask[]; onOp
         <ListingTable.Row>
           <ListingTable.Cell>Task</ListingTable.Cell>
           <ListingTable.Cell>Workflow Name</ListingTable.Cell>
+          <ListingTable.Cell>Workflow ID</ListingTable.Cell>
           <ListingTable.Cell>Status</ListingTable.Cell>
           <ListingTable.Cell>Started</ListingTable.Cell>
           <ListingTable.Cell>{showActionable ? 'Open' : 'View'}</ListingTable.Cell>
@@ -89,7 +107,7 @@ function TaskTable({ tasks, onOpen, showActionable }: { tasks: HumanTask[]; onOp
           <ListingTable.Row key={t.taskId}>
             <ListingTable.Cell>
               <Stack direction="row" alignItems="center" gap={1}>
-                <Typography variant="body2">{t.title ?? t.taskName ?? t.taskId}</Typography>
+                <Typography variant="body2">{taskDisplayName(t)}</Typography>
                 {showActionable && t.canComplete === false && (
                   <Tooltip title="You do not have a matching role to complete this task">
                     <Chip label="Read-only" size="small" variant="outlined" sx={{ fontSize: 10, height: 18 }} />
@@ -99,6 +117,9 @@ function TaskTable({ tasks, onOpen, showActionable }: { tasks: HumanTask[]; onOp
             </ListingTable.Cell>
             <ListingTable.Cell>
               <Typography variant="body2">{t.parentWorkflowType ?? '—'}</Typography>
+            </ListingTable.Cell>
+            <ListingTable.Cell>
+              <Typography sx={{ fontFamily: 'monospace', fontSize: 12 }}>{t.parentWorkflowId ?? '—'}</Typography>
             </ListingTable.Cell>
             <ListingTable.Cell>
               <StatusChip status={taskDisplayStatus(t.status)} />
@@ -304,7 +325,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={sectionTitleSx}>
         <Stack direction="row" alignItems="center" gap={1.5}>
-          <span>{task?.title ?? task?.taskName ?? taskId}</span>
+          <span>{task ? taskDisplayName(task) : taskId}</span>
           {task?.status && <StatusChip status={isRejectedTask(task) ? 'REJECTED' : taskDisplayStatus(task.status)} />}
         </Stack>
       </DialogTitle>

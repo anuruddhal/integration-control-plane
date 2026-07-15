@@ -22,16 +22,21 @@ import { useMemo, useState } from 'react';
 import SearchField from '../SearchField';
 import SchemaFormFields from './SchemaFormFields';
 import WorkflowDetailDrawer from './WorkflowDetailDrawer';
-import { buildFormResult, formatTime, parseFormSchema, sectionTitleSx } from './helpers';
+import { buildFormResult, formatTime, parseFormSchema, sectionTitleSx, splitQualifiedName } from './helpers';
 import { SchemaDisclosure, StatusChip, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
 import { useRetryDecision, useRetryTasks, useStartWorkflow, useWorkflowDefinitions, useWorkflowInstances, type RetryDecision, type WorkflowDefinition } from '../../api/workflows';
 
 const WORKFLOW_STATUSES = ['All', 'RUNNING', 'COMPLETED', 'FAILED', 'TERMINATED', 'CANCELED', 'TIMED_OUT'];
+const RETRY_TASK_STATUSES = ['All', 'PENDING', 'COMPLETED', 'CANCELED', 'TERMINATED'];
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const;
 
 const statusLabel = (s: string) => (s === 'All' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' '));
+
+// Retry tasks report their child workflow's status, where a pending task is RUNNING.
+// Display it as PENDING to match the status filter values.
+const retryDisplayStatus = (s?: string) => (s === 'RUNNING' ? 'PENDING' : s);
 
 /** Converts a `datetime-local` input value to an ISO-8601 string, or undefined when empty/invalid. */
 const localToIso = (v: string): string | undefined => {
@@ -57,6 +62,79 @@ const TIME_PRESETS: { label: string; ms: number }[] = [
 ];
 
 type Toast = { severity: 'success' | 'error'; message: string } | null;
+
+// ── Shared filter controls (used by the Workflows and Retry Tasks views) ─────
+
+function StatusFilter({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) {
+  return <Autocomplete size="small" sx={{ width: 180 }} options={options} value={value} disableClearable getOptionLabel={statusLabel} onChange={(_, v) => onChange(v ?? 'All')} renderInput={(params) => <TextField {...params} label="Status" />} />;
+}
+
+function WorkflowNameFilter({ definitions, value, onChange }: { definitions: WorkflowDefinition[]; value: WorkflowDefinition | null; onChange: (v: WorkflowDefinition | null) => void }) {
+  return (
+    <Autocomplete
+      size="small"
+      sx={{ width: 240 }}
+      options={definitions}
+      value={value}
+      getOptionLabel={(d) => d.workflowType}
+      isOptionEqualToValue={(a, b) => a.workflowType === b.workflowType}
+      onChange={(_, v) => onChange(v)}
+      renderInput={(params) => <TextField {...params} label="Workflow name" placeholder="All workflows" />}
+    />
+  );
+}
+
+/** Owns the time-range dropdown (relative presets + custom bounds) and resolves it to ISO bounds. */
+function useTimeRangeFilter() {
+  const [timeRange, setTimeRange] = useState(ANY_TIME);
+  const [customStart, setCustomStart] = useState(() => toLocalInput(new Date(Date.now() - 24 * 3600_000)));
+  const [customEnd, setCustomEnd] = useState(() => toLocalInput(new Date()));
+
+  // Memoized so a relative preset snapshots "now" only when the selection changes —
+  // recomputing every render would change the query key continuously and refetch in a loop.
+  const bounds = useMemo<{ startTimeFrom?: string; startTimeTo?: string }>(() => {
+    if (timeRange === ANY_TIME) return {};
+    if (timeRange === CUSTOM_RANGE) return { startTimeFrom: localToIso(customStart), startTimeTo: localToIso(customEnd) };
+    const preset = TIME_PRESETS.find((p) => p.label === timeRange);
+    if (!preset) return {};
+    const now = Date.now();
+    return { startTimeFrom: new Date(now - preset.ms).toISOString(), startTimeTo: new Date(now).toISOString() };
+  }, [timeRange, customStart, customEnd]);
+
+  const controls = (
+    <>
+      <Select
+        size="small"
+        sx={{ minWidth: 170 }}
+        value={timeRange}
+        onChange={(e) => {
+          const v = e.target.value as string;
+          setTimeRange(v);
+          if (v === CUSTOM_RANGE) {
+            setCustomStart(toLocalInput(new Date(Date.now() - 24 * 3600_000)));
+            setCustomEnd(toLocalInput(new Date()));
+          }
+        }}
+        inputProps={{ 'aria-label': 'Time range' }}>
+        <MenuItem value={ANY_TIME}>{ANY_TIME}</MenuItem>
+        {TIME_PRESETS.map((p) => (
+          <MenuItem key={p.label} value={p.label}>
+            {p.label}
+          </MenuItem>
+        ))}
+        <MenuItem value={CUSTOM_RANGE}>{CUSTOM_RANGE}</MenuItem>
+      </Select>
+      {timeRange === CUSTOM_RANGE && (
+        <>
+          <TextField label="Start from" type="datetime-local" size="small" value={customStart} onChange={(e) => setCustomStart(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+          <TextField label="End on" type="datetime-local" size="small" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+        </>
+      )}
+    </>
+  );
+
+  return { bounds, controls, active: timeRange !== ANY_TIME, reset: () => setTimeRange(ANY_TIME) };
+}
 
 export default function AdminPortal({ componentId, environmentId, initialWorkflowType }: WorkflowScope & { initialWorkflowType?: string }) {
   const scope: WorkflowScope = { componentId, environmentId };
@@ -95,37 +173,23 @@ function WorkflowsAdmin({ scope, onToast, initialWorkflowType }: { scope: Workfl
   // matches options by workflowType, so a minimal {workflowType} object selects the right option.
   const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(initialWorkflowType ? { workflowType: initialWorkflowType } : null);
   const [search, setSearch] = useState('');
-  const [timeRange, setTimeRange] = useState(ANY_TIME);
-  const [customStart, setCustomStart] = useState(() => toLocalInput(new Date(Date.now() - 24 * 3600_000)));
-  const [customEnd, setCustomEnd] = useState(() => toLocalInput(new Date()));
+  const timeFilter = useTimeRangeFilter();
   const [startOpen, setStartOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
   const { data: definitions = [] } = useWorkflowDefinitions(scope);
 
-  // Resolve the selected range to absolute ISO bounds. Memoized so a relative preset
-  // snapshots "now" only when the selection changes — recomputing every render would
-  // change the query key continuously and refetch in a loop.
-  const timeBounds = useMemo<{ startTimeFrom?: string; startTimeTo?: string }>(() => {
-    if (timeRange === ANY_TIME) return {};
-    if (timeRange === CUSTOM_RANGE) return { startTimeFrom: localToIso(customStart), startTimeTo: localToIso(customEnd) };
-    const preset = TIME_PRESETS.find((p) => p.label === timeRange);
-    if (!preset) return {};
-    const now = Date.now();
-    return { startTimeFrom: new Date(now - preset.ms).toISOString(), startTimeTo: new Date(now).toISOString() };
-  }, [timeRange, customStart, customEnd]);
-
   const filters = {
     status: status === 'All' ? undefined : status,
     workflowType: selectedType?.workflowType || undefined,
     workflowId: search || undefined,
-    startTimeFrom: timeBounds.startTimeFrom,
-    startTimeTo: timeBounds.startTimeTo,
+    startTimeFrom: timeFilter.bounds.startTimeFrom,
+    startTimeTo: timeFilter.bounds.startTimeTo,
     limit: 50,
   };
   const { data: page, isLoading, error, refetch, isFetching } = useWorkflowInstances(scope, filters);
   const items = page?.items ?? [];
-  const hasFilters = status !== 'All' || !!selectedType || !!search || timeRange !== ANY_TIME;
+  const hasFilters = status !== 'All' || !!selectedType || !!search || timeFilter.active;
 
   return (
     <>
@@ -145,44 +209,9 @@ function WorkflowsAdmin({ scope, onToast, initialWorkflowType }: { scope: Workfl
       </Stack>
 
       <Stack direction="row" gap={1.5} sx={{ mb: 2 }} flexWrap="wrap" alignItems="center">
-        <Autocomplete size="small" sx={{ width: 180 }} options={WORKFLOW_STATUSES} value={status} disableClearable getOptionLabel={statusLabel} onChange={(_, v) => setStatus(v ?? 'All')} renderInput={(params) => <TextField {...params} label="Status" />} />
-        <Autocomplete
-          size="small"
-          sx={{ width: 240 }}
-          options={definitions}
-          value={selectedType}
-          getOptionLabel={(d) => d.workflowType}
-          isOptionEqualToValue={(a, b) => a.workflowType === b.workflowType}
-          onChange={(_, v) => setSelectedType(v)}
-          renderInput={(params) => <TextField {...params} label="Workflow name" placeholder="All workflows" />}
-        />
-        <Select
-          size="small"
-          sx={{ minWidth: 170 }}
-          value={timeRange}
-          onChange={(e) => {
-            const v = e.target.value as string;
-            setTimeRange(v);
-            if (v === CUSTOM_RANGE) {
-              setCustomStart(toLocalInput(new Date(Date.now() - 24 * 3600_000)));
-              setCustomEnd(toLocalInput(new Date()));
-            }
-          }}
-          inputProps={{ 'aria-label': 'Time range' }}>
-          <MenuItem value={ANY_TIME}>{ANY_TIME}</MenuItem>
-          {TIME_PRESETS.map((p) => (
-            <MenuItem key={p.label} value={p.label}>
-              {p.label}
-            </MenuItem>
-          ))}
-          <MenuItem value={CUSTOM_RANGE}>{CUSTOM_RANGE}</MenuItem>
-        </Select>
-        {timeRange === CUSTOM_RANGE && (
-          <>
-            <TextField label="Start from" type="datetime-local" size="small" value={customStart} onChange={(e) => setCustomStart(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-            <TextField label="End on" type="datetime-local" size="small" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-          </>
-        )}
+        <StatusFilter options={WORKFLOW_STATUSES} value={status} onChange={setStatus} />
+        <WorkflowNameFilter definitions={definitions} value={selectedType} onChange={setSelectedType} />
+        {timeFilter.controls}
         {hasFilters && (
           <Button
             size="small"
@@ -190,7 +219,7 @@ function WorkflowsAdmin({ scope, onToast, initialWorkflowType }: { scope: Workfl
               setStatus('All');
               setSelectedType(null);
               setSearch('');
-              setTimeRange(ANY_TIME);
+              timeFilter.reset();
             }}>
             Clear
           </Button>
@@ -350,11 +379,29 @@ function StartWorkflowDialog({ scope, onClose, onToast }: { scope: WorkflowScope
 
 function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast) => void }) {
   const [search, setSearch] = useState('');
-  const { data: page, isLoading, error, refetch, isFetching } = useRetryTasks(scope, { parentWorkflowId: search || undefined, limit: 50 });
+  const [status, setStatus] = useState('All');
+  const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(null);
+  const timeFilter = useTimeRangeFilter();
+  const { data: definitions = [] } = useWorkflowDefinitions(scope);
+  const {
+    data: page,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useRetryTasks(scope, {
+    status: status === 'All' ? undefined : status,
+    parentWorkflowId: search || undefined,
+    startTimeFrom: timeFilter.bounds.startTimeFrom,
+    startTimeTo: timeFilter.bounds.startTimeTo,
+    limit: 50,
+  });
   const decide = useRetryDecision(scope);
   const [inputTaskId, setInputTaskId] = useState<string | null>(null);
 
-  const items = page?.items ?? [];
+  // The retry-task API has no workflow-name filter; the qualified task name carries it, so filter client-side.
+  const items = (page?.items ?? []).filter((t) => !selectedType || splitQualifiedName(t.taskName ?? t.activityName).workflow === selectedType.workflowType);
+  const hasFilters = status !== 'All' || !!selectedType || !!search || timeFilter.active;
 
   const runDecision = (taskId: string, decision: RetryDecision, parsedInput?: unknown) => {
     decide.mutate(
@@ -369,13 +416,31 @@ function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t
   return (
     <>
       <Stack direction="row" alignItems="center" gap={1.5} sx={{ mb: 2 }}>
-        <SearchField value={search} onChange={setSearch} placeholder="Filter by parent workflow ID" sx={{ width: 320 }} />
+        <SearchField value={search} onChange={setSearch} placeholder="Search by workflow ID" sx={{ width: 320 }} />
         <Box sx={{ flex: 1 }} />
         <Tooltip title="Refresh">
           <IconButton size="small" onClick={() => refetch()} aria-label="Refresh">
             <RefreshCw size={16} style={{ animation: isFetching ? 'spin 1s linear infinite' : 'none' }} />
           </IconButton>
         </Tooltip>
+      </Stack>
+
+      <Stack direction="row" gap={1.5} sx={{ mb: 2 }} flexWrap="wrap" alignItems="center">
+        <StatusFilter options={RETRY_TASK_STATUSES} value={status} onChange={setStatus} />
+        <WorkflowNameFilter definitions={definitions} value={selectedType} onChange={setSelectedType} />
+        {timeFilter.controls}
+        {hasFilters && (
+          <Button
+            size="small"
+            onClick={() => {
+              setStatus('All');
+              setSelectedType(null);
+              setSearch('');
+              timeFilter.reset();
+            }}>
+            Clear
+          </Button>
+        )}
       </Stack>
 
       {isLoading ? (
@@ -389,44 +454,53 @@ function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t
           <ListingTable.Head>
             <ListingTable.Row>
               <ListingTable.Cell>Task</ListingTable.Cell>
-              <ListingTable.Cell>Parent Workflow</ListingTable.Cell>
+              <ListingTable.Cell>Workflow Name</ListingTable.Cell>
+              <ListingTable.Cell>Workflow ID</ListingTable.Cell>
               <ListingTable.Cell>Status</ListingTable.Cell>
               <ListingTable.Cell>Started</ListingTable.Cell>
               <ListingTable.Cell>Actions</ListingTable.Cell>
             </ListingTable.Row>
           </ListingTable.Head>
           <ListingTable.Body>
-            {items.map((t) => (
-              <ListingTable.Row key={t.taskId}>
-                <ListingTable.Cell>{t.taskName ?? t.taskId}</ListingTable.Cell>
-                <ListingTable.Cell>
-                  <Typography sx={{ fontFamily: 'monospace', fontSize: 12 }}>{t.parentWorkflowId ?? '—'}</Typography>
-                </ListingTable.Cell>
-                <ListingTable.Cell>
-                  <StatusChip status={t.status} />
-                </ListingTable.Cell>
-                <ListingTable.Cell>{formatTime(t.startTime)}</ListingTable.Cell>
-                <ListingTable.Cell>
-                  <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
-                    <Stack direction="row" gap={0.5}>
-                      <Tooltip title="Retry with original input">
-                        <IconButton size="small" disabled={decide.isPending} onClick={() => runDecision(t.taskId, 'retry')} aria-label="Retry">
-                          <RotateCcw size={16} />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Retry with modified input">
-                        <IconButton size="small" disabled={decide.isPending} onClick={() => setInputTaskId(t.taskId)} aria-label="Retry with input">
-                          <Plus size={16} />
-                        </IconButton>
-                      </Tooltip>
-                      <Button size="small" color="error" disabled={decide.isPending} onClick={() => runDecision(t.taskId, 'fail')}>
-                        Fail
-                      </Button>
-                    </Stack>
-                  </Authorized>
-                </ListingTable.Cell>
-              </ListingTable.Row>
-            ))}
+            {items.map((t) => {
+              const qualified = splitQualifiedName(t.taskName ?? t.activityName);
+              return (
+                <ListingTable.Row key={t.taskId}>
+                  <ListingTable.Cell>
+                    <Typography variant="body2">{qualified.task ?? t.taskId}</Typography>
+                  </ListingTable.Cell>
+                  <ListingTable.Cell>
+                    <Typography variant="body2">{qualified.workflow ?? '—'}</Typography>
+                  </ListingTable.Cell>
+                  <ListingTable.Cell>
+                    <Typography sx={{ fontFamily: 'monospace', fontSize: 12 }}>{t.parentWorkflowId ?? '—'}</Typography>
+                  </ListingTable.Cell>
+                  <ListingTable.Cell>
+                    <StatusChip status={retryDisplayStatus(t.status)} />
+                  </ListingTable.Cell>
+                  <ListingTable.Cell>{formatTime(t.startTime)}</ListingTable.Cell>
+                  <ListingTable.Cell>
+                    <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+                      <Stack direction="row" gap={0.5}>
+                        <Tooltip title="Retry with original input">
+                          <IconButton size="small" disabled={decide.isPending} onClick={() => runDecision(t.taskId, 'retry')} aria-label="Retry">
+                            <RotateCcw size={16} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Retry with modified input">
+                          <IconButton size="small" disabled={decide.isPending} onClick={() => setInputTaskId(t.taskId)} aria-label="Retry with input">
+                            <Plus size={16} />
+                          </IconButton>
+                        </Tooltip>
+                        <Button size="small" color="error" disabled={decide.isPending} onClick={() => runDecision(t.taskId, 'fail')}>
+                          Fail
+                        </Button>
+                      </Stack>
+                    </Authorized>
+                  </ListingTable.Cell>
+                </ListingTable.Row>
+              );
+            })}
           </ListingTable.Body>
         </ListingTable>
       )}

@@ -39,6 +39,19 @@ export function jsonPretty(value: unknown): string {
 /** Shared heading style for workflow cards, sections, and form/dialog titles: bold, muted gray. */
 export const sectionTitleSx = { fontWeight: 700, color: 'text.secondary' } as const;
 
+/**
+ * Splits a qualified task/activity name like `placeOrderWorkflow.approveOrder` (optionally
+ * prefixed `workflow-`) into its workflow and task parts. Names without a qualifier map to
+ * `{ task: name }`.
+ */
+export function splitQualifiedName(name?: string): { workflow?: string; task?: string } {
+  if (!name) return {};
+  const clean = name.replace(/^workflow-/, '');
+  const idx = clean.indexOf('.');
+  if (idx <= 0) return { task: clean };
+  return { workflow: clean.slice(0, idx), task: clean.slice(idx + 1) };
+}
+
 /** Converts a key like `orderId` or `error_code` to a display label like `Order Id`. */
 export function humanizeKey(key: string): string {
   return key

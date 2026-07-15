@@ -67,6 +67,7 @@ export interface HumanTask {
 export interface RetryTask {
   taskId: string;
   taskName?: string;
+  activityName?: string;
   parentWorkflowId?: string;
   status?: string;
   startTime?: string;
@@ -278,6 +279,8 @@ export interface RetryTaskFilters {
   status?: string;
   parentWorkflowId?: string;
   taskName?: string;
+  startTimeFrom?: string;
+  startTimeTo?: string;
   limit?: number;
   pageToken?: string;
 }
