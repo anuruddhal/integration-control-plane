@@ -15,12 +15,18 @@ IF COL_LENGTH('runtimes', 'callback_url') IS NULL
     ALTER TABLE runtimes ADD callback_url NVARCHAR(500) NULL;
 GO
 
--- 2. Allow the 'Workflow-Management' permission domain: drop whatever CHECK currently
---    guards permission_domain (fresh installs name it automatically), re-add it named.
+-- 2. Allow the 'Workflow-Management' permission domain: drop every CHECK currently
+--    guarding permission_domain (fresh installs name it automatically, and more than
+--    one may exist), then re-add a single named constraint.
 DECLARE @cn NVARCHAR(256);
-SELECT @cn = name FROM sys.check_constraints
+SELECT @cn = MIN(name) FROM sys.check_constraints
     WHERE parent_object_id = OBJECT_ID('permissions') AND definition LIKE '%permission_domain%';
-IF @cn IS NOT NULL EXEC('ALTER TABLE permissions DROP CONSTRAINT ' + @cn);
+WHILE @cn IS NOT NULL
+BEGIN
+    EXEC('ALTER TABLE permissions DROP CONSTRAINT [' + @cn + ']');
+    SELECT @cn = MIN(name) FROM sys.check_constraints
+        WHERE parent_object_id = OBJECT_ID('permissions') AND definition LIKE '%permission_domain%';
+END
 GO
 
 ALTER TABLE permissions ADD CONSTRAINT chk_permission_domain CHECK (

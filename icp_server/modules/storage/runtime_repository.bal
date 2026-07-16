@@ -297,7 +297,8 @@ public isolated function getListenersForRuntime(string runtimeId) returns types:
 // Resolve the workflow management service target (callbackUrl) for a component+environment,
 // along with the org-secret key id the runtime registered with — the workflow proxy uses it
 // to reconstruct the runtime's management API key.
-// Prefers a RUNNING runtime; returns () when none of the matching runtimes reported a callbackUrl.
+// Only a RUNNING runtime's callbackUrl is used — a stopped/offline runtime's URL is stale.
+// Returns () when no running runtime reported a callbackUrl (proxy surfaces this as 503).
 public isolated function getRuntimeWorkflowTarget(string componentId, string environmentId) returns types:WorkflowTarget?|error {
     stream<record {|string? callback_url; string? key_id; string status;|}, sql:Error?> rs = dbClient->query(`
         SELECT callback_url, key_id, status
@@ -307,19 +308,11 @@ public isolated function getRuntimeWorkflowTarget(string componentId, string env
     `);
     record {|string? callback_url; string? key_id; string status;|}[] rows = check from var r in rs
         select r;
-    if rows.length() == 0 {
-        return ();
-    }
-    // Prefer a RUNNING runtime's callbackUrl; fall back to the first available.
     foreach var r in rows {
         string? callbackUrl = r.callback_url;
         if r.status == "RUNNING" && callbackUrl is string {
             return {callbackUrl, keyId: r.key_id};
         }
-    }
-    string? callbackUrl = rows[0].callback_url;
-    if callbackUrl is string {
-        return {callbackUrl, keyId: rows[0].key_id};
     }
     return ();
 }

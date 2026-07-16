@@ -58,6 +58,7 @@ import Authorized from '../components/Authorized';
 import { Permissions } from '../constants/permissions';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import type { OrgScope } from '../nav';
+import { workflowManagementToml } from '../utils/runtimeToml';
 
 const drawerSx = {
   '& .MuiDrawer-paper': { width: '45%', maxWidth: 560, minWidth: 360, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' },
@@ -169,12 +170,7 @@ secret = "${secret}"
   if (!workflowMgt) return base;
   return `${base}
 
-[ballerina.workflow.management]
-enableManagementApi = true
-enableApiKey = true
-apiKeyValue = "${secret}"
-apiKeyHeader = "X-API-KEY"
-enableBasicAuth = false`;
+${workflowManagementToml(secret)}`;
 }
 
 function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () => void }) {
@@ -214,7 +210,10 @@ function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () =>
             <Alert severity="warning" sx={{ mb: 2 }}>
               <strong>The secret will be shown once — copy it before closing.</strong>
             </Alert>
-            <FormControlLabel control={<Switch checked={workflowMgt} onChange={(e) => setWorkflowMgt(e.target.checked)} />} label="Enable Workflow Management" sx={{ display: 'flex', mb: 2 }} />
+            <FormControlLabel control={<Switch checked={workflowMgt} onChange={(e) => setWorkflowMgt(e.target.checked)} />} label="Enable Workflow Management" sx={{ display: 'flex' }} />
+            <DialogContentText variant="caption" sx={{ mb: 2, display: 'block' }}>
+              Applies to Default (BI) runtimes only — the MI configuration is not affected.
+            </DialogContentText>
             <Button variant="contained" onClick={handleGenerate} disabled={createMutation.isPending}>
               {createMutation.isPending ? 'Generating...' : 'Generate Secret'}
             </Button>

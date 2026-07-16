@@ -36,9 +36,9 @@ import ballerina/log;
 // secret the runtime registered with (configured as `apiKeyValue` in the runtime's
 // `[ballerina.workflow.management]` section).
 
-// Allow self-signed certs when the callbackUrl is https (suitable for
-// K8s-internal / dev). Set to false in production with a trusted chain.
-configurable boolean workflowProxyAllowInsecureTLS = true;
+// Certificate validation for https callbackUrls is on by default. Set to true only to
+// deliberately accept self-signed certs (K8s-internal / dev without a trusted chain).
+configurable boolean workflowProxyAllowInsecureTLS = false;
 
 // Request timeout (seconds) for calls to the runtime workflow service.
 configurable decimal workflowProxyTimeout = 30;
@@ -55,6 +55,12 @@ isolated function getWorkflowClient(string baseUrl) returns http:Client|error {
     http:ClientConfiguration cfg = {timeout: workflowProxyTimeout};
     if baseUrl.startsWith("https") && workflowProxyAllowInsecureTLS {
         cfg.secureSocket = {enable: false};
+    }
+    if !baseUrl.startsWith("https") {
+        // Plain-http callback URLs send the runtime's management API key unencrypted.
+        // Tolerated for local/dev runtimes; use an https callbackUrl in production.
+        log:printWarn("Workflow runtime callback URL uses plain http; the management API key "
+                + "will be sent unencrypted. Use an https callbackUrl in production.", callbackUrl = baseUrl);
     }
     http:Client newClient = check new (baseUrl, cfg);
     lock {

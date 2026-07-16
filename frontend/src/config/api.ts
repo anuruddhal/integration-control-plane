@@ -98,6 +98,7 @@ function validateConfig(config: ApiConfig): void {
   if (!config.graphqlUrl) missing.push('VITE_GRAPHQL_URL');
   if (!config.authBaseUrl) missing.push('VITE_AUTH_BASE_URL');
   if (!config.observabilityUrl) missing.push('VITE_OBSERVABILITY_URL');
+  if (!config.workflowUrl) missing.push('VITE_WORKFLOW_URL');
 
   if (missing.length > 0) {
     console.warn(`Warning: The following configuration values are not set: ${missing.join(', ')}. ` + 'Using default values.');
@@ -119,4 +120,4 @@ export const getIcpVersion = (): string => window.API_CONFIG.version;
  * Builds a URL to the workflow management proxy for a given component+environment.
  * `subpath` is the runtime-side workflow API path (e.g. "workflows?status=RUNNING").
  */
-export const workflowApiUrl = (componentId: string, environmentId: string, subpath: string): string => `${window.API_CONFIG.workflowUrl}/${encodeURIComponent(componentId)}/${encodeURIComponent(environmentId)}/${subpath}`;
+export const workflowApiUrl = (componentId: string, environmentId: string, subpath: string): string => `${window.API_CONFIG.workflowUrl.replace(/\/+$/, '')}/${encodeURIComponent(componentId)}/${encodeURIComponent(environmentId)}/${subpath}`;

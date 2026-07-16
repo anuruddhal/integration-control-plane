@@ -54,6 +54,7 @@ import { useProjectByHandler, useEnvironments, useComponentByHandler, useCompone
 import { useCreateOrgSecret, useDeleteRuntime, useRevokeOrgSecret } from '../api/mutations';
 import { hasComponent, type ProjectScope, type ComponentScope } from '../nav';
 import { formatDistanceToNow } from '../utils/time';
+import { workflowManagementToml } from '../utils/runtimeToml';
 import Authorized from '../components/Authorized';
 import { Permissions } from '../constants/permissions';
 import { useAccessControl } from '../contexts/AccessControlContext';
@@ -94,12 +95,7 @@ secret = "${secret}"
   if (!workflowMgt) return base;
   return `${base}
 
-[ballerina.workflow.management]
-enableManagementApi = true
-enableApiKey = true
-apiKeyValue = "${secret}"
-apiKeyHeader = "X-API-KEY"
-enableBasicAuth = false`;
+${workflowManagementToml(secret)}`;
 }
 
 function AddRuntimeModal({

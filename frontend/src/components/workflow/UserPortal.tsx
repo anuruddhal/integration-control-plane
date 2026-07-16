@@ -236,7 +236,7 @@ function DetailRow({ label, children }: { label: string; children: ReactNode }) 
 }
 
 function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { scope: WorkflowScope; taskId: string; actionable?: boolean; onClose: () => void; onToast: (t: Toast) => void }) {
-  const { data: task, isLoading } = useHumanTask(scope, taskId);
+  const { data: task, isLoading, error: taskError } = useHumanTask(scope, taskId);
   const complete = useCompleteHumanTask(scope);
   const fail = useFailHumanTask(scope);
   const [mode, setMode] = useState<'view' | 'complete' | 'fail'>('view');
@@ -332,6 +332,8 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
       <DialogContent>
         {isLoading ? (
           <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
+        ) : taskError || !task ? (
+          <Typography sx={emptySx}>{taskError instanceof Error ? taskError.message : 'Failed to load task details.'}</Typography>
         ) : (
           <Stack gap={2} sx={{ mt: 1 }}>
             {task?.description && (
@@ -412,7 +414,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
         <Button onClick={onClose}>Close</Button>
         {/* Acting on human tasks requires the workflow manage-human-tasks permission. */}
         <Authorized permissions={[Permissions.WORKFLOW_MANAGE_HUMAN_TASKS]}>
-          {actionable && mode === 'view' && (
+          {actionable && !!task && mode === 'view' && (
             <>
               <Button color="warning" disabled={busy} onClick={() => setMode('fail')}>
                 Reject
