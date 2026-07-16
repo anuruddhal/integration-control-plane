@@ -903,7 +903,6 @@ public type Workflow record {
     int workerCount = 0;
     string? inputSchema = ();
     ArtifactState state = "enabled"; // derived from isActive for the UI status chip
-    string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };
 

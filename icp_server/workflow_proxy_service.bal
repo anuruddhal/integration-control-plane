@@ -110,8 +110,11 @@ isolated function fetchWorkflowDefinitions(string componentId, string environmen
     http:Client wfClient = check getWorkflowClient(target.callbackUrl);
     http:Response resp = check wfClient->get("/workflow/definitions", headers);
     if resp.statusCode != 200 {
+        // Keep the upstream payload out of the client-facing error; log it for diagnosis.
         json|error errBody = resp.getJsonPayload();
-        return error("Workflow definitions request failed: " + (errBody is json ? errBody.toString() : "status " + resp.statusCode.toString()));
+        log:printError("Workflow definitions request failed", statusCode = resp.statusCode,
+                upstreamBody = errBody is json ? errBody.toString() : "");
+        return error(string `Workflow definitions request failed (status ${resp.statusCode})`);
     }
     json payload = check resp.getJsonPayload();
     json definitionsJson = check payload.definitions;
@@ -119,8 +122,6 @@ isolated function fetchWorkflowDefinitions(string componentId, string environmen
 
     // Definitions are shared across the component+environment's runtimes; attach them for the UI.
     types:Runtime[] runtimes = check storage:getRuntimes((), (), environmentId, (), componentId);
-    string[] runtimeIds = from var r in runtimes
-        select r.runtimeId;
     types:ArtifactRuntimeInfo[] runtimeInfos = from var r in runtimes
         select {runtimeId: r.runtimeId, runtimeName: r?.runtimeName, status: r.status};
 
@@ -133,7 +134,6 @@ isolated function fetchWorkflowDefinitions(string componentId, string environmen
             workerCount: d.workerCount ?: 0,
             inputSchema: d?.inputSchema,
             state: active ? types:ENABLED : types:DISABLED,
-            runtimeIds: runtimeIds,
             runtimes: runtimeInfos
         });
     }

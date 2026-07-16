@@ -285,10 +285,25 @@ export interface RetryTaskFilters {
   pageToken?: string;
 }
 
+// Retry-task pages are fetched and combined up to this many pages so client-side
+// filters (e.g. by workflow name, which the runtime API cannot filter on) see the
+// full set rather than only the first page.
+const RETRY_TASK_MAX_PAGES = 20;
+
 export function useRetryTasks(s: Scope, filters: RetryTaskFilters) {
   return useQuery({
     queryKey: ['wf', 'retry-tasks', s.componentId, s.environmentId, filters],
-    queryFn: () => wfRequest<Page<RetryTask>>(s.componentId, s.environmentId, `retry-tasks${buildQuery({ ...filters })}`),
+    queryFn: async (): Promise<Page<RetryTask>> => {
+      const items: RetryTask[] = [];
+      let pageToken: string | undefined;
+      for (let i = 0; i < RETRY_TASK_MAX_PAGES; i++) {
+        const page = await wfRequest<Page<RetryTask>>(s.componentId, s.environmentId, `retry-tasks${buildQuery({ ...filters, pageToken })}`);
+        items.push(...(page.items ?? []));
+        if (!page.hasMore || !page.nextPageToken) return { items, hasMore: false };
+        pageToken = page.nextPageToken;
+      }
+      return { items, hasMore: true };
+    },
     enabled: enabledFor(s),
   });
 }

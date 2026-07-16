@@ -981,8 +981,9 @@ service /graphql on graphqlListener {
             envUuid: environmentId
         };
 
-        // Verify user has view, edit, or manage permission
-        if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
+        // Verify user has the workflow-specific view (or manage) permission — same rule as
+        // the workflow proxy's browse paths.
+        if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_WORKFLOW_VIEW_WORKFLOWS, auth:PERMISSION_WORKFLOW_MANAGE_WORKFLOWS], scope) {
             log:printWarn("Attempt to access component workflows without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
             return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }

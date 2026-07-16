@@ -314,7 +314,6 @@ type Workflow {
   workerCount: Int!
   inputSchema: String
   state: ArtifactState!
-  runtimeIds: [String!]
   runtimes: [ArtifactRuntimeInfo]
 }
 

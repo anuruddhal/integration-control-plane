@@ -406,7 +406,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
             </Authorized>
           )}
           {showRuntimesButton && (
-            <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerTab('Runtimes')} sx={{ ml: showSourceButton || showParametersButton || showWsdlButton || showListenerToggle ? 0 : 'auto' }}>
+            <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerTab('Runtimes')} sx={{ ml: showSourceButton || showParametersButton || showWsdlButton || showListenerToggle || showInstancesButton ? 0 : 'auto' }}>
               View Runtimes
             </Button>
           )}
@@ -466,11 +466,10 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
       </Snackbar>
       {startWorkflowOpen && <StartWorkflowDialog scope={{ componentId, environmentId: envId }} initialWorkflowType={artifactName} onClose={() => setStartWorkflowOpen(false)} onToast={setWorkflowToast} />}
       <Snackbar open={workflowToast !== null} autoHideDuration={4000} onClose={() => setWorkflowToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        {workflowToast ? (
-          <Alert severity={workflowToast.severity} onClose={() => setWorkflowToast(null)} sx={{ width: '100%' }}>
-            {workflowToast.message}
-          </Alert>
-        ) : undefined}
+        {/* Alert stays mounted so the Snackbar's exit transition can play after the toast clears. */}
+        <Alert severity={workflowToast?.severity ?? 'success'} onClose={() => setWorkflowToast(null)} sx={{ width: '100%' }}>
+          {workflowToast?.message}
+        </Alert>
       </Snackbar>
     </>
   );
