@@ -425,7 +425,9 @@ public isolated function getProxyServicesForRuntime(string runtimeId) returns ty
 type EndpointAttrRecordInDB record {|
     string endpoint_name;
     string attribute_name;
-    string attribute_value;
+    // Nullable: the column allows NULL, and Oracle additionally stores
+    // empty-string attribute values as NULL.
+    string? attribute_value;
 |};
 
 public isolated function getEndpointsForRuntime(string runtimeId) returns types:Endpoint[]|error {
@@ -458,7 +460,7 @@ public isolated function getEndpointsForRuntime(string runtimeId) returns types:
     map<types:EndpointAttribute[]> attrMap = {};
     foreach EndpointAttrRecordInDB a in attrRecords {
         types:EndpointAttribute[] existing = attrMap[a.endpoint_name] ?: [];
-        existing.push({name: a.attribute_name, value: a.attribute_value});
+        existing.push({name: a.attribute_name, value: a.attribute_value ?: ""});
         attrMap[a.endpoint_name] = existing;
     }
     log:printDebug(string `getEndpointsForRuntime(${runtimeId}): ${records.length()} endpoints, ${attrRecords.length()} attributes`);
@@ -600,11 +602,22 @@ public isolated function getTemplatesForRuntime(string runtimeId) returns types:
 // Get message stores for a specific runtime
 public isolated function getMessageStoresForRuntime(string runtimeId) returns types:MessageStore[]|error {
     types:MessageStore[] storeList = [];
-    stream<types:MessageStoreRecordInDB, sql:Error?> storeStream = dbClient->query(`
-        SELECT store_name, store_type, size, composite_app
-        FROM mi_message_store_artifacts 
-        WHERE runtime_id = ${runtimeId}
-    `);
+    sql:ParameterizedQuery storeQuery;
+    if isOracle() {
+        // SIZE is a reserved word in Oracle; the column is created as quoted "SIZE"
+        storeQuery = `
+            SELECT store_name, store_type, "SIZE" AS "size", composite_app
+            FROM mi_message_store_artifacts
+            WHERE runtime_id = ${runtimeId}
+        `;
+    } else {
+        storeQuery = `
+            SELECT store_name, store_type, size, composite_app
+            FROM mi_message_store_artifacts
+            WHERE runtime_id = ${runtimeId}
+        `;
+    }
+    stream<types:MessageStoreRecordInDB, sql:Error?> storeStream = dbClient->query(storeQuery);
 
     check from types:MessageStoreRecordInDB storeRecord in storeStream
         do {
@@ -971,6 +984,17 @@ public isolated function upsertLogLevel(string runtimeId, string componentName, 
             WHEN NOT MATCHED THEN
                 INSERT (runtime_id, component_name, log_level)
                 VALUES (source.runtime_id, source.component_name, source.log_level);
+        `);
+    } else if dbType == ORACLE {
+        _ = check dbClient->execute(`
+            MERGE INTO bi_runtime_log_levels target
+            USING (SELECT ${runtimeId} AS runtime_id, ${componentName} AS component_name, ${logLevel} AS log_level FROM dual) source
+            ON (target.runtime_id = source.runtime_id AND target.component_name = source.component_name)
+            WHEN MATCHED THEN
+                UPDATE SET log_level = source.log_level, updated_at = CURRENT_TIMESTAMP
+            WHEN NOT MATCHED THEN
+                INSERT (runtime_id, component_name, log_level)
+                VALUES (source.runtime_id, source.component_name, source.log_level)
         `);
     } else if dbType == POSTGRESQL {
         _ = check dbClient->execute(`

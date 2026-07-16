@@ -99,6 +99,15 @@ type ObservedStateRow record {|
     boolean optimistic;
 |};
 
+// Oracle: NUMBER(1) cannot map to a boolean field — read as int and convert
+type OracleObservedStateRow record {|
+    string artifact_name;
+    string artifact_type;
+    string state_key;
+    string? state_value;
+    int optimistic;
+|};
+
 // Returns reconcile-derived state for all artifacts in a component+environment.
 // Keyed by "artifactName|artifactType" -> stateKey -> {value, inSync}.
 public isolated function queryArtifactState(string componentId, string envId)
@@ -106,29 +115,48 @@ public isolated function queryArtifactState(string componentId, string envId)
     log:printDebug("queryArtifactState", componentId = componentId, envId = envId);
 
     // 1. Read observed state (only RUNNING runtimes)
-    stream<ObservedStateRow, sql:Error?> obsRows = dbClient->query(`
+    sql:ParameterizedQuery obsQuery = `
         SELECT os.artifact_name, os.artifact_type, os.state_key, os.state_value, os.optimistic
         FROM reconcile_observed_state os
         JOIN runtimes r ON r.runtime_id = os.runtime_id AND r.status = 'RUNNING'
         WHERE os.component_id = ${componentId} AND os.env_id = ${envId}
-    `);
+    `;
 
     // Group: (artifactKey, stateKey) -> list of {value, optimistic}
     map<map<[string, boolean][]>> groups = {};
-    check from ObservedStateRow row in obsRows
-        do {
-            string artKey = string `${row.artifact_name}|${row.artifact_type}`;
-            string val = row.state_value ?: "";
-            if !groups.hasKey(artKey) {
-                groups[artKey] = {};
-            }
-            map<[string, boolean][]> keyMap = <map<[string, boolean][]>>groups[artKey];
-            if !keyMap.hasKey(row.state_key) {
-                keyMap[row.state_key] = [];
-            }
-            [string, boolean][] entries = <[string, boolean][]>keyMap[row.state_key];
-            entries.push([val, row.optimistic]);
-        };
+    if dbType == ORACLE {
+        stream<OracleObservedStateRow, sql:Error?> obsRows = dbClient->query(obsQuery);
+        check from OracleObservedStateRow row in obsRows
+            do {
+                string artKey = string `${row.artifact_name}|${row.artifact_type}`;
+                string val = row.state_value ?: "";
+                if !groups.hasKey(artKey) {
+                    groups[artKey] = {};
+                }
+                map<[string, boolean][]> keyMap = <map<[string, boolean][]>>groups[artKey];
+                if !keyMap.hasKey(row.state_key) {
+                    keyMap[row.state_key] = [];
+                }
+                [string, boolean][] entries = <[string, boolean][]>keyMap[row.state_key];
+                entries.push([val, row.optimistic == 1]);
+            };
+    } else {
+        stream<ObservedStateRow, sql:Error?> obsRows = dbClient->query(obsQuery);
+        check from ObservedStateRow row in obsRows
+            do {
+                string artKey = string `${row.artifact_name}|${row.artifact_type}`;
+                string val = row.state_value ?: "";
+                if !groups.hasKey(artKey) {
+                    groups[artKey] = {};
+                }
+                map<[string, boolean][]> keyMap = <map<[string, boolean][]>>groups[artKey];
+                if !keyMap.hasKey(row.state_key) {
+                    keyMap[row.state_key] = [];
+                }
+                [string, boolean][] entries = <[string, boolean][]>keyMap[row.state_key];
+                entries.push([val, row.optimistic]);
+            };
+    }
 
     // 2. Read desired state for same scope
     stream<record {|string artifact_name; string artifact_type; string state_key; string? state_value;|}, sql:Error?> desRows = dbClient->query(`
@@ -201,6 +229,19 @@ public isolated function upsertReconcileDesiredState(string componentId, string 
                 WHEN NOT MATCHED THEN INSERT (component_id, env_id, artifact_name, artifact_type, state_key, state_value)
                     VALUES (source.component_id, source.env_id, source.artifact_name, source.artifact_type, source.state_key, source.state_value);
             `);
+        } else if dbType == ORACLE {
+            _ = check dbClient->execute(`
+                MERGE INTO reconcile_desired_state target
+                USING (SELECT ${componentId} AS component_id, ${envId} AS env_id, ${artifact.artifactName} AS artifact_name,
+                              ${artifact.artifactType} AS artifact_type, ${stateKey} AS state_key, ${stateValue} AS state_value
+                       FROM dual) source
+                ON (target.component_id = source.component_id AND target.env_id = source.env_id
+                    AND target.artifact_name = source.artifact_name AND target.artifact_type = source.artifact_type
+                    AND target.state_key = source.state_key)
+                WHEN MATCHED THEN UPDATE SET state_value = source.state_value, updated_at = CURRENT_TIMESTAMP
+                WHEN NOT MATCHED THEN INSERT (component_id, env_id, artifact_name, artifact_type, state_key, state_value)
+                    VALUES (source.component_id, source.env_id, source.artifact_name, source.artifact_type, source.state_key, source.state_value)
+            `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
                 INSERT INTO reconcile_desired_state (component_id, env_id, artifact_name, artifact_type, state_key, state_value)
@@ -235,6 +276,20 @@ public isolated function optimisticUpsertObservedState(string runtimeId, string 
                 WHEN NOT MATCHED THEN INSERT (runtime_id, component_id, env_id, artifact_name, artifact_type, state_key, state_value, optimistic)
                     VALUES (source.runtime_id, source.component_id, source.env_id, source.artifact_name, source.artifact_type, source.state_key, source.state_value, source.optimistic);
             `);
+        } else if dbType == ORACLE {
+            _ = check dbClient->execute(`
+                MERGE INTO reconcile_observed_state target
+                USING (SELECT ${runtimeId} AS runtime_id, ${componentId} AS component_id, ${envId} AS env_id,
+                              ${artifact.artifactName} AS artifact_name, ${artifact.artifactType} AS artifact_type,
+                              ${stateKey} AS state_key, ${stateValue} AS state_value, 1 AS optimistic
+                       FROM dual) source
+                ON (target.runtime_id = source.runtime_id AND target.artifact_name = source.artifact_name
+                    AND target.artifact_type = source.artifact_type AND target.state_key = source.state_key)
+                WHEN MATCHED THEN UPDATE SET state_value = source.state_value, component_id = source.component_id,
+                    env_id = source.env_id, optimistic = source.optimistic, updated_at = CURRENT_TIMESTAMP
+                WHEN NOT MATCHED THEN INSERT (runtime_id, component_id, env_id, artifact_name, artifact_type, state_key, state_value, optimistic)
+                    VALUES (source.runtime_id, source.component_id, source.env_id, source.artifact_name, source.artifact_type, source.state_key, source.state_value, source.optimistic)
+            `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
                 INSERT INTO reconcile_observed_state (runtime_id, component_id, env_id, artifact_name, artifact_type, state_key, state_value, optimistic)
@@ -264,7 +319,35 @@ public isolated function batchUpsertReconcileObservedState(string runtimeId, str
     log:printDebug("batchUpsertReconcileObservedState", runtimeId = runtimeId, nextGen = nextGen,
         artifactCount = artifacts.length());
 
-    if artifacts.length() > 0 {
+    if artifacts.length() > 0 && dbType == ORACLE {
+        // Oracle has no multi-row VALUES; batch the per-entry MERGE statements
+        sql:ParameterizedQuery[] mergeQueries = [];
+        foreach var [artifact, state] in artifacts {
+            foreach var [stateKey, stateValue] in state.clone().entries() {
+                mergeQueries.push(`
+                    MERGE INTO reconcile_observed_state target
+                    USING (SELECT ${runtimeId} AS runtime_id, ${componentId} AS component_id, ${envId} AS env_id,
+                                  ${artifact.artifactName} AS artifact_name, ${artifact.artifactType} AS artifact_type,
+                                  ${stateKey} AS state_key, ${stateValue} AS state_value, 0 AS optimistic,
+                                  ${nextGen} AS heartbeat_gen
+                           FROM dual) source
+                    ON (target.runtime_id = source.runtime_id AND target.artifact_name = source.artifact_name
+                        AND target.artifact_type = source.artifact_type AND target.state_key = source.state_key)
+                    WHEN MATCHED THEN UPDATE SET state_value = source.state_value, component_id = source.component_id,
+                        env_id = source.env_id, optimistic = source.optimistic, heartbeat_gen = source.heartbeat_gen,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHEN NOT MATCHED THEN INSERT (runtime_id, component_id, env_id, artifact_name, artifact_type,
+                        state_key, state_value, optimistic, heartbeat_gen)
+                        VALUES (source.runtime_id, source.component_id, source.env_id, source.artifact_name,
+                                source.artifact_type, source.state_key, source.state_value, source.optimistic,
+                                source.heartbeat_gen)
+                `);
+            }
+        }
+        if mergeQueries.length() > 0 {
+            _ = check dbClient->batchExecute(mergeQueries);
+        }
+    } else if artifacts.length() > 0 {
         sql:ParameterizedQuery values = ``;
         boolean first = true;
         foreach var [artifact, state] in artifacts {
@@ -341,6 +424,19 @@ public isolated function upsertReconcileBackoff(string runtimeId, types:Reconcil
             WHEN MATCHED THEN UPDATE SET attempt_count = source.attempt_count, has_error = source.has_error, next_attempt = source.next_attempt
             WHEN NOT MATCHED THEN INSERT (runtime_id, artifact_name, artifact_type, state_key, attempt_count, has_error, next_attempt)
                 VALUES (source.runtime_id, source.artifact_name, source.artifact_type, source.state_key, source.attempt_count, source.has_error, source.next_attempt);
+        `);
+    } else if dbType == ORACLE {
+        _ = check dbClient->execute(`
+            MERGE INTO reconcile_backoff target
+            USING (SELECT ${runtimeId} AS runtime_id, ${artifact.artifactName} AS artifact_name,
+                          ${artifact.artifactType} AS artifact_type, ${stateKey} AS state_key,
+                          ${attemptCount} AS attempt_count, ${hasError} AS has_error, ${nextAttempt} AS next_attempt
+                   FROM dual) source
+            ON (target.runtime_id = source.runtime_id AND target.artifact_name = source.artifact_name
+                AND target.artifact_type = source.artifact_type AND target.state_key = source.state_key)
+            WHEN MATCHED THEN UPDATE SET attempt_count = source.attempt_count, has_error = source.has_error, next_attempt = source.next_attempt
+            WHEN NOT MATCHED THEN INSERT (runtime_id, artifact_name, artifact_type, state_key, attempt_count, has_error, next_attempt)
+                VALUES (source.runtime_id, source.artifact_name, source.artifact_type, source.state_key, source.attempt_count, source.has_error, source.next_attempt)
         `);
     } else if dbType == POSTGRESQL {
         _ = check dbClient->execute(`

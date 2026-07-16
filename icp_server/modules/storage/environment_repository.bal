@@ -20,34 +20,86 @@ import ballerina/log;
 import ballerina/sql;
 import ballerina/uuid;
 
+// Oracle stores booleans as NUMBER(1), which the connector cannot map to
+// Ballerina boolean fields — read `critical` as int and convert.
+type OracleEnvironmentRow record {
+    string environment_id;
+    string name;
+    string handler;
+    string? description;
+    string? region;
+    string? cluster_id;
+    string? choreo_env;
+    string? external_apim_env_name;
+    string? internal_apim_env_name;
+    string? sandbox_apim_env_name;
+    int critical;
+    string? dns_prefix;
+    string? created_at?;
+    string? updated_at?;
+    string? created_by?;
+    string? updated_by?;
+};
+
+isolated function oracleRowToEnvironment(OracleEnvironmentRow row) returns types:Environment => {
+    id: row.environment_id,
+    name: row.name,
+    handler: row.handler,
+    description: row.description,
+    region: row.region,
+    clusterId: row.cluster_id,
+    choreoEnv: row.choreo_env,
+    externalApimEnvName: row.external_apim_env_name,
+    internalApimEnvName: row.internal_apim_env_name,
+    sandboxApimEnvName: row.sandbox_apim_env_name,
+    critical: row.critical == 1,
+    dnsPrefix: row.dns_prefix,
+    createdAt: row?.created_at,
+    updatedAt: row?.updated_at,
+    createdBy: row?.created_by,
+    updatedBy: row?.updated_by
+};
+
+// Runs an environments SELECT and returns typed rows, handling the Oracle
+// NUMBER(1)-to-boolean limitation transparently for callers.
+isolated function fetchEnvironmentRows(sql:ParameterizedQuery query) returns types:Environment[]|error {
+    if isOracle() {
+        stream<OracleEnvironmentRow, sql:Error?> s = dbClient->query(query);
+        return check from OracleEnvironmentRow row in s
+            select oracleRowToEnvironment(row);
+    }
+    stream<types:Environment, sql:Error?> s = dbClient->query(query);
+    return check from types:Environment env in s
+        select env;
+}
+
 // Get all environments
 public isolated function getEnvironments() returns types:Environment[]|error {
     types:Environment[] environments = [];
-    stream<types:Environment, sql:Error?> envStream = dbClient->query(`SELECT environment_id, name, handler, description, 
-        region, cluster_id, choreo_env, external_apim_env_name, internal_apim_env_name, sandbox_apim_env_name, 
-        critical, dns_prefix, created_at, updated_at, created_by, updated_by 
+    types:Environment[] envRows = check fetchEnvironmentRows(`SELECT environment_id, name, handler, description,
+        region, cluster_id, choreo_env, external_apim_env_name, internal_apim_env_name, sandbox_apim_env_name,
+        critical, dns_prefix, created_at, updated_at, created_by, updated_by
         FROM environments ORDER BY name ASC`);
-    check from types:Environment env in envStream
-        do {
-            environments.push({
-                id: env.id,
-                description: env.description,
-                name: env.name,
-                handler: env.handler,
-                region: env.region,
-                clusterId: env.clusterId,
-                choreoEnv: env.choreoEnv,
-                externalApimEnvName: env.externalApimEnvName,
-                internalApimEnvName: env.internalApimEnvName,
-                sandboxApimEnvName: env.sandboxApimEnvName,
-                critical: env.critical,
-                dnsPrefix: env.dnsPrefix,
-                createdAt: env.createdAt,
-                createdBy: getDisplayNameById(env.createdBy),
-                updatedAt: env.updatedAt,
-                updatedBy: getDisplayNameById(env.updatedBy)
-            });
-        };
+    foreach types:Environment env in envRows {
+        environments.push({
+            id: env.id,
+            description: env.description,
+            name: env.name,
+            handler: env.handler,
+            region: env.region,
+            clusterId: env.clusterId,
+            choreoEnv: env.choreoEnv,
+            externalApimEnvName: env.externalApimEnvName,
+            internalApimEnvName: env.internalApimEnvName,
+            sandboxApimEnvName: env.sandboxApimEnvName,
+            critical: env.critical,
+            dnsPrefix: env.dnsPrefix,
+            createdAt: env.createdAt,
+            createdBy: getDisplayNameById(env.createdBy),
+            updatedAt: env.updatedAt,
+            updatedBy: getDisplayNameById(env.updatedBy)
+        });
+    }
     return environments;
 }
 
@@ -77,29 +129,28 @@ public isolated function getEnvironmentsByIds(string[] environmentIds) returns t
 
     query = sql:queryConcat(query, `) ORDER BY name ASC`);
 
-    stream<types:Environment, sql:Error?> envStream = dbClient->query(query);
+    types:Environment[] envRows = check fetchEnvironmentRows(query);
 
-    check from types:Environment env in envStream
-        do {
-            environments.push({
-                id: env.id,
-                description: env.description,
-                name: env.name,
-                handler: env.handler,
-                region: env.region,
-                clusterId: env.clusterId,
-                choreoEnv: env.choreoEnv,
-                externalApimEnvName: env.externalApimEnvName,
-                internalApimEnvName: env.internalApimEnvName,
-                sandboxApimEnvName: env.sandboxApimEnvName,
-                critical: env.critical,
-                dnsPrefix: env.dnsPrefix,
-                createdAt: env.createdAt,
-                updatedAt: env.updatedAt,
-                createdBy: getDisplayNameById(env.createdBy),
-                updatedBy: getDisplayNameById(env.updatedBy)
-            });
-        };
+    foreach types:Environment env in envRows {
+        environments.push({
+            id: env.id,
+            description: env.description,
+            name: env.name,
+            handler: env.handler,
+            region: env.region,
+            clusterId: env.clusterId,
+            choreoEnv: env.choreoEnv,
+            externalApimEnvName: env.externalApimEnvName,
+            internalApimEnvName: env.internalApimEnvName,
+            sandboxApimEnvName: env.sandboxApimEnvName,
+            critical: env.critical,
+            dnsPrefix: env.dnsPrefix,
+            createdAt: env.createdAt,
+            updatedAt: env.updatedAt,
+            createdBy: getDisplayNameById(env.createdBy),
+            updatedBy: getDisplayNameById(env.updatedBy)
+        });
+    }
 
     log:printDebug("Retrieved environments by IDs", environmentCount = environments.length());
 
@@ -116,29 +167,28 @@ public isolated function getAllEnvironments() returns types:Environment[]|error 
                                      FROM environments 
                                      ORDER BY name ASC`;
 
-    stream<types:Environment, sql:Error?> envStream = dbClient->query(query);
+    types:Environment[] envRows = check fetchEnvironmentRows(query);
 
-    check from types:Environment env in envStream
-        do {
-            environments.push({
-                id: env.id,
-                description: env.description,
-                name: env.name,
-                handler: env.handler,
-                region: env.region,
-                clusterId: env.clusterId,
-                choreoEnv: env.choreoEnv,
-                externalApimEnvName: env.externalApimEnvName,
-                internalApimEnvName: env.internalApimEnvName,
-                sandboxApimEnvName: env.sandboxApimEnvName,
-                critical: env.critical,
-                dnsPrefix: env.dnsPrefix,
-                createdAt: env.createdAt,
-                updatedAt: env.updatedAt,
-                createdBy: getDisplayNameById(env.createdBy),
-                updatedBy: getDisplayNameById(env.updatedBy)
-            });
-        };
+    foreach types:Environment env in envRows {
+        environments.push({
+            id: env.id,
+            description: env.description,
+            name: env.name,
+            handler: env.handler,
+            region: env.region,
+            clusterId: env.clusterId,
+            choreoEnv: env.choreoEnv,
+            externalApimEnvName: env.externalApimEnvName,
+            internalApimEnvName: env.internalApimEnvName,
+            sandboxApimEnvName: env.sandboxApimEnvName,
+            critical: env.critical,
+            dnsPrefix: env.dnsPrefix,
+            createdAt: env.createdAt,
+            updatedAt: env.updatedAt,
+            createdBy: getDisplayNameById(env.createdBy),
+            updatedBy: getDisplayNameById(env.updatedBy)
+        });
+    }
 
     log:printDebug("Retrieved all environments", environmentCount = environments.length());
 
@@ -180,13 +230,10 @@ public isolated function getEnvironmentIdsByTypes(boolean hasProdAccess, boolean
 
 // Get environment by ID
 public isolated function getEnvironmentById(string environmentId) returns types:Environment|error {
-    stream<types:Environment, sql:Error?> envStream =
-        dbClient->query(`SELECT environment_id, name, handler, description, region, cluster_id, choreo_env, 
-                        external_apim_env_name, internal_apim_env_name, sandbox_apim_env_name, critical, dns_prefix, 
-                        created_at, updated_at FROM environments WHERE environment_id = ${environmentId}`);
-
-    types:Environment[] envRecords = check from types:Environment env in envStream
-        select env;
+    types:Environment[] envRecords = check fetchEnvironmentRows(
+        `SELECT environment_id, name, handler, description, region, cluster_id, choreo_env,
+        external_apim_env_name, internal_apim_env_name, sandbox_apim_env_name, critical, dns_prefix,
+        created_at, updated_at FROM environments WHERE environment_id = ${environmentId}`);
 
     if envRecords.length() == 0 {
         return error(string `Environment ${environmentId} not found.`);
@@ -385,13 +432,10 @@ public isolated function deleteEnvironment(string environmentId) returns error? 
 
 // Get environment by handler
 public isolated function getEnvironmentByHandler(string environmentHandler) returns types:Environment|error {
-    stream<types:Environment, sql:Error?> envStream =
-        dbClient->query(`SELECT environment_id, name, handler, description, region, cluster_id, choreo_env, 
-                        external_apim_env_name, internal_apim_env_name, sandbox_apim_env_name, critical, dns_prefix, 
-                        created_at, updated_at FROM environments WHERE handler = ${environmentHandler}`);
-
-    types:Environment[] envRecords = check from types:Environment env in envStream
-        select env;
+    types:Environment[] envRecords = check fetchEnvironmentRows(
+        `SELECT environment_id, name, handler, description, region, cluster_id, choreo_env,
+        external_apim_env_name, internal_apim_env_name, sandbox_apim_env_name, critical, dns_prefix,
+        created_at, updated_at FROM environments WHERE handler = ${environmentHandler}`);
 
     if envRecords.length() == 0 {
         return error(string `Environment with handler '${environmentHandler}' not found.`);
