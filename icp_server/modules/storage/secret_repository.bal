@@ -119,24 +119,15 @@ public isolated function createComponentEnvBoundOrgSecret(string environmentId, 
 public isolated function listOrgSecrets(string? environmentId = ()) returns types:OrgSecretListEntry[]|error {
     log:printDebug(string `listOrgSecrets: environmentId=${environmentId ?: "all"}`);
 
-    sql:ParameterizedQuery query;
-    if isOracle() {
-        // Oracle: no TRUE/FALSE literals, and NUMBER cannot map to a boolean
-        // field — produce 1/0 and convert after reading.
-        query = `
-            SELECT os.key_id, os.environment_id, e.name AS environment_name,
-                   CASE WHEN os.bound_at IS NOT NULL THEN 1 ELSE 0 END AS bound,
-                   os.created_at, os.created_by
-            FROM org_secrets os
-            JOIN environments e ON os.environment_id = e.environment_id`;
-    } else {
-        query = `
-            SELECT os.key_id, os.environment_id, e.name AS environment_name,
-                   CASE WHEN os.bound_at IS NOT NULL THEN TRUE ELSE FALSE END AS bound,
-                   os.created_at, os.created_by
-            FROM org_secrets os
-            JOIN environments e ON os.environment_id = e.environment_id`;
-    }
+    // 1/0 works on every supported dialect (Oracle has no TRUE/FALSE literals,
+    // and its NUMBER type cannot map to a boolean field), so read bound as an
+    // int and convert.
+    sql:ParameterizedQuery query = `
+        SELECT os.key_id, os.environment_id, e.name AS environment_name,
+               CASE WHEN os.bound_at IS NOT NULL THEN 1 ELSE 0 END AS bound,
+               os.created_at, os.created_by
+        FROM org_secrets os
+        JOIN environments e ON os.environment_id = e.environment_id`;
 
     if environmentId is string {
         query = sql:queryConcat(query, ` WHERE os.environment_id = ${environmentId}`);
@@ -144,48 +135,24 @@ public isolated function listOrgSecrets(string? environmentId = ()) returns type
 
     query = sql:queryConcat(query, ` ORDER BY os.created_at DESC`);
 
-    types:OrgSecretListEntry[] entries = [];
-    if isOracle() {
-        stream<record {|
-            string key_id;
-            string environment_id;
-            string environment_name;
-            int bound;
-            string created_at;
-            string? created_by;
-        |}, sql:Error?> s = dbClient->query(query);
-        check from var row in s
-            do {
-                entries.push({
-                    keyId: row.key_id,
-                    environmentId: row.environment_id,
-                    environmentName: row.environment_name,
-                    bound: row.bound == 1,
-                    createdAt: row.created_at,
-                    createdBy: getDisplayNameById(row.created_by)
-                });
-            };
-    } else {
-        stream<record {|
-            string key_id;
-            string environment_id;
-            string environment_name;
-            boolean bound;
-            string created_at;
-            string? created_by;
-        |}, sql:Error?> s = dbClient->query(query);
-        check from var row in s
-            do {
-                entries.push({
-                    keyId: row.key_id,
-                    environmentId: row.environment_id,
-                    environmentName: row.environment_name,
-                    bound: row.bound,
-                    createdAt: row.created_at,
-                    createdBy: getDisplayNameById(row.created_by)
-                });
-            };
-    }
+    stream<record {|
+        string key_id;
+        string environment_id;
+        string environment_name;
+        int bound;
+        string created_at;
+        string? created_by;
+    |}, sql:Error?> s = dbClient->query(query);
+
+    types:OrgSecretListEntry[] entries = check from var row in s
+        select {
+            keyId: row.key_id,
+            environmentId: row.environment_id,
+            environmentName: row.environment_name,
+            bound: row.bound == 1,
+            createdAt: row.created_at,
+            createdBy: getDisplayNameById(row.created_by)
+        };
 
     log:printDebug(string `listOrgSecrets: found ${entries.length()} entries`);
     return entries;
