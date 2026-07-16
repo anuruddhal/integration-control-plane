@@ -24,6 +24,6 @@ final sql:Client dbClient = check createDbClient();
 function createDbClient() returns sql:Client|error {
     string resolvedUser = check utils:resolveConfig(dbUser, secrets);
     string resolvedPassword = check utils:resolveConfig(dbPassword, secrets);
-    DatabaseConnectionManager dbManager = check new (dbType, dbHost, dbPort, dbName, resolvedUser, resolvedPassword);
+    DatabaseConnectionManager dbManager = check new (dbType, dbHost, dbPort, dbName, resolvedUser, resolvedPassword, dbUseTLS);
     return dbManager.getClient();
 }

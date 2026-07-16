@@ -1171,6 +1171,15 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${store.name}, ${store.'type}, ${store.size}, ${compositeApp}
                 )
             `);
+        } else if dbType == ORACLE {
+            // SIZE is a reserved word in Oracle; the column is created as quoted "SIZE"
+            _ = check dbClient->execute(`
+                INSERT INTO mi_message_store_artifacts (
+                    runtime_id, store_name, store_type, "SIZE", composite_app
+                ) VALUES (
+                    ${runtimeId}, ${store.name}, ${store.'type}, ${store.size}, ${compositeApp}
+                )
+            `);
         } else {
             _ = check dbClient->execute(`
                 INSERT INTO mi_message_store_artifacts (
@@ -1433,6 +1442,17 @@ isolated function insertRuntimeLogLevels(string runtimeId, types:Heartbeat heart
                 WHEN NOT MATCHED THEN
                     INSERT (runtime_id, component_name, log_level)
                     VALUES (source.runtime_id, source.component_name, source.log_level);
+            `);
+        } else if dbType == ORACLE {
+            _ = check dbClient->execute(`
+                MERGE INTO bi_runtime_log_levels target
+                USING (SELECT ${runtimeId} AS runtime_id, ${componentName} AS component_name, ${logLevelStr} AS log_level FROM dual) source
+                ON (target.runtime_id = source.runtime_id AND target.component_name = source.component_name)
+                WHEN MATCHED THEN
+                    UPDATE SET log_level = source.log_level, updated_at = CURRENT_TIMESTAMP
+                WHEN NOT MATCHED THEN
+                    INSERT (runtime_id, component_name, log_level)
+                    VALUES (source.runtime_id, source.component_name, source.log_level)
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`

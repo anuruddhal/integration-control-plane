@@ -67,7 +67,28 @@ public isolated function validateRefreshToken(string tokenHash) returns types:Us
         string user_id;
         boolean revoked;
         int seconds_until_expiry;
-    |}|sql:Error refreshToken = dbClient->queryRow(selectQuery);
+    |}|sql:Error refreshToken;
+    if isOracle() {
+        // Oracle: NUMBER(1) cannot map to a boolean field — read as int and convert
+        record {|
+            string token_id;
+            string user_id;
+            int revoked;
+            int seconds_until_expiry;
+        |}|sql:Error oraRow = dbClient->queryRow(selectQuery);
+        if oraRow is sql:Error {
+            refreshToken = oraRow;
+        } else {
+            refreshToken = {
+                token_id: oraRow.token_id,
+                user_id: oraRow.user_id,
+                revoked: oraRow.revoked == 1,
+                seconds_until_expiry: oraRow.seconds_until_expiry
+            };
+        }
+    } else {
+        refreshToken = dbClient->queryRow(selectQuery);
+    }
 
     if refreshToken is sql:Error {
         if refreshToken is sql:NoRowsError {

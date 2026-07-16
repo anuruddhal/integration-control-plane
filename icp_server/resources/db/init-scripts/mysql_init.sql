@@ -808,7 +808,7 @@ CREATE TABLE mi_inbound_endpoint_artifacts (
     runtime_id CHAR(36) NOT NULL,
     inbound_name VARCHAR(200) NOT NULL,
     artifact_id CHAR(36) NOT NULL UNIQUE,
-    protocol VARCHAR(50) NOT NULL,
+    protocol VARCHAR(50) NULL,
     sequence VARCHAR(200) NULL,
     statistics VARCHAR(20) NULL,
     on_error VARCHAR(200) NULL,

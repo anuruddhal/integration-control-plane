@@ -27,13 +27,13 @@ listener http:Listener httpListener = new (serverPort,
     config = {
         host: serverHost,
         httpVersion: http:HTTP_1_1,
-        secureSocket: {
+        secureSocket: sslEnabled ? {
             key: {
                 path: keystorePath,
                 password: resolvedKeystorePassword
             },
             ciphers: tlsCiphers
-        }
+        } : ()
     }
 );
 
@@ -41,13 +41,13 @@ listener http:Listener httpListener = new (serverPort,
 listener http:Listener runtimeListener = new (runtimeListenerPort,
     config = {
         host: serverHost,
-        secureSocket: {
+        secureSocket: sslEnabled ? {
             key: {
                 path: keystorePath,
                 password: resolvedKeystorePassword
             },
             ciphers: tlsCiphers
-        }
+        } : ()
     }
 );
 

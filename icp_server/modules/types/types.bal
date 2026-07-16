@@ -1037,7 +1037,7 @@ public type InboundEndpoint record {
         name: "inbound_name"
     }
     string name;
-    string protocol;
+    string? protocol;
     string sequence?;
     @sql:Column {
         name: "statistics"
@@ -2540,6 +2540,7 @@ public type ListenerControlInput record {|
     string[] runtimeIds;
     string listenerName;
     string listenerPackage?;
+    int port?;
     ControlAction action;
 |};
 

@@ -46,8 +46,8 @@ import {
   Tooltip,
   Typography,
 } from '@wso2/oxygen-ui';
-import { RefreshCw, ListFilter, LayoutGrid, Server, Settings, Play, Plus, X, Trash2, UserPlus, Code, Sliders, Link as LinkIcon, FileText } from '@wso2/oxygen-ui-icons-react';
-import { useEffect, useMemo, useState } from 'react';
+import { RefreshCw, ListFilter, LayoutGrid, Server, Settings, Play, Square, Plus, X, Trash2, UserPlus, Code, Sliders, Link as LinkIcon, FileText } from '@wso2/oxygen-ui-icons-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useArtifacts, useRefreshEnvironmentArtifacts, useComponentRuntimes, type GqlArtifact, type GqlEnvironment } from '../api/queries';
@@ -71,6 +71,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const [listenerEnabled, setListenerEnabled] = useState(false);
   const [pendingToggle, setPendingToggle] = useState<{ type: 'tracing' | 'statistics' | 'status'; checked: boolean } | null>(null);
   const [pendingListenerToggle, setPendingListenerToggle] = useState<{ checked: boolean } | null>(null);
+  const pendingActionRef = useRef<'START' | 'STOP' | null>(null);
   const [triggerConfirmDialogOpen, setTriggerConfirmDialogOpen] = useState(false);
   const [triggerSuccessMessage, setTriggerSuccessMessage] = useState<string | null>(null);
   const [startWorkflowOpen, setStartWorkflowOpen] = useState(false);
@@ -97,7 +98,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const showWsdlButton = artifactType === 'ProxyService';
   const showStatisticsToggle = ['RestApi', 'ProxyService', 'InboundEndpoint'].includes(artifactType);
   const showStatusToggle = ['ProxyService', 'InboundEndpoint'].includes(artifactType);
-  const showStatusChip = artifactType === 'RestApi';
+  const showStatusChip = artifactType === 'RestApi' || artifactType === 'Listener';
   const showListenerToggle = artifactType === 'Listener';
   const showTaskToggle = artifactType === 'Task';
   const showTaskTrigger = artifactType === 'Task';
@@ -117,7 +118,10 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
     setTracingEnabled(toEnabled(artifact.tracing));
     setStatisticsEnabled(toEnabled(artifact.statistics));
     setStatusEnabled(toEnabled(artifact.state));
-    setListenerEnabled(toEnabled(artifact.state));
+    // Don't overwrite the optimistic listenerEnabled while a listener action is still in flight.
+    if (!pendingActionRef.current) {
+      setListenerEnabled(toEnabled(artifact.state));
+    }
   }, [artifactKey, artifact.tracing, artifact.statistics, artifact.state]);
 
   const handleToggleTracing = (checked: boolean) => {
@@ -209,21 +213,30 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
     }
 
     const runtimeIds = runtimes.map((r: { runtimeId: string }) => r.runtimeId);
-    const previousValue = listenerEnabled;
-
-    setListenerEnabled(pendingListenerToggle.checked);
+    const action = pendingListenerToggle.checked ? 'START' : 'STOP';
+    const targetEnabled = pendingListenerToggle.checked;
     const artifactQueryKey = ['artifacts', artifactType, envId, componentId];
+
+    pendingActionRef.current = action;
+    setListenerEnabled(targetEnabled);
 
     updateListenerState.mutate(
       {
         runtimeIds,
         listenerName: artifactName,
         listenerPackage: artifact.package?.toString(),
-        action: pendingListenerToggle.checked ? 'START' : 'STOP',
+        port: typeof artifact.port === 'number' ? artifact.port : undefined,
+        action,
       },
       {
-        onError: () => setListenerEnabled(previousValue),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: artifactQueryKey }),
+        onError: () => {
+          setListenerEnabled(!targetEnabled);
+          pendingActionRef.current = null;
+        },
+        onSettled: async () => {
+          await queryClient.invalidateQueries({ queryKey: artifactQueryKey });
+          pendingActionRef.current = null;
+        },
       },
     );
 
@@ -261,7 +274,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPendingListenerToggle(null)}>Cancel</Button>
-          <Button variant="contained" color={listenerAction === 'disable' ? 'error' : 'primary'} onClick={handleConfirmListenerToggle}>
+          <Button variant="contained" color={listenerAction === 'disable' ? 'error' : 'success'} onClick={handleConfirmListenerToggle}>
             {listenerAction === 'enable' ? 'Enable' : 'Disable'}
           </Button>
         </DialogActions>
@@ -291,7 +304,14 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
               <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
                 Status
               </Typography>
-              <Chip label={artifactState.charAt(0).toUpperCase() + artifactState.slice(1).toLowerCase()} size="small" variant="outlined" color={toEnabled(artifact.state) ? 'success' : 'default'} />
+              {artifactType === 'Listener' ? (
+                <Stack direction="row" alignItems="center" gap={0.75}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: toEnabled(artifact.state) ? 'success.main' : 'text.disabled' }} />
+                  <Typography variant="body2">{toEnabled(artifact.state) ? 'Enabled' : 'Disabled'}</Typography>
+                </Stack>
+              ) : (
+                <Chip label={artifactState.charAt(0).toUpperCase() + artifactState.slice(1).toLowerCase()} size="small" variant="outlined" color={toEnabled(artifact.state) ? 'success' : 'default'} sx={{ fontSize: '0.875rem' }} />
+              )}
             </Box>
           )}
           {showStatusChip && artifactState && (showStatusToggle || showTracingToggle || showStatisticsToggle || showListenerToggle) && <Divider orientation="vertical" flexItem />}
@@ -300,8 +320,36 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
           {showTracingToggle && <SyncSwitch label="Tracing" checked={tracingEnabled} inSync={artifact.tracingInSync as boolean | null} onChange={handleToggleTracing} disabled={updateTracingStatus.isPending} />}
           {showTracingToggle && showStatisticsToggle && <Divider orientation="vertical" flexItem />}
           {showStatisticsToggle && <SyncSwitch label="Statistics" checked={statisticsEnabled} inSync={artifact.statisticsInSync as boolean | null} onChange={handleToggleStatistics} disabled={updateStatisticsStatus.isPending} />}
-          {(showTracingToggle || showStatisticsToggle) && showListenerToggle && <Divider orientation="vertical" flexItem />}
-          {showListenerToggle && <SyncSwitch label="State" checked={listenerEnabled} inSync={artifact.stateInSync as boolean | null} onChange={handleToggleListener} disabled={updateListenerState.isPending} />}
+          {showListenerToggle && (updateListenerState.isPending ? pendingActionRef.current === 'START' : !listenerEnabled) && (
+            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Enable listener'}>
+              <span style={{ marginLeft: 'auto' }}>
+                <Button
+                  variant="contained"
+                  size="small"
+                  color="success"
+                  startIcon={updateListenerState.isPending || artifact.stateInSync === false ? <CircularProgress size={12} color="inherit" /> : <Play size={14} />}
+                  disabled={updateListenerState.isPending || !hasRuntimes}
+                  onClick={() => handleToggleListener(true)}>
+                  {updateListenerState.isPending ? 'Enabling…' : 'Enable'}
+                </Button>
+              </span>
+            </Tooltip>
+          )}
+          {showListenerToggle && (updateListenerState.isPending ? pendingActionRef.current === 'STOP' : listenerEnabled) && (
+            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Disable listener'}>
+              <span style={{ marginLeft: 'auto' }}>
+                <Button
+                  variant="contained"
+                  size="small"
+                  color="error"
+                  startIcon={updateListenerState.isPending || artifact.stateInSync === false ? <CircularProgress size={12} color="inherit" /> : <Square size={14} />}
+                  disabled={updateListenerState.isPending || !hasRuntimes}
+                  onClick={() => handleToggleListener(false)}>
+                  {updateListenerState.isPending ? 'Disabling…' : 'Disable'}
+                </Button>
+              </span>
+            </Tooltip>
+          )}
           {showTaskToggle && (
             <>
               {hasPrecedingControls && <Divider orientation="vertical" flexItem />}
@@ -358,7 +406,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
             </Authorized>
           )}
           {showRuntimesButton && (
-            <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerTab('Runtimes')} sx={{ ml: showSourceButton || showParametersButton || showWsdlButton || showInstancesButton ? 0 : 'auto' }}>
+            <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerTab('Runtimes')} sx={{ ml: showSourceButton || showParametersButton || showWsdlButton || showListenerToggle ? 0 : 'auto' }}>
               View Runtimes
             </Button>
           )}
@@ -520,6 +568,8 @@ function EntryPointsList({
         autoHighlight
         fullWidth
         getOptionLabel={(option) => {
+          const cfg = ENTRY_POINT_CONFIG[option.type];
+          if (cfg?.primaryDisplay && cfg.metaField) return option.artifact[cfg.metaField]?.toString() ?? option.artifact.name?.toString() ?? '';
           const displayName = option.type === 'Automation' ? option.artifact.packageName : option.artifact.name;
           return displayName?.toString() ?? '';
         }}
@@ -532,14 +582,15 @@ function EntryPointsList({
           const { key, ...optionProps } = props;
           const cfg = ENTRY_POINT_CONFIG[type];
           const meta = cfg?.metaField ? a[cfg.metaField]?.toString() : undefined;
-          const displayName = type === 'Automation' ? a.packageName?.toString() : a.name?.toString();
+          const useMeta = cfg?.primaryDisplay && !!meta;
+          const displayName = useMeta ? meta : type === 'Automation' ? a.packageName?.toString() : a.name?.toString();
           return (
             <Box key={key} component="li" sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }} {...optionProps}>
               <Chip label={cfg?.label} size="small" sx={{ bgcolor: cfg?.bgColor, color: cfg?.color, fontWeight: 700, fontSize: 11, minWidth: 60, justifyContent: 'center' }} />
               <Typography variant="body2" sx={{ fontWeight: 500, flex: 1 }}>
                 {displayName}
               </Typography>
-              {meta && (
+              {!useMeta && meta && (
                 <Typography variant="body2" color="text.secondary">
                   {meta}
                 </Typography>

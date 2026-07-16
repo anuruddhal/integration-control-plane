@@ -92,7 +92,7 @@ public isolated function reconcileArtifact(string runtimeId, string componentId,
         check doOptimisticUpdate(runtimeId, componentId, envId, artifact, eligible);
     }
 
-    check doClearConverged(runtimeId, artifact, actions);
+    check doClearConverged(runtimeId, artifact, actions, backoffMap);
     return commands;
 }
 
@@ -170,11 +170,42 @@ isolated function doOptimisticUpdate(string runtimeId, string componentId, strin
     check storage:optimisticUpsertObservedState(runtimeId, componentId, envId, artifact, state);
 }
 
+// Seconds to keep a converged backoff record alive before deleting it.
+// Prevents immediate re-dispatch when an artifact briefly converges and then
+// regresses (e.g. a listener that starts and quickly fails), which would
+// otherwise clear the attempt counter and reset the backoff to zero.
+const int CONVERGENCE_STABILITY_COOLDOWN_SEC = 30;
+
 isolated function doClearConverged(string runtimeId, types:ReconcileArtifactKey artifact,
-        types:ReconcileAction[] currentActions) returns error? {
+        types:ReconcileAction[] currentActions, map<types:ReconcileBackoffRecord> backoffMap) returns error? {
     string[] activeKeys = from types:ReconcileAction a in currentActions
         select a.key;
     log:printDebug("clearConverged", runtimeId = runtimeId,
             artifactName = artifact.artifactName, activeKeyCount = activeKeys.length());
-    check storage:deleteReconcileBackoffConverged(runtimeId, artifact, activeKeys);
+
+    // Build an active-key lookup set for O(1) checks.
+    map<boolean> activeKeySet = {};
+    foreach string k in activeKeys {
+        activeKeySet[k] = true;
+    }
+
+    // For converged keys that had prior dispatch attempts, preserve the backoff
+    // record during the cooldown window and only decrement the attempt count
+    // once the window has expired.  Gating on rec.next_attempt <= now prevents
+    // rapid heartbeat passes from burning through the counter faster than the
+    // cooldown period — e.g. with attempt_count=4 (60 s backoff), six 10 s
+    // heartbeats would otherwise zero the count before a single cooldown fires.
+    int now = time:utcNow()[0];
+    string[] skipDeleteKeys = activeKeys.clone();
+    foreach var [stateKey, rec] in backoffMap.entries() {
+        if !activeKeySet.hasKey(stateKey) && rec.attempt_count > 0 {
+            skipDeleteKeys.push(stateKey);
+            if rec.next_attempt <= now {
+                int newCount = rec.attempt_count - 1;
+                check storage:upsertReconcileBackoff(runtimeId, artifact, stateKey, newCount, 0, now + CONVERGENCE_STABILITY_COOLDOWN_SEC);
+            }
+        }
+    }
+
+    check storage:deleteReconcileBackoffConverged(runtimeId, artifact, skipDeleteKeys);
 }

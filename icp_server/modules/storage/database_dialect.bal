@@ -76,6 +76,8 @@ public isolated function convertUtcToDbDateTime(time:Utc utcTime) returns string
         return convertUtcToMySQLDateTime(utcTime); // MSSQL DATETIME2 supports same format as MySQL
     } else if dbType == POSTGRESQL {
         return convertUtcToPostgreSQLDateTime(utcTime);
+    } else if dbType == ORACLE {
+        return convertUtcToMySQLDateTime(utcTime); // Oracle TO_TIMESTAMP with FF6 accepts the same format as MySQL
     } else {
         return convertUtcToMySQLDateTime(utcTime);
     }
@@ -90,6 +92,9 @@ public isolated function epochFromTimestamp(string column) returns string {
         return string `DATEDIFF_BIG(SECOND, '1970-01-01 00:00:00', ${column})`;
     } else if dbType == POSTGRESQL {
         return string `EXTRACT(EPOCH FROM ${column})`;
+    } else if dbType == ORACLE {
+        // Casting to DATE truncates fractional seconds; date arithmetic yields days
+        return string `ROUND((CAST(${column} AS DATE) - DATE '1970-01-01') * 86400)`;
     } else {
         // MySQL and H2 (in MySQL compatibility mode)
         return string `UNIX_TIMESTAMP(${column})`;
@@ -105,6 +110,8 @@ public isolated function getTimestampDiffSeconds(string startColumn, string endT
         return string `DATEDIFF(SECOND, ${startColumn}, ${endTimestamp})`;
     } else if dbType == POSTGRESQL {
         return string `EXTRACT(EPOCH FROM (${endTimestamp} - ${startColumn}))`;
+    } else if dbType == ORACLE {
+        return string `ROUND((CAST(${endTimestamp} AS DATE) - CAST(${startColumn} AS DATE)) * 86400)`;
     } else {
         return string `TIMESTAMPDIFF(SECOND, ${startColumn}, ${endTimestamp})`;
     }
@@ -112,9 +119,9 @@ public isolated function getTimestampDiffSeconds(string startColumn, string endT
 
 // Get database-specific boolean literal
 // MySQL/H2: TRUE/FALSE
-// MSSQL: 1/0
+// MSSQL/Oracle (NUMBER(1) columns): 1/0
 public isolated function getBooleanLiteral(boolean value) returns string {
-    if dbType == MSSQL {
+    if dbType == MSSQL || dbType == ORACLE {
         return value ? "1" : "0";
     } else {
         return value ? "TRUE" : "FALSE";
@@ -141,11 +148,13 @@ public isolated function isH2() returns boolean => dbType == H2;
 
 public isolated function isPostgreSQL() returns boolean => dbType == POSTGRESQL;
 
+public isolated function isOracle() returns boolean => dbType == ORACLE;
+
 // Get database-specific LIMIT clause
 // MySQL/H2: LIMIT n
-// MSSQL: OFFSET 0 ROWS FETCH NEXT n ROWS ONLY
+// MSSQL/Oracle (12c+): OFFSET 0 ROWS FETCH NEXT n ROWS ONLY
 public isolated function getLimitClause(int rowCount) returns string {
-    if dbType == MSSQL {
+    if dbType == MSSQL || dbType == ORACLE {
         return string `OFFSET 0 ROWS FETCH NEXT ${rowCount} ROWS ONLY`;
     } else {
         return string `LIMIT ${rowCount}`;
@@ -155,7 +164,7 @@ public isolated function getLimitClause(int rowCount) returns string {
 // Append database-specific LIMIT clause to a query
 // Note: MSSQL requires an ORDER BY clause in the query before calling this function.
 public isolated function appendLimitClause(sql:ParameterizedQuery query, int rowCount) returns sql:ParameterizedQuery {
-    if dbType == MSSQL {
+    if dbType == MSSQL || dbType == ORACLE {
         return sql:queryConcat(query, ` OFFSET 0 ROWS FETCH NEXT ${rowCount} ROWS ONLY`);
     } else {
         return sql:queryConcat(query, ` LIMIT ${rowCount}`);
@@ -175,11 +184,14 @@ public isolated function convertDbDateTimeToISO8601(string dbTimestamp) returns 
     return base + "Z";
 }
 
-// Cast string to timestamp for PostgreSQL (no-op for other databases)
-// PostgreSQL requires explicit ::timestamp cast, others handle it automatically
+// Cast string to timestamp for PostgreSQL/Oracle (no-op for other databases)
+// PostgreSQL requires explicit ::timestamp cast, Oracle an explicit TO_TIMESTAMP,
+// others handle it automatically
 public isolated function timestampCast(string timestampStr) returns string {
     if dbType == POSTGRESQL {
         return string `'${timestampStr}'::timestamp`;
+    } else if dbType == ORACLE {
+        return string `TO_TIMESTAMP('${timestampStr}', 'YYYY-MM-DD HH24:MI:SS.FF6')`;
     } else {
         return string `'${timestampStr}'`;
     }

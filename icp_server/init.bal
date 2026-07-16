@@ -73,7 +73,7 @@ function init() returns error? {
         log:printInfo("OpenSearch client initialized successfully");
     }
 
-    // Initialize audit logging
+// Initialize audit logging
     storage:initAuditLogging(enableAuditLogging, auditLogFilePath);
 
     // Initialize the runtime scheduler
