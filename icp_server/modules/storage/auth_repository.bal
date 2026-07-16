@@ -564,7 +564,7 @@ public isolated function assignRoleToGroup(types:AssignRoleToGroupInput input) r
         return result;
     }
 
-    if dbType == ORACLE {
+    if isOracle() {
         // Oracle returns the ROWID (not the identity value) as lastInsertId,
         // so read the id back via the unique mapping tuple. NVL sentinels make
         // the nullable scope columns comparable.

@@ -124,7 +124,7 @@ public isolated function queryArtifactState(string componentId, string envId)
 
     // Group: (artifactKey, stateKey) -> list of {value, optimistic}
     map<map<[string, boolean][]>> groups = {};
-    if isOracle() {
+    if dbType == ORACLE {
         stream<OracleObservedStateRow, sql:Error?> obsRows = dbClient->query(obsQuery);
         check from OracleObservedStateRow row in obsRows
             do {
@@ -320,10 +320,11 @@ public isolated function batchUpsertReconcileObservedState(string runtimeId, str
         artifactCount = artifacts.length());
 
     if artifacts.length() > 0 && dbType == ORACLE {
-        // Oracle has no multi-row VALUES; merge each state entry individually
+        // Oracle has no multi-row VALUES; batch the per-entry MERGE statements
+        sql:ParameterizedQuery[] mergeQueries = [];
         foreach var [artifact, state] in artifacts {
             foreach var [stateKey, stateValue] in state.clone().entries() {
-                _ = check dbClient->execute(`
+                mergeQueries.push(`
                     MERGE INTO reconcile_observed_state target
                     USING (SELECT ${runtimeId} AS runtime_id, ${componentId} AS component_id, ${envId} AS env_id,
                                   ${artifact.artifactName} AS artifact_name, ${artifact.artifactType} AS artifact_type,
@@ -342,6 +343,9 @@ public isolated function batchUpsertReconcileObservedState(string runtimeId, str
                                 source.heartbeat_gen)
                 `);
             }
+        }
+        if mergeQueries.length() > 0 {
+            _ = check dbClient->batchExecute(mergeQueries);
         }
     } else if artifacts.length() > 0 {
         sql:ParameterizedQuery values = ``;
