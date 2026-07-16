@@ -17,12 +17,14 @@
  */
 
 import { Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListingTable, MenuItem, Select, Snackbar, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
-import { Eye, Play, RefreshCw, RotateCcw, Plus } from '@wso2/oxygen-ui-icons-react';
+import { Copy, Eye, Play, RefreshCw, RotateCcw, Plus } from '@wso2/oxygen-ui-icons-react';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
+import { resourceUrl, useScope } from '../../nav';
 import SearchField from '../SearchField';
 import SchemaFormFields from './SchemaFormFields';
 import WorkflowDetailDrawer from './WorkflowDetailDrawer';
-import { buildFormResult, formatTime, parseFormSchema, sectionTitleSx, splitQualifiedName } from './helpers';
+import { buildFormResult, formatTime, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, splitQualifiedName } from './helpers';
 import { SchemaDisclosure, StatusChip, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
@@ -61,7 +63,7 @@ const TIME_PRESETS: { label: string; ms: number }[] = [
   { label: 'Past 24 hours', ms: 24 * 60 * 60_000 },
 ];
 
-type Toast = { severity: 'success' | 'error'; message: string } | null;
+export type Toast = { severity: 'success' | 'error'; message: string } | null;
 
 // ── Shared filter controls (used by the Workflows and Retry Tasks views) ─────
 
@@ -136,7 +138,7 @@ function useTimeRangeFilter() {
   return { bounds, controls, active: timeRange !== ANY_TIME, reset: () => setTimeRange(ANY_TIME) };
 }
 
-export default function AdminPortal({ componentId, environmentId, initialWorkflowType }: WorkflowScope & { initialWorkflowType?: string }) {
+export default function AdminPortal({ componentId, environmentId, initialWorkflowType, initialWorkflowId }: WorkflowScope & { initialWorkflowType?: string; initialWorkflowId?: string }) {
   const scope: WorkflowScope = { componentId, environmentId };
   const [view, setView] = useState<'workflows' | 'retry'>('workflows');
   const [toast, setToast] = useState<Toast>(null);
@@ -152,7 +154,7 @@ export default function AdminPortal({ componentId, environmentId, initialWorkflo
         </Button>
       </Stack>
 
-      {view === 'workflows' ? <WorkflowsAdmin scope={scope} onToast={setToast} initialWorkflowType={initialWorkflowType} /> : <RetryTasksAdmin scope={scope} onToast={setToast} />}
+      {view === 'workflows' ? <WorkflowsAdmin scope={scope} onToast={setToast} initialWorkflowType={initialWorkflowType} initialWorkflowId={initialWorkflowId} /> : <RetryTasksAdmin scope={scope} onToast={setToast} />}
 
       <Snackbar open={toast !== null} autoHideDuration={4000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         {toast ? (
@@ -167,12 +169,13 @@ export default function AdminPortal({ componentId, environmentId, initialWorkflo
 
 // ── Workflows ────────────────────────────────────────────────────────────────
 
-function WorkflowsAdmin({ scope, onToast, initialWorkflowType }: { scope: WorkflowScope; onToast: (t: Toast) => void; initialWorkflowType?: string }) {
+function WorkflowsAdmin({ scope, onToast, initialWorkflowType, initialWorkflowId }: { scope: WorkflowScope; onToast: (t: Toast) => void; initialWorkflowType?: string; initialWorkflowId?: string }) {
   const [status, setStatus] = useState('All');
   // Seed the type filter from a deep link (e.g. Overview → "View Instances"). The Autocomplete
   // matches options by workflowType, so a minimal {workflowType} object selects the right option.
   const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(initialWorkflowType ? { workflowType: initialWorkflowType } : null);
-  const [search, setSearch] = useState('');
+  // Seed the ID search from a deep link (e.g. the start-workflow success dialog's "View Instance").
+  const [search, setSearch] = useState(initialWorkflowId ?? '');
   const timeFilter = useTimeRangeFilter();
   const [startOpen, setStartOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -188,7 +191,7 @@ function WorkflowsAdmin({ scope, onToast, initialWorkflowType }: { scope: Workfl
     limit: 50,
   };
   const { data: page, isLoading, error, refetch, isFetching } = useWorkflowInstances(scope, filters);
-  const items = page?.items ?? [];
+  const items = sortByStartTimeDesc(page?.items ?? []);
   const hasFilters = status !== 'All' || !!selectedType || !!search || timeFilter.active;
 
   return (
@@ -280,14 +283,21 @@ function WorkflowsAdmin({ scope, onToast, initialWorkflowType }: { scope: Workfl
   );
 }
 
-function StartWorkflowDialog({ scope, onClose, onToast }: { scope: WorkflowScope; onClose: () => void; onToast: (t: Toast) => void }) {
+export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToast }: { scope: WorkflowScope; initialWorkflowType?: string; onClose: () => void; onToast: (t: Toast) => void }) {
   const { data: definitions = [] } = useWorkflowDefinitions(scope);
   const start = useStartWorkflow(scope);
-  const [type, setType] = useState<WorkflowDefinition | null>(null);
+  // Seeded from a deep link (e.g. Overview → "Start Workflow") with a minimal {workflowType}
+  // object; the full definition (with inputSchema) is resolved once definitions load.
+  const [selected, setSelected] = useState<WorkflowDefinition | null>(initialWorkflowType ? { workflowType: initialWorkflowType } : null);
   const [workflowId, setWorkflowId] = useState('');
   const [timeout, setTimeoutVal] = useState('');
   const [formValues, setFormValues] = useState<Record<string, string | boolean>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [started, setStarted] = useState<{ workflowType: string; workflowId: string } | null>(null);
+  const navigate = useNavigate();
+  const navScope = useScope();
+
+  const type = selected ? (definitions.find((d) => d.workflowType === selected.workflowType) ?? selected) : null;
 
   // When the input schema parses into fields, a generated form replaces the raw JSON input.
   const formFields = type ? parseFormSchema(type.inputSchema) : null;
@@ -321,14 +331,59 @@ function StartWorkflowDialog({ scope, onClose, onToast }: { scope: WorkflowScope
         timeoutSeconds: timeout.trim() ? Number(timeout) : undefined,
       },
       {
-        onSuccess: () => {
-          onToast({ severity: 'success', message: `Started ${type.workflowType}.` });
-          onClose();
+        onSuccess: (wf) => {
+          if (wf?.workflowId) {
+            setStarted({ workflowType: type.workflowType, workflowId: wf.workflowId });
+          } else {
+            onToast({ severity: 'success', message: `Started ${type.workflowType}.` });
+            onClose();
+          }
         },
         onError: (e) => onToast({ severity: 'error', message: e instanceof Error ? e.message : 'Failed to start workflow.' }),
       },
     );
   };
+
+  const copyWorkflowId = async () => {
+    if (!started) return;
+    try {
+      await navigator.clipboard.writeText(started.workflowId);
+      onToast({ severity: 'success', message: 'Workflow ID copied to clipboard.' });
+    } catch {
+      onToast({ severity: 'error', message: 'Failed to copy workflow ID.' });
+    }
+  };
+
+  const viewInstance = () => {
+    if (!started) return;
+    onClose();
+    navigate(`${resourceUrl(navScope, 'workflows')}?tab=admin&workflowId=${encodeURIComponent(started.workflowId)}&env=${encodeURIComponent(scope.environmentId)}`);
+  };
+
+  if (started) {
+    return (
+      <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle sx={sectionTitleSx}>Workflow Started</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            <strong>{started.workflowType}</strong> workflow started with workflow ID{' '}
+            <Typography component="code" sx={{ fontFamily: 'monospace', fontSize: 13, bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 0.5, px: 0.75, py: 0.25 }}>
+              {started.workflowId}
+            </Typography>
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>Close</Button>
+          <Button startIcon={<Copy size={14} />} onClick={copyWorkflowId}>
+            Copy Workflow ID
+          </Button>
+          <Button variant="contained" startIcon={<Eye size={14} />} onClick={viewInstance}>
+            View Running Workflow
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -341,7 +396,7 @@ function StartWorkflowDialog({ scope, onClose, onToast }: { scope: WorkflowScope
             value={type}
             isOptionEqualToValue={(a, b) => a.workflowType === b.workflowType}
             onChange={(_, v) => {
-              setType(v);
+              setSelected(v);
               setFormValues({});
               setFieldErrors({});
             }}
@@ -400,7 +455,7 @@ function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t
   const [inputTaskId, setInputTaskId] = useState<string | null>(null);
 
   // The retry-task API has no workflow-name filter; the qualified task name carries it, so filter client-side.
-  const items = (page?.items ?? []).filter((t) => !selectedType || splitQualifiedName(t.taskName ?? t.activityName).workflow === selectedType.workflowType);
+  const items = sortByStartTimeDesc((page?.items ?? []).filter((t) => !selectedType || splitQualifiedName(t.taskName ?? t.activityName).workflow === selectedType.workflowType));
   const hasFilters = status !== 'All' || !!selectedType || !!search || timeFilter.active;
 
   const runDecision = (taskId: string, decision: RetryDecision, parsedInput?: unknown) => {

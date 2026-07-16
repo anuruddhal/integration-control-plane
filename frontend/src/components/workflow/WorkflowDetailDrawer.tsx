@@ -46,6 +46,16 @@ export default function WorkflowDetailDrawer({ scope, workflowId, onClose }: { s
   const runId = (info?.runId as string | undefined) ?? '';
   const startInput = extractWorkflowInput(history as Array<Record<string, unknown>>);
 
+  // Lifecycle actions narrowed by status: a running instance can be suspended/cancelled/terminated,
+  // a suspended one resumed/cancelled/terminated; closed instances (completed, failed, terminated,
+  // canceled, timed out) get no actions. Note: the runtime currently reports suspended instances
+  // as RUNNING (suspend is a signal, not a Temporal status), so SUSPENDED only takes effect once
+  // the runtime exposes it.
+  const normalizedStatus = status.toUpperCase();
+  const isRunning = normalizedStatus === 'RUNNING';
+  const isSuspended = normalizedStatus === 'SUSPENDED';
+  const showActions = isRunning || isSuspended;
+
   const runAction = (action: WorkflowLifecycleAction, actionReason?: string) => {
     lifecycle.mutate(
       { workflowId, action, reason: actionReason },
@@ -73,22 +83,28 @@ export default function WorkflowDetailDrawer({ scope, workflowId, onClose }: { s
       </Stack>
 
       {/* Lifecycle actions — only for users who can manage workflow executions */}
-      <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
-        <Stack direction="row" gap={1} sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', flexWrap: 'wrap' }}>
-          <Button size="small" variant="outlined" startIcon={<PauseCircle size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('suspend')}>
-            Suspend
-          </Button>
-          <Button size="small" variant="outlined" startIcon={<PlayCircle size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('resume')}>
-            Resume
-          </Button>
-          <Button size="small" variant="outlined" color="warning" startIcon={<Ban size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('cancel')}>
-            Cancel
-          </Button>
-          <Button size="small" variant="outlined" color="error" startIcon={<OctagonX size={14} />} disabled={lifecycle.isPending} onClick={() => setTerminateOpen(true)}>
-            Terminate
-          </Button>
-        </Stack>
-      </Authorized>
+      {showActions && (
+        <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+          <Stack direction="row" gap={1} sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', flexWrap: 'wrap' }}>
+            {isRunning && (
+              <Button size="small" variant="outlined" startIcon={<PauseCircle size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('suspend')}>
+                Suspend
+              </Button>
+            )}
+            {isSuspended && (
+              <Button size="small" variant="outlined" startIcon={<PlayCircle size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('resume')}>
+                Resume
+              </Button>
+            )}
+            <Button size="small" variant="outlined" color="warning" startIcon={<Ban size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('cancel')}>
+              Cancel
+            </Button>
+            <Button size="small" variant="outlined" color="error" startIcon={<OctagonX size={14} />} disabled={lifecycle.isPending} onClick={() => setTerminateOpen(true)}>
+              Terminate
+            </Button>
+          </Stack>
+        </Authorized>
+      )}
 
       <Box sx={{ px: 2 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>

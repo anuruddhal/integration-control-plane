@@ -39,12 +39,17 @@ export default function Workflows(scope: ComponentScope): JSX.Element {
   useLoadComponentPermissions(scope.org, projectId, componentId);
   const { hasAnyPermission } = useAccessControl();
 
-  // Optional deep-link params (e.g. from the Overview page's "View Instances" action):
-  // ?tab=admin&type=<workflowType>&env=<environmentId>
+  // Optional deep-link params (e.g. from the Overview page's "View Instances" action or the
+  // start-workflow success dialog): ?tab=admin&type=<workflowType>&workflowId=<id>&env=<environmentId>
   const [searchParams] = useSearchParams();
   const initialWorkflowType = searchParams.get('type') ?? undefined;
+  const initialWorkflowId = searchParams.get('workflowId') ?? undefined;
   const [tabKey, setTabKey] = useState<'user' | 'admin'>(searchParams.get('tab') === 'admin' ? 'admin' : 'user');
   const [selectedEnvId, setSelectedEnvId] = useState(searchParams.get('env') ?? '');
+
+  // Deep-link params seed component state once; remount the admin portal when they change so
+  // in-page navigation (e.g. "View Instance" from the start dialog) re-applies them.
+  const deepLinkKey = `${initialWorkflowType ?? ''}:${initialWorkflowId ?? ''}`;
 
   if (loadingProject || loadingComponent || loadingEnvs)
     return (
@@ -60,8 +65,7 @@ export default function Workflows(scope: ComponentScope): JSX.Element {
   const canViewHumanTasks = hasAnyPermission([Permissions.WORKFLOW_VIEW_HUMAN_TASKS, Permissions.WORKFLOW_MANAGE_HUMAN_TASKS], projectId, componentId);
   const canViewWorkflows = hasAnyPermission([Permissions.WORKFLOW_VIEW_WORKFLOWS, Permissions.WORKFLOW_MANAGE_WORKFLOWS], projectId, componentId);
   // Resolve the requested tab to one the user is allowed to see (null = neither).
-  const activeTab: 'user' | 'admin' | null =
-    tabKey === 'admin' && canViewWorkflows ? 'admin' : tabKey === 'user' && canViewHumanTasks ? 'user' : canViewHumanTasks ? 'user' : canViewWorkflows ? 'admin' : null;
+  const activeTab: 'user' | 'admin' | null = tabKey === 'admin' && canViewWorkflows ? 'admin' : tabKey === 'user' && canViewHumanTasks ? 'user' : canViewHumanTasks ? 'user' : canViewWorkflows ? 'admin' : null;
 
   return (
     <PageContent>
@@ -105,7 +109,7 @@ export default function Workflows(scope: ComponentScope): JSX.Element {
           ) : activeTab === 'user' ? (
             <UserPortal componentId={componentId} environmentId={activeEnvId} />
           ) : (
-            <AdminPortal componentId={componentId} environmentId={activeEnvId} initialWorkflowType={initialWorkflowType} />
+            <AdminPortal key={deepLinkKey} componentId={componentId} environmentId={activeEnvId} initialWorkflowType={initialWorkflowType} initialWorkflowId={initialWorkflowId} />
           )}
         </>
       )}

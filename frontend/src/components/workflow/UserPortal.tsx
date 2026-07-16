@@ -20,7 +20,7 @@ import { Alert, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions
 import { Eye, RefreshCw } from '@wso2/oxygen-ui-icons-react';
 import { useState, type ReactNode } from 'react';
 import SchemaFormFields from './SchemaFormFields';
-import { buildFormResult, formatTime, humanizeKey, parseFormSchema, sectionTitleSx } from './helpers';
+import { buildFormResult, formatTime, humanizeKey, parseFormSchema, sectionTitleSx, sortByStartTimeDesc } from './helpers';
 import { StatusChip, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
@@ -142,7 +142,7 @@ function TaskTable({ tasks, onOpen, showActionable }: { tasks: HumanTask[]; onOp
 function MyTasks({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast) => void }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const { data: page, isLoading, error, refetch, isFetching } = useHumanTasks(scope, { status: 'PENDING', limit: 50 });
-  const tasks = page?.items ?? [];
+  const tasks = sortByStartTimeDesc(page?.items ?? []);
 
   return (
     <>
@@ -185,7 +185,7 @@ function TaskHistory({ scope, onToast }: { scope: WorkflowScope; onToast: (t: To
   const error = completedQuery.error ?? terminatedQuery.error;
 
   const rejectedFlags = detailQueries.map((q) => isRejectedTask(q.data));
-  const tasks = tab === 'Completed' ? completedItems.filter((_, i) => !rejectedFlags[i]) : [...completedItems.filter((_, i) => rejectedFlags[i]).map((t) => ({ ...t, status: 'REJECTED' })), ...(terminatedQuery.data?.items ?? [])];
+  const tasks = sortByStartTimeDesc(tab === 'Completed' ? completedItems.filter((_, i) => !rejectedFlags[i]) : [...completedItems.filter((_, i) => rejectedFlags[i]).map((t) => ({ ...t, status: 'REJECTED' })), ...(terminatedQuery.data?.items ?? [])]);
 
   return (
     <>

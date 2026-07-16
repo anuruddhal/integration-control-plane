@@ -56,6 +56,7 @@ import { useUpdateArtifactStatus, useUpdateListenerState, useTriggerTask } from 
 import { useListMiUsers, useCreateMiUser, useDeleteMiUser } from '../api/miUsers';
 import { ArtifactApiDefinition, ServiceResources, AutomationExecutions, ProxyApiReference } from './ArtifactTabs';
 import { SchemaDisclosure } from './workflow/shared';
+import { StartWorkflowDialog, type Toast as WorkflowToast } from './workflow/AdminPortal';
 import { ArtifactTypeSelector } from './ArtifactDetail';
 import Authorized from './Authorized';
 import { Permissions } from '../constants/permissions';
@@ -72,6 +73,8 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const [pendingListenerToggle, setPendingListenerToggle] = useState<{ checked: boolean } | null>(null);
   const [triggerConfirmDialogOpen, setTriggerConfirmDialogOpen] = useState(false);
   const [triggerSuccessMessage, setTriggerSuccessMessage] = useState<string | null>(null);
+  const [startWorkflowOpen, setStartWorkflowOpen] = useState(false);
+  const [workflowToast, setWorkflowToast] = useState<WorkflowToast>(null);
   const { artifact, artifactType, envId, componentId, projectId } = selected;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -347,6 +350,13 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
               View Instances
             </Button>
           )}
+          {showInstancesButton && (
+            <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+              <Button variant="contained" size="small" startIcon={<Play size={14} />} onClick={() => setStartWorkflowOpen(true)}>
+                Start Workflow
+              </Button>
+            </Authorized>
+          )}
           {showRuntimesButton && (
             <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerTab('Runtimes')} sx={{ ml: showSourceButton || showParametersButton || showWsdlButton || showInstancesButton ? 0 : 'auto' }}>
               View Runtimes
@@ -405,6 +415,14 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         <Alert onClose={() => setTriggerSuccessMessage(null)} severity="success" sx={{ width: '100%' }}>
           {triggerSuccessMessage}
         </Alert>
+      </Snackbar>
+      {startWorkflowOpen && <StartWorkflowDialog scope={{ componentId, environmentId: envId }} initialWorkflowType={artifactName} onClose={() => setStartWorkflowOpen(false)} onToast={setWorkflowToast} />}
+      <Snackbar open={workflowToast !== null} autoHideDuration={4000} onClose={() => setWorkflowToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        {workflowToast ? (
+          <Alert severity={workflowToast.severity} onClose={() => setWorkflowToast(null)} sx={{ width: '100%' }}>
+            {workflowToast.message}
+          </Alert>
+        ) : undefined}
       </Snackbar>
     </>
   );

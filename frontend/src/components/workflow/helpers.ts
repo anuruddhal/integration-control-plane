@@ -144,6 +144,15 @@ export function buildFormResult(fields: FormField[], values: Record<string, stri
   return { result, errors };
 }
 
+/** Returns a copy of `items` sorted by their `startTime`, newest first (missing/invalid times last). */
+export function sortByStartTimeDesc<T extends { startTime?: string }>(items: T[]): T[] {
+  const ts = (v?: string) => {
+    const t = v ? Date.parse(v) : NaN;
+    return Number.isNaN(t) ? 0 : t;
+  };
+  return [...items].sort((a, b) => ts(b.startTime) - ts(a.startTime));
+}
+
 /** Formats an ISO-8601 timestamp for compact display; passes through on failure. */
 export function formatTime(value?: string): string {
   if (!value) return '—';
