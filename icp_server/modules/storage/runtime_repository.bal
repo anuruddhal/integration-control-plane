@@ -299,22 +299,40 @@ public isolated function getListenersForRuntime(string runtimeId) returns types:
 // to reconstruct the runtime's management API key.
 // Only a RUNNING runtime's callbackUrl is used — a stopped/offline runtime's URL is stale.
 // Returns () when no running runtime reported a callbackUrl (proxy surfaces this as 503).
+// Predicate matching a usable (non-null, non-empty) callback_url. Oracle stores empty
+// strings as NULL and any comparison with '' is never true there, so `callback_url <> ''`
+// would exclude every row on Oracle; IS NOT NULL alone is the correct Oracle form.
+isolated function usableCallbackUrlPredicate() returns sql:ParameterizedQuery =>
+    isOracle() ? ` AND callback_url IS NOT NULL` : ` AND callback_url IS NOT NULL AND callback_url <> ''`;
+
 public isolated function getRuntimeWorkflowTarget(string componentId, string environmentId) returns types:WorkflowTarget?|error {
-    stream<record {|string? callback_url; string? key_id; string status;|}, sql:Error?> rs = dbClient->query(`
-        SELECT callback_url, key_id, status
+    sql:ParameterizedQuery query = sql:queryConcat(`
+        SELECT callback_url, key_id
         FROM runtimes
         WHERE component_id = ${componentId} AND environment_id = ${environmentId}
-            AND callback_url IS NOT NULL AND callback_url <> ''
-    `);
-    record {|string? callback_url; string? key_id; string status;|}[] rows = check from var r in rs
+            AND status = 'RUNNING'`, usableCallbackUrlPredicate());
+    stream<record {|string callback_url; string? key_id;|}, sql:Error?> rs = dbClient->query(query);
+    record {|string callback_url; string? key_id;|}[] rows = check from var r in rs
+        limit 1
         select r;
-    foreach var r in rows {
-        string? callbackUrl = r.callback_url;
-        if r.status == "RUNNING" && callbackUrl is string {
-            return {callbackUrl, keyId: r.key_id};
-        }
+    if rows.length() == 0 {
+        return ();
     }
-    return ();
+    return {callbackUrl: rows[0].callback_url, keyId: rows[0].key_id};
+}
+
+// Distinct callback URLs of RUNNING runtimes — the only URLs the workflow proxy can
+// currently target (getRuntimeWorkflowTarget ignores non-RUNNING rows). Used by the
+// offline-runtime scheduler to prune the workflow proxy's http:Client cache: after a
+// heartbeat sweep, any cached URL absent from this set belongs to a dead/stopped runtime.
+public isolated function getRunningWorkflowCallbackUrls() returns string[]|error {
+    sql:ParameterizedQuery query = sql:queryConcat(`
+        SELECT DISTINCT callback_url
+        FROM runtimes
+        WHERE status = 'RUNNING'`, usableCallbackUrlPredicate());
+    stream<record {|string callback_url;|}, sql:Error?> rs = dbClient->query(query);
+    return from var r in rs
+        select r.callback_url;
 }
 
 type ApiRecordInDB record {|

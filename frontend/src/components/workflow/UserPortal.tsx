@@ -20,7 +20,7 @@ import { Alert, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions
 import { Eye, RefreshCw } from '@wso2/oxygen-ui-icons-react';
 import { useState, type ReactNode } from 'react';
 import SchemaFormFields from './SchemaFormFields';
-import { buildFormResult, formatTime, humanizeKey, parseFormSchema, sectionTitleSx, sortByStartTimeDesc } from './helpers';
+import { buildFormResult, formatTime, humanizeKey, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, unescapeRoleName } from './helpers';
 import { StatusChip, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
@@ -359,7 +359,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
                   {eligibleRoles?.length ? (
                     <Stack direction="row" gap={0.5} flexWrap="wrap">
                       {eligibleRoles.map((role) => (
-                        <Chip key={role} label={role} size="small" variant="outlined" />
+                        <Chip key={role} label={unescapeRoleName(role)} size="small" variant="outlined" />
                       ))}
                     </Stack>
                   ) : (

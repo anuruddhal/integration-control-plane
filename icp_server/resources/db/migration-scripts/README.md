@@ -21,6 +21,7 @@ Pick the script matching your database engine:
 | MySQL / MariaDB | `add_workflow_feature_mysql.sql` |
 | PostgreSQL | `add_workflow_feature_postgresql.sql` |
 | Microsoft SQL Server | `add_workflow_feature_mssql.sql` |
+| Oracle (19c+) | `add_workflow_feature_oracle.sql` |
 
 Each script applies, in order:
 
@@ -49,6 +50,9 @@ psql -U <admin_user> -d <icp_db_name> -f add_workflow_feature_postgresql.sql
 
 # Microsoft SQL Server
 sqlcmd -S <server> -U <user> -P <password> -d <icp_db_name> -i add_workflow_feature_mssql.sql
+
+# Oracle (run as the ICP schema owner)
+sqlplus <icp_schema_user>/<password>@//<host>:1521/<service_name> @add_workflow_feature_oracle.sql
 ```
 
 ---

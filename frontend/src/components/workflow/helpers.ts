@@ -36,6 +36,16 @@ export function jsonPretty(value: unknown): string {
   }
 }
 
+/**
+ * Reverses the ICP proxy's role-name escaping for display (`%2C` → `,`).
+ * The proxy escapes commas in each role name before comma-joining the `x-user-roles`
+ * header (see escapeRoleName in icp_server/workflow_proxy_service.bal), and the runtime
+ * echoes the escaped names back in task role lists.
+ */
+export function unescapeRoleName(role: string): string {
+  return role.replace(/%2C/gi, ',');
+}
+
 /** Shared heading style for workflow cards, sections, and form/dialog titles: bold, muted gray. */
 export const sectionTitleSx = { fontWeight: 700, color: 'text.secondary' } as const;
 

@@ -43,12 +43,30 @@ configurable boolean workflowProxyAllowInsecureTLS = false;
 // Request timeout (seconds) for calls to the runtime workflow service.
 configurable decimal workflowProxyTimeout = 30;
 
-// Cache of http:Clients keyed by callbackUrl so we don't rebuild a client per request.
-// Bounded: in K8s, pod churn produces a new callbackUrl per pod, so the key set grows
-// for the life of the server. At the cap the cache is flushed wholesale — by then stale
-// entries for dead pods dominate the map, and rebuilding a client per live runtime is cheap.
 const int WORKFLOW_CLIENT_CACHE_MAX_SIZE = 100;
 isolated map<http:Client> workflowClientCache = {};
+
+// Evicts cached clients whose callbackUrl no longer belongs to a RUNNING runtime.
+isolated function pruneWorkflowClientCache() {
+    string[]|error liveUrls = storage:getRunningWorkflowCallbackUrls();
+    if liveUrls is error {
+        log:printWarn("Workflow client cache prune skipped — failed to look up running runtimes",
+                'error = liveUrls);
+        return;
+    }
+    map<()> liveSetMut = {};
+    foreach string url in liveUrls {
+        liveSetMut[url] = ();
+    }
+    final readonly & map<()> liveSet = liveSetMut.cloneReadOnly();
+    lock {
+        foreach string cachedUrl in workflowClientCache.keys() {
+            if !liveSet.hasKey(cachedUrl) {
+                _ = workflowClientCache.remove(cachedUrl);
+            }
+        }
+    }
+}
 
 isolated function getWorkflowClient(string baseUrl) returns http:Client|error {
     lock {
@@ -147,6 +165,15 @@ isolated function fetchWorkflowDefinitions(string componentId, string environmen
     return result;
 }
 
+// Escapes a role name for the comma-joined `x-user-roles` header (`,` → `%2C`).
+// Role names are user-created, so a literal comma would otherwise let a role like
+// `Foo,admin` inject the synthetic `admin` role when the runtime splits the header.
+// Names without commas pass through unchanged, so runtime-side role matching is unaffected.
+// The frontend reverses this for display (unescapeRoleName in workflow/helpers.ts).
+isolated function escapeRoleName(string roleName) returns string {
+    return re `,`.replaceAll(roleName, "%2C");
+}
+
 isolated function workflowErrorResponse(int statusCode, string message) returns http:Response {
     http:Response res = new;
     res.statusCode = statusCode;
@@ -218,14 +245,15 @@ function proxyWorkflowRequest(string componentId, string environmentId, string[]
     string query = qIdx is int ? rawPath.substring(qIdx) : "";
     string targetPath = "/workflow/" + subPath + query;
 
-    // 5. Inject identity headers. Forward the caller's ICP role names so the workflow
-    //    service can match/authorize human tasks by role. Drop ICP's bearer token and
+    // 5. Inject identity headers. Forward the caller's ICP role names (each escaped, see
+    //    escapeRoleName) so the workflow service can match/authorize human tasks by role.
+    //    Drop ICP's bearer token and
     //    authenticate to the runtime's management API with its API key instead.
     string[]|error roleNames = storage:getAllUserRoleNames(userContext.userId);
     if roleNames is error {
         return workflowErrorResponse(500, "Failed to resolve user roles: " + roleNames.message());
     }
-    string roles = string:'join(",", ...roleNames);
+    string roles = string:'join(",", ...roleNames.map(escapeRoleName));
     boolean|error superAdmin = auth:isSuperAdmin(userContext.userId);
     if superAdmin is boolean && superAdmin {
         roles = roles.length() > 0 ? roles + ",admin" : "admin";
