@@ -82,7 +82,7 @@ export interface HistoryEvent {
 
 async function wfRequest<T>(componentId: string, environmentId: string, subpath: string, init: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
   try {
     const res = await authenticatedFetch(workflowApiUrl(componentId, environmentId, subpath), {
       ...init,

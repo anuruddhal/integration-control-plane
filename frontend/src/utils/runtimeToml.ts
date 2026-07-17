@@ -25,6 +25,6 @@ export function workflowManagementToml(secret: string): string {
 enableManagementApi = true
 enableApiKey = true
 apiKeyValue = "${secret}"
-apiKeyHeader = "X-API-KEY"
+apiKeyHeader = "X-API-Key"
 enableBasicAuth = false`;
 }

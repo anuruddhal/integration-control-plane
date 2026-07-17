@@ -44,6 +44,10 @@ configurable boolean workflowProxyAllowInsecureTLS = false;
 configurable decimal workflowProxyTimeout = 30;
 
 // Cache of http:Clients keyed by callbackUrl so we don't rebuild a client per request.
+// Bounded: in K8s, pod churn produces a new callbackUrl per pod, so the key set grows
+// for the life of the server. At the cap the cache is flushed wholesale — by then stale
+// entries for dead pods dominate the map, and rebuilding a client per live runtime is cheap.
+const int WORKFLOW_CLIENT_CACHE_MAX_SIZE = 100;
 isolated map<http:Client> workflowClientCache = {};
 
 isolated function getWorkflowClient(string baseUrl) returns http:Client|error {
@@ -67,6 +71,9 @@ isolated function getWorkflowClient(string baseUrl) returns http:Client|error {
         // Re-check in case another worker created it meanwhile.
         if workflowClientCache.hasKey(baseUrl) {
             return workflowClientCache.get(baseUrl);
+        }
+        if workflowClientCache.length() >= WORKFLOW_CLIENT_CACHE_MAX_SIZE {
+            workflowClientCache.removeAll();
         }
         workflowClientCache[baseUrl] = newClient;
     }
@@ -257,7 +264,7 @@ function proxyWorkflowRequest(string componentId, string environmentId, string[]
         }
     ],
     cors: {
-        allowOrigins: ["*"],
+        allowOrigins: normalizedCorsAllowedOrigins,
         allowHeaders: ["Content-Type", "Authorization"]
     }
 }
