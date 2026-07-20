@@ -1522,7 +1522,7 @@ public type ComponentInput record {
     string orgHandler?; // Organization handle
 
     // Component Classification (optional - can have defaults)
-    RuntimeType componentType?; // Runtime type: "BI" or "MI"
+    RuntimeType? componentType?; // Runtime type: "BI" or "MI"
     string technology?; // Technology: "WSO2MI", "Ballerina", etc.
 
     // Repository Integration (optional - for future use)
@@ -1544,7 +1544,7 @@ public type ComponentUpdateInput record {
     string name?;
     string displayName?;
     string description?;
-    RuntimeType componentType?;
+    RuntimeType? componentType?;
     string version?;
     string labels?;
     string serviceAccessMode?;

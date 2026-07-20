@@ -24,7 +24,7 @@ import ballerina/uuid;
 // Create a new component
 public isolated function createComponent(types:ComponentInput component) returns types:Component|error? {
     string componentId = uuid:createType1AsString();
-    string componentTypeValue = component.componentType.toString();
+    string componentTypeValue = (component?.componentType ?: types:BI).toString();
 
     // Use displayName if provided, otherwise fall back to name
     string displayName = component?.displayName ?: component.name;
