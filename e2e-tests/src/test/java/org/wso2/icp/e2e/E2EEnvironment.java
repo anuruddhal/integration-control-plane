@@ -30,6 +30,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import org.jacoco.core.runtime.RemoteControlReader;
@@ -497,11 +498,11 @@ public final class E2EEnvironment implements AutoCloseable {
     // time window, so the logs never appear.
     private static void patchMiLog4j(Path log4j) throws IOException {
         String content = Files.readString(log4j);
-        content = content.replaceAll(
-                "(?m)^appender\\.CARBON_LOGFILE\\.layout\\.pattern\\s*=.*$",
-                Matcher.quoteReplacement(
-                        "appender.CARBON_LOGFILE.layout.pattern = [%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}] %5p {%c} %X{Artifact-Container} - %m%ex ${sys:icp.runtime.log.suffix:-}%n"));
-        Files.writeString(log4j, content);
+        Matcher matcher = Pattern.compile(
+                "(?m)^appender\\.CARBON_LOGFILE\\.layout\\.pattern\\s*=.*$").matcher(content);
+        if (!matcher.find()) throw new IOException("MI log4j carbon log pattern not found: " + log4j);
+        Files.writeString(log4j, matcher.replaceFirst(Matcher.quoteReplacement(
+                "appender.CARBON_LOGFILE.layout.pattern = [%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}] %5p {%c} %X{Artifact-Container} - %m%ex ${sys:icp.runtime.log.suffix:-}%n")));
     }
 
     private void seedOidcUser() throws Exception {
