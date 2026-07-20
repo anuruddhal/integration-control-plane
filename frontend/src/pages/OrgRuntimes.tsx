@@ -31,11 +31,13 @@ import {
   DialogTitle,
   Divider,
   Drawer,
+  FormControlLabel,
   IconButton,
   ListingTable,
   PageContent,
   PageTitle,
   Stack,
+  Switch,
   Tab,
   TablePagination,
   Tabs,
@@ -56,6 +58,7 @@ import Authorized from '../components/Authorized';
 import { Permissions } from '../constants/permissions';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import type { OrgScope } from '../nav';
+import { workflowManagementToml } from '../utils/runtimeToml';
 
 const drawerSx = {
   '& .MuiDrawer-paper': { width: '45%', maxWidth: 560, minWidth: 360, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' },
@@ -156,14 +159,18 @@ secret = "${secret}"
 #icp_url = "https://<hostname>:9445"`;
 }
 
-function biToml(envName: string, secret: string): string {
-  return `[wso2.icp.runtime.bridge]
+function biToml(envName: string, secret: string, workflowMgt: boolean): string {
+  const base = `[wso2.icp.runtime.bridge]
 environment = "${envName}"
 project = "<project name>"
 integration = "<integration name>"
 runtime = "<unique id for the runtime>"
 secret = "${secret}"
 #serverUrl="https://<hostname>:9445"`;
+  if (!workflowMgt) return base;
+  return `${base}
+
+${workflowManagementToml(secret)}`;
 }
 
 function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () => void }) {
@@ -171,6 +178,7 @@ function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () =>
   const [secret, setSecret] = useState<string | null>(null);
   const [tab, setTab] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [workflowMgt, setWorkflowMgt] = useState(false);
 
   const handleGenerate = () => {
     setError(null);
@@ -183,7 +191,7 @@ function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () =>
     );
   };
 
-  const config = secret ? (tab === 0 ? biToml(env.handler, secret) : miToml(env.handler, secret)) : null;
+  const config = secret ? (tab === 0 ? biToml(env.handler, secret, workflowMgt) : miToml(env.handler, secret)) : null;
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -202,6 +210,10 @@ function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () =>
             <Alert severity="warning" sx={{ mb: 2 }}>
               <strong>The secret will be shown once — copy it before closing.</strong>
             </Alert>
+            <FormControlLabel control={<Switch checked={workflowMgt} onChange={(e) => setWorkflowMgt(e.target.checked)} />} label="Enable Workflow Management" sx={{ display: 'flex' }} />
+            <DialogContentText variant="caption" sx={{ mb: 2, display: 'block' }}>
+              Applies to Default (BI) runtimes only — the MI configuration is not affected.
+            </DialogContentText>
             <Button variant="contained" onClick={handleGenerate} disabled={createMutation.isPending}>
               {createMutation.isPending ? 'Generating...' : 'Generate Secret'}
             </Button>

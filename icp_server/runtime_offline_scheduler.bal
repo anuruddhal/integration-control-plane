@@ -52,6 +52,9 @@ class Job {
         if (e is error) {
             log:printError("Failed to mark offline runtimes", e);
         }
+        // Runtimes that just went offline were deleted (K8S) or marked OFFLINE (VM);
+        // drop the workflow proxy's cached clients for their callback URLs.
+        pruneWorkflowClientCache();
     }
 
 }

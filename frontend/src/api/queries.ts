@@ -543,6 +543,12 @@ const ARTIFACT_QUERY_MAP: Record<string, { queryName: string; field: string; fie
     fields: 'packageOrg, packageName, packageVersion',
     gqlFields: 'packageOrg, packageName, packageVersion, runtimeIds, runtimes { runtimeId, runtimeName, status, executionTimestamps }, executionTimestamp',
   },
+  Workflow: {
+    queryName: 'workflowsByEnvironmentAndComponent',
+    field: 'workflowsByEnvironmentAndComponent',
+    fields: 'name, workerCount',
+    gqlFields: 'name, isActive, workerCount, inputSchema, state, runtimes { runtimeId, runtimeName, status }',
+  },
   MessageStore: {
     queryName: 'messageStoresByEnvironmentAndComponent',
     field: 'messageStoresByEnvironmentAndComponent',

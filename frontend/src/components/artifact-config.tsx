@@ -16,7 +16,7 @@
  * under the License.
  */
 
-import { Globe, Link2, ListOrdered, Clock, FolderArchive, Package, Plug, FileText, Radio, Server, Wifi, Layers, Zap, Database, Cpu, LayoutTemplate, Table, HardDrive } from '@wso2/oxygen-ui-icons-react';
+import { Globe, Link2, ListOrdered, Clock, FolderArchive, Package, Plug, FileText, Radio, Server, Wifi, Layers, Zap, Database, Cpu, LayoutTemplate, Table, HardDrive, Workflow } from '@wso2/oxygen-ui-icons-react';
 import type { JSX } from 'react';
 import type { GqlArtifact } from '../api/queries';
 
@@ -49,6 +49,7 @@ export const ARTIFACT_ICONS: Record<string, JSX.Element> = {
   Template: <LayoutTemplate size={18} />,
   DataService: <Table size={18} />,
   DataSource: <HardDrive size={18} />,
+  Workflow: <Workflow size={18} />,
 };
 
 export const ARTIFACT_TABS: Record<string, string[]> = {
@@ -68,6 +69,7 @@ export const ARTIFACT_TABS: Record<string, string[]> = {
   Template: ['Source', 'Runtimes'],
   DataService: ['Overview', 'Source', 'Runtimes'],
   DataSource: ['Overview', 'Parameters', 'Source', 'Runtimes'],
+  Workflow: ['Runtimes'],
 };
 export const DEFAULT_ARTIFACT_TABS = ['Source', 'Runtimes'];
 
@@ -79,6 +81,7 @@ export const ENTRY_POINT_CONFIG: Record<string, { label: string; detailLabel: st
   Service: { label: 'Service', detailLabel: 'SERVICE', color: '#4a148c', bgColor: '#f3e5f5', metaField: 'basePath', primaryDisplay: true, overviewFields: 'package, basePath, type' },
   Listener: { label: 'Listener', detailLabel: 'LISTENER', color: '#bf360c', bgColor: '#fbe9e7', metaField: 'port', primaryDisplay: true, overviewFields: 'package, protocol, host, port' },
   Automation: { label: 'Automation', detailLabel: 'AUTOMATION', color: '#f57c00', bgColor: '#fff3e0', metaField: 'packageVersion', overviewFields: 'packageOrg, packageName, packageVersion' },
+  Workflow: { label: 'Workflow', detailLabel: 'WORKFLOW', color: '#00838f', bgColor: '#e0f7fa', overviewFields: 'state, workerCount' },
 };
 
 export const ENTRY_POINT_DETAIL_TABS: Record<string, string[]> = {
@@ -88,6 +91,7 @@ export const ENTRY_POINT_DETAIL_TABS: Record<string, string[]> = {
   Task: ['Runtimes'],
   Service: ['Overview', 'Resources', 'Runtimes'],
   Listener: ['Overview', 'Runtimes'],
+  Workflow: ['Overview', 'Runtimes'],
 };
 
 export const ENTRY_POINT_TYPE_SET = new Set(Object.keys(ENTRY_POINT_CONFIG));

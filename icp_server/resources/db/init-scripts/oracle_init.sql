@@ -259,7 +259,8 @@ CREATE TABLE permissions (
         'Environment-Management',
         'Observability-Management',
         'Project-Management',
-        'User-Management'
+        'User-Management',
+        'Workflow-Management'
     )),
     resource_type VARCHAR2(100 CHAR) NOT NULL,
     action VARCHAR2(100 CHAR) NOT NULL,
@@ -525,6 +526,16 @@ INSERT INTO permissions (permission_id, permission_name, permission_domain, reso
 INSERT INTO permissions (permission_id, permission_name, permission_domain, resource_type, action, description) VALUES
 (REGEXP_REPLACE(LOWER(RAWTOHEX(SYS_GUID())), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\1-\2-\3-\4-\5'), 'user_mgt:update_group_roles', 'User-Management', 'group-role', 'update', 'Map roles to groups');
 
+-- Workflow Management permissions
+INSERT INTO permissions (permission_id, permission_name, permission_domain, resource_type, action, description) VALUES
+('a1f4c2e0-0000-4000-8000-000000000001', 'workflow_mgt:view_human_tasks', 'Workflow-Management', 'human_task', 'view', 'View human tasks');
+INSERT INTO permissions (permission_id, permission_name, permission_domain, resource_type, action, description) VALUES
+('a1f4c2e0-0000-4000-8000-000000000002', 'workflow_mgt:manage_human_tasks', 'Workflow-Management', 'human_task', 'manage', 'Complete, fail and cancel human tasks');
+INSERT INTO permissions (permission_id, permission_name, permission_domain, resource_type, action, description) VALUES
+('a1f4c2e0-0000-4000-8000-000000000003', 'workflow_mgt:view_workflows', 'Workflow-Management', 'workflow', 'view', 'View workflow executions');
+INSERT INTO permissions (permission_id, permission_name, permission_domain, resource_type, action, description) VALUES
+('a1f4c2e0-0000-4000-8000-000000000004', 'workflow_mgt:manage_workflows', 'Workflow-Management', 'workflow', 'manage', 'Start, suspend, resume, cancel and terminate workflow executions');
+
 -- Map Super Admin to ALL permissions
 INSERT INTO role_permission_mapping (role_id, permission_id)
 SELECT
@@ -581,6 +592,20 @@ WHERE permission_name IN (
     'observability_mgt:view_insights'
 );
 
+-- Map Workflow human-task permissions to operational roles (Super Admin/Admin covered above)
+INSERT INTO role_permission_mapping (role_id, permission_id)
+SELECT r.role_id, p.permission_id
+FROM roles_v2 r, permissions p
+WHERE p.permission_name IN ('workflow_mgt:view_human_tasks', 'workflow_mgt:manage_human_tasks')
+    AND (r.role_name IN ('Developer', 'Project Admin') OR (r.role_name = 'Viewer' AND p.permission_name = 'workflow_mgt:view_human_tasks'));
+
+-- Map Workflow execution permissions to admin roles (Super Admin/Admin covered above)
+INSERT INTO role_permission_mapping (role_id, permission_id)
+SELECT r.role_id, p.permission_id
+FROM roles_v2 r, permissions p
+WHERE (p.permission_name = 'workflow_mgt:view_workflows' AND r.role_name IN ('Developer', 'Project Admin'))
+    OR (p.permission_name = 'workflow_mgt:manage_workflows' AND r.role_name = 'Project Admin');
+
 -- Create default groups
 INSERT INTO user_groups (group_id, group_name, org_uuid, description) VALUES
 (REGEXP_REPLACE(LOWER(RAWTOHEX(SYS_GUID())), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\1-\2-\3-\4-\5'), 'Super Admins', 1, 'Group for super administrators with full access');
@@ -619,6 +644,7 @@ CREATE TABLE runtimes (
     version VARCHAR2(50 CHAR) NULL,
     runtime_hostname VARCHAR2(255 CHAR) NULL,
     runtime_port VARCHAR2(10 CHAR) NULL,
+    callback_url VARCHAR2(500 CHAR) NULL,
     platform_name VARCHAR2(50 CHAR) DEFAULT 'ballerina' NOT NULL,
     platform_version VARCHAR2(50 CHAR) NULL,
     platform_home VARCHAR2(255 CHAR) NULL,

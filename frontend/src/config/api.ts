@@ -26,6 +26,7 @@ interface RuntimeConfig {
   VITE_GRAPHQL_URL?: string;
   VITE_AUTH_BASE_URL?: string;
   VITE_OBSERVABILITY_URL?: string;
+  VITE_WORKFLOW_URL?: string;
   VITE_WS_URL?: string;
   VITE_SSO_ENABLED?: boolean;
   VITE_ICP_VERSION?: string;
@@ -35,6 +36,7 @@ export interface ApiConfig {
   graphqlUrl: string;
   authBaseUrl: string;
   observabilityUrl: string;
+  workflowUrl: string;
   wsUrl: string;
   ssoEnabled: boolean;
   version: string;
@@ -52,6 +54,7 @@ const DEFAULT_CONFIG: ApiConfig = {
   graphqlUrl: 'https://localhost:9446/graphql',
   authBaseUrl: 'https://localhost:9446/auth',
   observabilityUrl: 'https://localhost:9446/icp/observability',
+  workflowUrl: 'https://localhost:9446/icp/workflow',
   wsUrl: 'wss://localhost:9446/runtime-status',
   ssoEnabled: false,
   version: '',
@@ -74,6 +77,7 @@ export async function loadConfig(): Promise<void> {
       graphqlUrl: config.VITE_GRAPHQL_URL || DEFAULT_CONFIG.graphqlUrl,
       authBaseUrl: config.VITE_AUTH_BASE_URL || DEFAULT_CONFIG.authBaseUrl,
       observabilityUrl: config.VITE_OBSERVABILITY_URL || DEFAULT_CONFIG.observabilityUrl,
+      workflowUrl: config.VITE_WORKFLOW_URL || DEFAULT_CONFIG.workflowUrl,
       wsUrl: config.VITE_WS_URL || DEFAULT_CONFIG.wsUrl,
       ssoEnabled: config.VITE_SSO_ENABLED ?? DEFAULT_CONFIG.ssoEnabled,
       version: config.VITE_ICP_VERSION || DEFAULT_CONFIG.version,
@@ -94,6 +98,7 @@ function validateConfig(config: ApiConfig): void {
   if (!config.graphqlUrl) missing.push('VITE_GRAPHQL_URL');
   if (!config.authBaseUrl) missing.push('VITE_AUTH_BASE_URL');
   if (!config.observabilityUrl) missing.push('VITE_OBSERVABILITY_URL');
+  if (!config.workflowUrl) missing.push('VITE_WORKFLOW_URL');
 
   if (missing.length > 0) {
     console.warn(`Warning: The following configuration values are not set: ${missing.join(', ')}. ` + 'Using default values.');
@@ -110,3 +115,9 @@ export const changePasswordApiUrl = (): string => `${window.API_CONFIG.authBaseU
 export const forceChangePasswordApiUrl = (): string => `${window.API_CONFIG.authBaseUrl}/force-change-password`;
 export const isSsoEnabled = (): boolean => window.API_CONFIG.ssoEnabled;
 export const getIcpVersion = (): string => window.API_CONFIG.version;
+
+/**
+ * Builds a URL to the workflow management proxy for a given component+environment.
+ * `subpath` is the runtime-side workflow API path (e.g. "workflows?status=RUNNING").
+ */
+export const workflowApiUrl = (componentId: string, environmentId: string, subpath: string): string => `${window.API_CONFIG.workflowUrl.replace(/\/+$/, '')}/${encodeURIComponent(componentId)}/${encodeURIComponent(environmentId)}/${subpath}`;

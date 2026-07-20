@@ -43,6 +43,12 @@ public const string PERMISSION_PROJECT_MANAGE = "project_mgt:manage";
 public const string PERMISSION_OBSERVABILITY_VIEW_LOGS = "observability_mgt:view_logs";
 public const string PERMISSION_OBSERVABILITY_VIEW_INSIGHTS = "observability_mgt:view_insights";
 
+// Workflow Management Permissions
+public const string PERMISSION_WORKFLOW_VIEW_HUMAN_TASKS = "workflow_mgt:view_human_tasks";
+public const string PERMISSION_WORKFLOW_MANAGE_HUMAN_TASKS = "workflow_mgt:manage_human_tasks";
+public const string PERMISSION_WORKFLOW_VIEW_WORKFLOWS = "workflow_mgt:view_workflows";
+public const string PERMISSION_WORKFLOW_MANAGE_WORKFLOWS = "workflow_mgt:manage_workflows";
+
 // User Management Permissions
 public const string PERMISSION_USER_MANAGE_USERS = "user_mgt:manage_users";
 public const string PERMISSION_USER_UPDATE_USERS = "user_mgt:update_users";

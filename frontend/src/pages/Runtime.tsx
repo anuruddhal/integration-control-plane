@@ -38,6 +38,7 @@ import {
   PageContent,
   PageTitle,
   Stack,
+  Switch,
   TablePagination,
   Typography,
 } from '@wso2/oxygen-ui';
@@ -53,6 +54,7 @@ import { useProjectByHandler, useEnvironments, useComponentByHandler, useCompone
 import { useCreateOrgSecret, useDeleteRuntime, useRevokeOrgSecret } from '../api/mutations';
 import { hasComponent, type ProjectScope, type ComponentScope } from '../nav';
 import { formatDistanceToNow } from '../utils/time';
+import { workflowManagementToml } from '../utils/runtimeToml';
 import Authorized from '../components/Authorized';
 import { Permissions } from '../constants/permissions';
 import { useAccessControl } from '../contexts/AccessControlContext';
@@ -81,14 +83,19 @@ secret = "${secret}"
 # icp_url = "https://<hostname>:9445"`;
 }
 
-function biToml(envName: string, secret: string, projectHandle: string, integrationHandle: string): string {
-  return `[wso2.icp.runtime.bridge]
+function biToml(envName: string, secret: string, projectHandle: string, integrationHandle: string, workflowMgt: boolean): string {
+  const base = `[wso2.icp.runtime.bridge]
 environment = "${envName}"
 project = "${projectHandle}"
 integration = "${integrationHandle}"
 runtime = "<unique id for the runtime>"
 secret = "${secret}"
-# serverUrl="https://<hostname>:9445"`;
+# serverUrl="https://<hostname>:9445"
+# runtimeBaseUrl="http://<hostname>"`;
+  if (!workflowMgt) return base;
+  return `${base}
+
+${workflowManagementToml(secret)}`;
 }
 
 function AddRuntimeModal({
@@ -112,6 +119,7 @@ function AddRuntimeModal({
   const queryClient = useQueryClient();
   const [secret, setSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [workflowMgt, setWorkflowMgt] = useState(false);
   const isBI = componentType === 'BI';
 
   const handleGenerate = () => {
@@ -130,7 +138,7 @@ function AddRuntimeModal({
     );
   };
 
-  const config = secret ? (isBI ? biToml(environmentName, secret, projectHandle, integrationHandle) : miToml(environmentName, secret, projectHandle, integrationHandle)) : null;
+  const config = secret ? (isBI ? biToml(environmentName, secret, projectHandle, integrationHandle, workflowMgt) : miToml(environmentName, secret, projectHandle, integrationHandle)) : null;
 
   const handleDialogClose = (_event: unknown, reason: string) => {
     if (createMutation.isPending && (reason === 'backdropClick' || reason === 'escapeKeyDown')) return;
@@ -154,6 +162,7 @@ function AddRuntimeModal({
             <Alert severity="warning" sx={{ mb: 2 }}>
               <strong>The secret will be shown once — copy it before closing.</strong>
             </Alert>
+            {isBI && <FormControlLabel control={<Switch checked={workflowMgt} onChange={(e) => setWorkflowMgt(e.target.checked)} />} label="Enable Workflow Management" sx={{ display: 'flex', mb: 2 }} />}
             <Button variant="contained" onClick={handleGenerate} disabled={createMutation.isPending}>
               {createMutation.isPending ? 'Generating...' : 'Generate Secret'}
             </Button>

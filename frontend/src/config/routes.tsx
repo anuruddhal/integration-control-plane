@@ -21,6 +21,7 @@ import CreateComponent from '../pages/CreateComponent';
 import EditComponent from '../pages/EditComponent';
 import Project from '../pages/Project';
 import Component from '../pages/Component';
+import Workflows from '../pages/Workflows';
 import RuntimeLogs from '../pages/RuntimeLogs';
 import Metrics from '../pages/Metrics';
 import Environments from '../pages/Environments';
@@ -46,6 +47,7 @@ export interface AppRoute extends Omit<RouteProps, 'children'> {
 
 const MATRIX: Matrix = {
   overview: { segment: '', pages: { organizations: Projects, projects: Project, components: Component } },
+  workflows: { segment: 'workflows', pages: { components: Workflows } },
   logs: { segment: 'logs', pages: { projects: RuntimeLogs, components: RuntimeLogs } },
   loggers: { segment: loggersSegment, pages: { components: ManageLoggers } },
   metrics: { segment: 'metrics', pages: { projects: Metrics, components: Metrics } },

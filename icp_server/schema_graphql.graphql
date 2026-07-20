@@ -154,6 +154,11 @@ type Query {
     componentId: String!
     pagination: PaginationInput
   ): RegistryResourcesPage!
+  workflowsByEnvironmentAndComponent(
+    environmentId: String!
+    componentId: String!
+    pagination: PaginationInput
+  ): WorkflowsPage!
 
   # Logger Queries
   loggersByRuntime(runtimeId: String!, pagination: PaginationInput): LoggersPage!
@@ -295,6 +300,19 @@ type Listener {
   name: String!
   package: String!
   protocol: String!
+  state: ArtifactState!
+  runtimes: [ArtifactRuntimeInfo]
+}
+
+# ============================================
+# Workflow Type - Workflow definitions fetched live from the
+# runtime's workflow management API (via its workflowCallbackUrl)
+# ============================================
+type Workflow {
+  name: String!
+  isActive: Boolean!
+  workerCount: Int!
+  inputSchema: String
   state: ArtifactState!
   runtimes: [ArtifactRuntimeInfo]
 }
@@ -489,6 +507,11 @@ type LoggerGroupsPage {
 
 type AutomationsPage {
   items: [Automation!]!
+  pageInfo: PageInfo!
+}
+
+type WorkflowsPage {
+  items: [Workflow!]!
   pageInfo: PageInfo!
 }
 
