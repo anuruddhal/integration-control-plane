@@ -142,6 +142,15 @@ export default function AdminPortal({ componentId, environmentId, initialWorkflo
   const scope: WorkflowScope = { componentId, environmentId };
   const [view, setView] = useState<'workflows' | 'retry'>('workflows');
   const [toast, setToast] = useState<Toast>(null);
+  // WorkflowsAdmin's filters live here, not inside it, so switching to Review Activities and
+  // back preserves them — WorkflowsAdmin unmounts on view change and would otherwise re-seed
+  // from the deep-link props, reapplying a search the user had already cleared. Deep-link
+  // params seed these once, at initial mount (the whole portal remounts when they change).
+  const [status, setStatus] = useState('All');
+  // The Autocomplete matches options by workflowType, so a minimal {workflowType} object selects it.
+  const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(initialWorkflowType ? { workflowType: initialWorkflowType } : null);
+  const [search, setSearch] = useState(initialWorkflowId ?? '');
+  const timeFilter = useTimeRangeFilter();
 
   return (
     <>
@@ -150,11 +159,15 @@ export default function AdminPortal({ componentId, environmentId, initialWorkflo
           Workflows
         </Button>
         <Button variant={view === 'retry' ? 'contained' : 'outlined'} size="small" onClick={() => setView('retry')}>
-          Retry Tasks
+          Review Activities
         </Button>
       </Stack>
 
-      {view === 'workflows' ? <WorkflowsAdmin scope={scope} onToast={setToast} initialWorkflowType={initialWorkflowType} initialWorkflowId={initialWorkflowId} /> : <RetryTasksAdmin scope={scope} onToast={setToast} />}
+      {view === 'workflows' ? (
+        <WorkflowsAdmin scope={scope} onToast={setToast} status={status} setStatus={setStatus} selectedType={selectedType} setSelectedType={setSelectedType} search={search} setSearch={setSearch} timeFilter={timeFilter} />
+      ) : (
+        <RetryTasksAdmin scope={scope} onToast={setToast} />
+      )}
 
       <Snackbar open={toast !== null} autoHideDuration={4000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         {toast ? (
@@ -169,14 +182,30 @@ export default function AdminPortal({ componentId, environmentId, initialWorkflo
 
 // ── Workflows ────────────────────────────────────────────────────────────────
 
-function WorkflowsAdmin({ scope, onToast, initialWorkflowType, initialWorkflowId }: { scope: WorkflowScope; onToast: (t: Toast) => void; initialWorkflowType?: string; initialWorkflowId?: string }) {
-  const [status, setStatus] = useState('All');
-  // Seed the type filter from a deep link (e.g. Overview → "View Instances"). The Autocomplete
-  // matches options by workflowType, so a minimal {workflowType} object selects the right option.
-  const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(initialWorkflowType ? { workflowType: initialWorkflowType } : null);
-  // Seed the ID search from a deep link (e.g. the start-workflow success dialog's "View Instance").
-  const [search, setSearch] = useState(initialWorkflowId ?? '');
-  const timeFilter = useTimeRangeFilter();
+type TimeRangeFilter = ReturnType<typeof useTimeRangeFilter>;
+
+// Filter state is owned by AdminPortal (lifted so it survives switching views), passed in here.
+function WorkflowsAdmin({
+  scope,
+  onToast,
+  status,
+  setStatus,
+  selectedType,
+  setSelectedType,
+  search,
+  setSearch,
+  timeFilter,
+}: {
+  scope: WorkflowScope;
+  onToast: (t: Toast) => void;
+  status: string;
+  setStatus: (v: string) => void;
+  selectedType: WorkflowDefinition | null;
+  setSelectedType: (v: WorkflowDefinition | null) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  timeFilter: TimeRangeFilter;
+}) {
   const [startOpen, setStartOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
@@ -508,7 +537,7 @@ function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t
         <ListingTable>
           <ListingTable.Head>
             <ListingTable.Row>
-              <ListingTable.Cell>Task</ListingTable.Cell>
+              <ListingTable.Cell>Activity Name</ListingTable.Cell>
               <ListingTable.Cell>Workflow Name</ListingTable.Cell>
               <ListingTable.Cell>Workflow ID</ListingTable.Cell>
               <ListingTable.Cell>Status</ListingTable.Cell>
