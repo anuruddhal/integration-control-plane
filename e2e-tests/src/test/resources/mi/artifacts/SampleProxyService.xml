@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<proxy name="SampleProxyService" startOnLoad="true" transports="http https" xmlns="http://ws.apache.org/ns/synapse">
+    <target>
+        <inSequence>
+            <log level="full"/>
+            <payloadFactory media-type="json">
+                <format>{"message":"proxy response"}</format>
+                <args/>
+            </payloadFactory>
+            <respond/>
+        </inSequence>
+        <faultSequence/>
+    </target>
+</proxy>

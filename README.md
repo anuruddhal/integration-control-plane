@@ -210,13 +210,8 @@ dbType = "h2"
 ### Backend Tests
 
 ```bash
-cd icp_server
-
-# Run all tests
-bal test
-
-# Run tests with Docker Compose
-docker-compose -f docker-compose.test.yml up --build
+# Self-contained: seeds H2 test databases, then runs `bal test` with coverage
+./gradlew testICP
 ```
 
 ### Frontend Tests

@@ -521,13 +521,16 @@ export default function AppLayout(): JSX.Element {
               </IconButton>
             </Tooltip>
             <Divider orientation="vertical" flexItem sx={{ mx: 1, display: { xs: 'none', sm: 'block' } }} />
-            <UserMenu>
-              <UserMenu.Trigger name={displayName || username || 'User'} />
-              <UserMenu.Header name={displayName || username || 'User'} email={username} role="Admin" />
-              <UserMenu.Item icon={<UserIcon size={18} />} label="Profile" onClick={() => navigate(profileUrl())} />
-              <UserMenu.Divider />
-              <UserMenu.Logout icon={<LogOut size={18} />} label="Sign Out" onClick={() => setConfirmDialogOpen(true)} />
-            </UserMenu>
+            {/* display:contents wrapper: gives E2E tests a stable hook without affecting layout */}
+            <Box data-testid="user-menu" sx={{ display: 'contents' }}>
+              <UserMenu>
+                <UserMenu.Trigger name={displayName || username || 'User'} />
+                <UserMenu.Header name={displayName || username || 'User'} email={username} role="Admin" />
+                <UserMenu.Item icon={<UserIcon size={18} />} label="Profile" onClick={() => navigate(profileUrl())} />
+                <UserMenu.Divider />
+                <UserMenu.Logout icon={<LogOut size={18} />} label="Sign Out" onClick={() => setConfirmDialogOpen(true)} />
+              </UserMenu>
+            </Box>
           </Header.Actions>
         </Header>
       </AppShell.Navbar>

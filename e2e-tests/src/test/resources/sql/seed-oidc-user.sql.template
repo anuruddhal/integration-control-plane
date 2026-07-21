@@ -1,0 +1,7 @@
+INSERT INTO users (user_id, username, display_name, is_super_admin, is_project_author, is_oidc_user, require_password_change)
+VALUES ('{{SSO_USER_ID}}', '{{SSO_USERNAME}}', 'SSO User', TRUE, FALSE, TRUE, FALSE);
+
+INSERT INTO group_user_mapping (group_id, user_uuid)
+SELECT group_id, '{{SSO_USER_ID}}'
+FROM user_groups
+WHERE group_name = 'Super Admins' AND org_uuid = 1;

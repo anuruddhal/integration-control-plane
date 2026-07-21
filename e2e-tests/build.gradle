@@ -1,0 +1,208 @@
+plugins {
+    id 'java'
+}
+
+group = 'org.wso2.icp'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url 'https://maven.wso2.org/nexus/content/groups/wso2-public/'
+    }
+}
+
+configurations {
+    miDistribution
+    jacocoAgent
+}
+
+def resolvedMiVersion = providers.gradleProperty('miVersion').orElse('latest.release')
+
+def dockerContextHost() {
+    def context = commandOutput('docker', 'context', 'show')
+    context ? commandOutput('docker', 'context', 'inspect', '--format', '{{.Endpoints.docker.Host}}', context) : ''
+}
+
+def commandOutput(String... args) {
+    def output = new ByteArrayOutputStream()
+    try {
+        def result = exec {
+            commandLine args
+            standardOutput = output
+            errorOutput = new ByteArrayOutputStream()
+            ignoreExitValue = true
+        }
+        return result.exitValue == 0 ? output.toString().trim() : ''
+    } catch (Exception ignored) {
+        return ''
+    }
+}
+
+dependencies {
+    testImplementation 'com.microsoft.playwright:playwright:1.49.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.3'
+    testImplementation 'org.testcontainers:testcontainers:1.20.4'
+    testRuntimeOnly 'org.slf4j:slf4j-simple:2.0.13'
+    testImplementation 'org.jacoco:org.jacoco.core:0.8.12'
+    testImplementation 'org.jacoco:org.jacoco.report:0.8.12'
+
+    miDistribution "org.wso2.ei:wso2mi:${resolvedMiVersion.get()}@zip"
+    jacocoAgent 'org.jacoco:org.jacoco.agent:0.8.12:runtime'
+}
+
+tasks.register('resolveMiDistribution') {
+    group = 'verification'
+    description = 'Resolve the MI distribution used by self-contained E2E tests.'
+    outputs.files(configurations.miDistribution)
+    doLast {
+        configurations.miDistribution.files.each { file ->
+            logger.lifecycle("Resolved MI distribution: ${file.name}")
+        }
+    }
+}
+
+tasks.register('buildBiE2eArtifact') {
+    group = 'verification'
+    description = 'Build the BI E2E artifact from source kept inside ./icp.'
+    inputs.dir('src/test/resources/bi/hello-world')
+    outputs.file(layout.buildDirectory.file('bi/hello-world/target/bin/icp_e2e_hello_world.jar'))
+    // Two concurrent `bal build`s corrupt the shared ~/.ballerina cache; serialize after the ICP build.
+    mustRunAfter rootProject.tasks.named('buildICP')
+
+    doLast {
+        def workDir = layout.buildDirectory.dir('bi/hello-world').get().asFile
+        delete workDir
+        copy {
+            from 'src/test/resources/bi/hello-world'
+            into workDir
+        }
+        exec {
+            workingDir workDir
+            commandLine 'bal', 'build'
+        }
+    }
+}
+
+def configureE2eSuite = { Test task, String suite, List<String> includes ->
+    task.group = 'verification'
+    task.description = "Run the ${suite} E2E suite."
+    task.useJUnitPlatform()
+    includes.each { task.include it }
+
+    task.dependsOn rootProject.tasks.named('packageICP')
+    task.dependsOn tasks.named('resolveMiDistribution')
+    task.dependsOn tasks.named('buildBiE2eArtifact')
+    task.dependsOn(project.hasProperty('playwrightWithDeps') ? 'playwrightInstallDeps' : 'playwrightInstall')
+
+    task.systemProperties System.getProperties().findAll { key, _ -> key.toString().startsWith('icp.e2e.') }
+    def coverageEnabled = System.getProperty('icp.e2e.coverage', 'true')
+    task.systemProperty 'icp.e2e.selfContained', System.getProperty('icp.e2e.selfContained', 'true')
+    task.systemProperty 'icp.e2e.coverage', coverageEnabled
+    task.systemProperty 'icp.e2e.distributionZip', rootProject.layout.buildDirectory.file("distribution/wso2-integration-control-plane-${rootProject.version}.zip").get().asFile.absolutePath
+    task.systemProperty 'icp.e2e.workDir', layout.buildDirectory.dir("runtime/${suite}").get().asFile.absolutePath
+    task.doFirst {
+        // Forward local Docker/Testcontainers config. Docker CLI contexts are not env vars, so pass
+        // them explicitly. Probed here (not at configuration time) so unrelated tasks never shell out.
+        def dockerHost = System.getenv('DOCKER_HOST') ?: dockerContextHost()
+        if (dockerHost) {
+            environment 'DOCKER_HOST', dockerHost
+            // docker-java negotiates too low an API version for some daemons (e.g. Colima); pin a supported one.
+            systemProperty 'api.version', System.getenv('DOCKER_API_VERSION') ?: '1.41'
+        }
+        ['TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE', 'TESTCONTAINERS_RYUK_DISABLED'].each { key ->
+            if (System.getenv(key)) environment key, System.getenv(key)
+        }
+        if (!System.getenv('TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE') && dockerHost?.startsWith('unix://')) {
+            environment 'TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE', '/var/run/docker.sock'
+        }
+        systemProperty 'icp.e2e.miZip', configurations.miDistribution.singleFile.absolutePath
+        systemProperty 'icp.e2e.biJar', layout.buildDirectory.file('bi/hello-world/target/bin/icp_e2e_hello_world.jar').get().asFile.absolutePath
+        systemProperty 'icp.e2e.reportDir', layout.buildDirectory.dir("reports/e2e/${suite}").get().asFile.absolutePath
+        // Ballerina compiles to JVM bytecode carrying .bal SourceFile/line info, so the JaCoCo agent
+        // on the packaged ICP process yields Ballerina line coverage. Resolve the agent only when needed.
+        if (coverageEnabled == 'true') {
+            systemProperty 'icp.e2e.jacocoAgentJar', configurations.jacocoAgent.singleFile.absolutePath
+        }
+    }
+
+    task.testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
+}
+
+tasks.register('e2eCore', Test) {
+    configureE2eSuite(it, 'core', ['**/*ScenariosTest.class'])
+    exclude '**/RuntimeLogsScenariosTest.class', '**/SsoScenariosTest.class'
+}
+
+tasks.register('e2eObservability', Test) {
+    configureE2eSuite(it, 'observability', ['**/RuntimeLogsScenariosTest.class'])
+    mustRunAfter tasks.named('e2eCore')
+}
+
+tasks.register('e2eSso', Test) {
+    configureE2eSuite(it, 'sso', ['**/SsoScenariosTest.class'])
+    mustRunAfter tasks.named('e2eObservability')
+}
+
+test {
+    description = 'Run all E2E suites: core, observability, and SSO.'
+    dependsOn tasks.named('e2eCore'), tasks.named('e2eObservability'), tasks.named('e2eSso')
+    onlyIf { false }
+}
+
+// Pure merge step: unions whatever JaCoCo dumps already exist into one report. It does NOT run any
+// test suite — those own their own infra. All dumps and the jar MUST come from the same source and
+// Ballerina toolchain, or JaCoCo drops the mismatched class ids. Paths are overridable via -P properties.
+tasks.register('combinedCoverageReport', JavaExec) {
+    group = 'verification'
+    description = 'Merge existing E2E and Ballerina unit-test JaCoCo dumps into one line-coverage report.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.wso2.icp.e2e.CombinedCoverageReport'
+    def jar = providers.gradleProperty('icp.coverage.jar')
+            .getOrElse(rootProject.file('icp_server/target/bin/icp_server.jar').absolutePath)
+    mustRunAfter rootProject.tasks.named('testICP')
+    mustRunAfter tasks.named('test'), tasks.named('e2eCore'), tasks.named('e2eObservability'), tasks.named('e2eSso')
+    def defaultE2eExecs = ['core', 'observability', 'sso'].collect {
+        layout.buildDirectory.file("reports/e2e/${it}/coverage/jacoco.exec").get().asFile.absolutePath
+    }
+    def e2eExecs = providers.gradleProperty('icp.coverage.e2eExec')
+            .map { it.split(File.pathSeparator).toList() }
+            .getOrElse(defaultE2eExecs)
+    def unitExec = providers.gradleProperty('icp.coverage.unitExec')
+            .getOrElse(rootProject.file('icp_server/target/cache/tests_cache/coverage/ballerina.exec').absolutePath)
+    // A "combined" report needs all default E2E suite dumps plus the unit dump. Skip (don't fail)
+    // when any is absent — e.g. a unit-only `build -x :e2e-tests:test`.
+    onlyIf {
+        (e2eExecs + [unitExec]).every { path -> def d = file(path); d.exists() && d.length() > 0 }
+    }
+    // Optional CI gate: -Picp.coverage.min=NN fails the build below that line-coverage percentage.
+    if (project.hasProperty('icp.coverage.min')) systemProperty 'icp.coverage.min', project.property('icp.coverage.min')
+    args([jar,
+            rootProject.file('icp_server').absolutePath,
+            layout.buildDirectory.dir('reports/combined/coverage').get().asFile.absolutePath] + e2eExecs + [unitExec])
+}
+
+tasks.register('playwrightInstall', JavaExec) {
+    group = 'verification'
+    description = 'Install Playwright browsers used by the Java E2E tests.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.microsoft.playwright.CLI'
+    args 'install', 'chromium'
+}
+
+tasks.register('playwrightInstallDeps', JavaExec) {
+    group = 'verification'
+    description = 'Install Playwright browsers plus OS dependencies (Linux/CI).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.microsoft.playwright.CLI'
+    args 'install', '--with-deps', 'chromium'
+}
