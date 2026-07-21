@@ -312,13 +312,15 @@ public isolated function getRuntimeWorkflowTarget(string componentId, string env
         WHERE component_id = ${componentId} AND environment_id = ${environmentId}
             AND status = 'RUNNING'`, usableCallbackUrlPredicate());
     stream<record {|string callback_url; string? key_id;|}, sql:Error?> rs = dbClient->query(query);
-    record {|string callback_url; string? key_id;|}[] rows = check from var r in rs
-        limit 1
-        select r;
-    if rows.length() == 0 {
+    record {|record {|string callback_url; string? key_id;|} value;|}|sql:Error? row = rs.next();
+    check rs.close();
+    if row is sql:Error {
+        return row;
+    }
+    if row is () {
         return ();
     }
-    return {callbackUrl: rows[0].callback_url, keyId: rows[0].key_id};
+    return {callbackUrl: row.value.callback_url, keyId: row.value.key_id};
 }
 
 // Distinct callback URLs of RUNNING runtimes — the only URLs the workflow proxy can
