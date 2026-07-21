@@ -40,7 +40,6 @@ const STATUS_COLORS: Record<string, ChipColor> = {
   SUSPENDED: 'warning',
   PENDING: 'info',
   OPEN: 'info',
-  REJECTED: 'error',
 };
 
 /** Renders a status string as a colour-coded chip. */

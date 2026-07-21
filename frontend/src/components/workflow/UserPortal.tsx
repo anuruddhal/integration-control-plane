@@ -24,16 +24,15 @@ import { buildFormResult, formatTime, humanizeKey, parseFormSchema, sectionTitle
 import { StatusChip, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
-import { useQueries } from '@tanstack/react-query';
-import { humanTaskQueryOptions, useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, usePendingTaskCount, type HumanTask } from '../../api/workflows';
+import { useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, usePendingTaskCount, type HumanTask } from '../../api/workflows';
 
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const;
 
 /**
  * Maps a runtime human-task status to its display status: a pending task's child workflow
- * reports RUNNING (shown as PENDING), and TERMINATED shows as REJECTED.
+ * reports RUNNING (shown as PENDING). Failed tasks report FAILED directly.
  */
-const taskDisplayStatus = (s?: string) => (s === 'RUNNING' ? 'PENDING' : s === 'TERMINATED' ? 'REJECTED' : s);
+const taskDisplayStatus = (s?: string) => (s === 'RUNNING' ? 'PENDING' : s);
 
 /**
  * Display name for a human task: the title when set, else the task name with its
@@ -47,12 +46,6 @@ function taskDisplayName(t?: HumanTask): string {
     return prefix && t.taskName.startsWith(prefix) ? t.taskName.slice(prefix.length) : t.taskName;
   }
   return t.taskId;
-}
-
-/** True when the task's completion result is the rejection sentinel sent by the Reject action. */
-function isRejectedTask(task?: HumanTask): boolean {
-  const r = task?.result;
-  return typeof r === 'object' && r !== null && (r as Record<string, unknown>).__rejected === true;
 }
 
 type Toast = { severity: 'success' | 'error'; message: string } | null;
@@ -171,26 +164,24 @@ function MyTasks({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast)
 }
 
 function TaskHistory({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast) => void }) {
-  const [tab, setTab] = useState<'Completed' | 'Rejected'>('Completed');
+  const [tab, setTab] = useState<'Completed' | 'Failed'>('Completed');
   const [openId, setOpenId] = useState<string | null>(null);
-  // A rejected task closes as COMPLETED with a rejection result — the list API cannot
-  // distinguish it, so fetch each completed task's detail and classify by result.__rejected.
-  // TERMINATED tasks (cancelled/terminated externally) are also grouped under Rejected.
+  // The list API reports a failed human task with status FAILED, so each tab maps directly
+  // to a status query. Externally-terminated tasks (TERMINATED) are grouped under Failed too.
   const completedQuery = useHumanTasks(scope, { status: 'COMPLETED', limit: 50 });
+  const failedQuery = useHumanTasks(scope, { status: 'FAILED', limit: 50 });
   const terminatedQuery = useHumanTasks(scope, { status: 'TERMINATED', limit: 50 });
-  const completedItems = completedQuery.data?.items ?? [];
-  const detailQueries = useQueries({ queries: completedItems.map((t) => humanTaskQueryOptions(scope, t.taskId)) });
 
-  const isLoading = completedQuery.isLoading || terminatedQuery.isLoading || detailQueries.some((q) => q.isLoading);
-  const error = completedQuery.error ?? terminatedQuery.error;
+  const isLoading = completedQuery.isLoading || failedQuery.isLoading || terminatedQuery.isLoading;
+  const error = completedQuery.error ?? failedQuery.error ?? terminatedQuery.error;
 
-  const rejectedFlags = detailQueries.map((q) => isRejectedTask(q.data));
-  const tasks = sortByStartTimeDesc(tab === 'Completed' ? completedItems.filter((_, i) => !rejectedFlags[i]) : [...completedItems.filter((_, i) => rejectedFlags[i]).map((t) => ({ ...t, status: 'REJECTED' })), ...(terminatedQuery.data?.items ?? [])]);
+  const items = tab === 'Completed' ? (completedQuery.data?.items ?? []) : [...(failedQuery.data?.items ?? []), ...(terminatedQuery.data?.items ?? [])];
+  const tasks = sortByStartTimeDesc(items);
 
   return (
     <>
       <Stack direction="row" gap={1} sx={{ mb: 2 }} flexWrap="wrap">
-        {(['Completed', 'Rejected'] as const).map((t) => (
+        {(['Completed', 'Failed'] as const).map((t) => (
           <Chip key={t} label={t} size="small" color={tab === t ? 'primary' : 'default'} variant={tab === t ? 'filled' : 'outlined'} onClick={() => setTab(t)} />
         ))}
       </Stack>
@@ -306,10 +297,10 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
       { taskId, reason: reason.trim() },
       {
         onSuccess: () => {
-          onToast({ severity: 'success', message: 'Task failed/rejected.' });
+          onToast({ severity: 'success', message: 'Task marked as failed.' });
           onClose();
         },
-        onError: (e) => onToast({ severity: 'error', message: e instanceof Error ? e.message : 'Failed to reject task.' }),
+        onError: (e) => onToast({ severity: 'error', message: e instanceof Error ? e.message : 'Failed to fail the task.' }),
       },
     );
   };
@@ -326,7 +317,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
       <DialogTitle sx={sectionTitleSx}>
         <Stack direction="row" alignItems="center" gap={1.5}>
           <span>{task ? taskDisplayName(task) : taskId}</span>
-          {task?.status && <StatusChip status={isRejectedTask(task) ? 'REJECTED' : taskDisplayStatus(task.status)} />}
+          {task?.status && <StatusChip status={taskDisplayStatus(task.status)} />}
         </Stack>
       </DialogTitle>
       <DialogContent>
@@ -417,7 +408,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
           {actionable && !!task && mode === 'view' && (
             <>
               <Button color="warning" disabled={busy} onClick={() => setMode('fail')}>
-                Reject
+                Fail
               </Button>
               <Tooltip title={canComplete ? '' : 'You do not have a matching role to complete this task'}>
                 <span>
@@ -440,7 +431,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
           )}
           {mode === 'fail' && (
             <Button variant="contained" color="warning" disabled={busy} onClick={submitFail}>
-              {fail.isPending ? 'Submitting…' : 'Submit Rejection'}
+              {fail.isPending ? 'Submitting…' : 'Fail Task'}
             </Button>
           )}
         </Authorized>
