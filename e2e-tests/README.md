@@ -51,7 +51,7 @@ and not-found resources.
 ## SSO (ThunderID)
 
 `e2eSso` runs a full OIDC login through a ThunderID IdP. It starts ThunderID
-(`ghcr.io/thunder-id/thunderid:latest`) via Testcontainers, enables ICP SSO
+(`ghcr.io/thunder-id/thunderid:0.48.0`) via Testcontainers, enables ICP SSO
 against it, seeds a matching OIDC super-admin user, then drives the **Sign in
 with SSO** flow in the browser. It needs Docker and fails if the fixture cannot
 start.

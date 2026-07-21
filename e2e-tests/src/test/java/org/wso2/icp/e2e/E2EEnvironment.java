@@ -51,7 +51,7 @@ public final class E2EEnvironment implements AutoCloseable {
     // password logins do not collide. ICP uses the OIDC `sub` as the user id, so ThunderID's
     // declarative user id and this seeded id must match.
     private static final String SSO_USER_ID = "5501b0b0-e29b-41d4-a716-446655440111";
-    private static final String THUNDERID_IMAGE = "ghcr.io/thunder-id/thunderid:latest";
+    private static final String THUNDERID_IMAGE = "ghcr.io/thunder-id/thunderid:0.48.0";
     private static final int THUNDERID_PORT = 8090;
     private static final String MYSQL_IMAGE = "mysql:8.0";
     private static final int MYSQL_PORT = 3306;
@@ -258,9 +258,10 @@ public final class E2EEnvironment implements AutoCloseable {
         writeThunderIdConfig(home);
 
         new GenericContainer<>(THUNDERID_IMAGE)
-                .withCommand("sh", "-c", "cp -r /opt/thunderid/database/* /data/ && (cp -r /opt/thunderid/consent/repository/database/* /consent-data/ 2>/dev/null || true)")
+                .withCommand("sh", "-c", "cp -r /opt/thunderid/database/* /data/ && (cp -r /opt/thunderid/consent/repository/database/* /consent-data/ 2>/dev/null || true) && cp -r /opt/thunderid/config/certs/* /certs/")
                 .withFileSystemBind(db.toString(), "/data", BindMode.READ_WRITE)
                 .withFileSystemBind(consentDb.toString(), "/consent-data", BindMode.READ_WRITE)
+                .withFileSystemBind(certs.toString(), "/certs", BindMode.READ_WRITE)
                 .withStartupCheckStrategy(new OneShotStartupCheckStrategy().withTimeout(Duration.ofMinutes(2)))
                 .start();
 
@@ -295,6 +296,9 @@ public final class E2EEnvironment implements AutoCloseable {
         Path resources = home.resolve("resources");
         Files.createDirectories(resources.resolve("applications"));
         Files.createDirectories(resources.resolve("users"));
+        // deployment-base.yaml.template references this file via a `file://` URI; ThunderID resolves
+        // it at config-load time, and unlike the `crypto` cert material it ships no default for it.
+        Files.writeString(home.resolve("config/secrets/direct_auth_secret"), UUID.randomUUID().toString());
 
         Map<String, String> vars = thunderIdVars();
         String baseDeployment = render("thunderid/deployment-base.yaml.template", vars);
