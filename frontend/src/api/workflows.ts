@@ -64,14 +64,29 @@ export interface HumanTask {
   [key: string]: unknown;
 }
 
-export interface RetryTask {
+export interface ReviewActivity {
   taskId: string;
   taskName?: string;
   activityName?: string;
   parentWorkflowId?: string;
+  parentWorkflowType?: string;
   status?: string;
+  trigger?: string;
   startTime?: string;
   [key: string]: unknown;
+}
+
+export interface ReviewActivityDetail extends ReviewActivity {
+  title?: string;
+  description?: string;
+  formSchema?: Record<string, unknown> | string;
+  // The arguments the gated/failed activity would run with; always conforms to formSchema.
+  activityArgs?: Record<string, unknown>;
+  userRoles?: string[];
+  errorMessage?: string;
+  closeTime?: string;
+  decidedBy?: string;
+  decidedAt?: string;
 }
 
 export interface HistoryEvent {
@@ -273,9 +288,11 @@ export function useFailHumanTask(s: Scope) {
   });
 }
 
-// ── Retry tasks ──
+// ── Review activities ──
+// (Replaces the deprecated retry-tasks routes; the runtime still exposes /retry-tasks
+// for pre-0.7.0 clients but the UI uses /review-activities.)
 
-export interface RetryTaskFilters {
+export interface ReviewActivityFilters {
   status?: string;
   parentWorkflowId?: string;
   taskName?: string;
@@ -285,19 +302,19 @@ export interface RetryTaskFilters {
   pageToken?: string;
 }
 
-// Retry-task pages are fetched and combined up to this many pages so client-side
+// Review-activity pages are fetched and combined up to this many pages so client-side
 // filters (e.g. by workflow name, which the runtime API cannot filter on) see the
 // full set rather than only the first page.
-const RETRY_TASK_MAX_PAGES = 20;
+const REVIEW_ACTIVITY_MAX_PAGES = 20;
 
-export function useRetryTasks(s: Scope, filters: RetryTaskFilters) {
+export function useReviewActivities(s: Scope, filters: ReviewActivityFilters) {
   return useQuery({
-    queryKey: ['wf', 'retry-tasks', s.componentId, s.environmentId, filters],
-    queryFn: async (): Promise<Page<RetryTask>> => {
-      const items: RetryTask[] = [];
+    queryKey: ['wf', 'review-activities', s.componentId, s.environmentId, filters],
+    queryFn: async (): Promise<Page<ReviewActivity>> => {
+      const items: ReviewActivity[] = [];
       let pageToken: string | undefined;
-      for (let i = 0; i < RETRY_TASK_MAX_PAGES; i++) {
-        const page = await wfRequest<Page<RetryTask>>(s.componentId, s.environmentId, `retry-tasks${buildQuery({ ...filters, pageToken })}`);
+      for (let i = 0; i < REVIEW_ACTIVITY_MAX_PAGES; i++) {
+        const page = await wfRequest<Page<ReviewActivity>>(s.componentId, s.environmentId, `review-activities${buildQuery({ ...filters, pageToken })}`);
         items.push(...(page.items ?? []));
         if (!page.hasMore || !page.nextPageToken) return { items, hasMore: false };
         pageToken = page.nextPageToken;
@@ -308,15 +325,32 @@ export function useRetryTasks(s: Scope, filters: RetryTaskFilters) {
   });
 }
 
-export type RetryDecision = 'retry' | 'retry-with-input' | 'fail';
+export function reviewActivityQueryOptions(s: Scope, taskId: string) {
+  return {
+    queryKey: ['wf', 'review-activity', s.componentId, s.environmentId, taskId] as const,
+    queryFn: () => wfRequest<ReviewActivityDetail>(s.componentId, s.environmentId, `review-activities/${encodeURIComponent(taskId)}`),
+  };
+}
 
-export function useRetryDecision(s: Scope) {
+export function useReviewActivity(s: Scope, taskId: string | null) {
+  return useQuery({
+    ...reviewActivityQueryOptions(s, taskId ?? ''),
+    enabled: enabledFor(s) && !!taskId,
+  });
+}
+
+export type ReviewDecision = 'proceed' | 'proceed-with-input' | 'reject';
+
+export function useReviewDecision(s: Scope) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ taskId, decision, input }: { taskId: string; decision: RetryDecision; input?: unknown }) => {
-      const init = decision === 'retry-with-input' ? jsonBody({ method: 'POST' }, { input }) : { method: 'POST' };
-      return wfRequest<unknown>(s.componentId, s.environmentId, `retry-tasks/${encodeURIComponent(taskId)}/${decision}`, init);
+    mutationFn: ({ taskId, decision, input, feedback }: { taskId: string; decision: ReviewDecision; input?: unknown; feedback?: string }) => {
+      let init: RequestInit;
+      if (decision === 'proceed-with-input') init = jsonBody({ method: 'POST' }, { input });
+      else if (decision === 'reject') init = jsonBody({ method: 'POST' }, { feedback });
+      else init = { method: 'POST' };
+      return wfRequest<unknown>(s.componentId, s.environmentId, `review-activities/${encodeURIComponent(taskId)}/${decision}`, init);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['wf', 'retry-tasks', s.componentId, s.environmentId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wf', 'review-activities', s.componentId, s.environmentId] }),
   });
 }

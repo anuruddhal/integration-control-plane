@@ -18,10 +18,10 @@
 
 import { Alert, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, ListingTable, Snackbar, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
 import { Eye, RefreshCw } from '@wso2/oxygen-ui-icons-react';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import SchemaFormFields from './SchemaFormFields';
 import { buildFormResult, formatTime, humanizeKey, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, unescapeRoleName } from './helpers';
-import { StatusChip, type WorkflowScope } from './shared';
+import { DetailRow, StatusChip, WorkflowIdLink, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
 import { useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, usePendingTaskCount, type HumanTask } from '../../api/workflows';
@@ -82,7 +82,7 @@ export default function UserPortal({ componentId, environmentId }: WorkflowScope
   );
 }
 
-function TaskTable({ tasks, onOpen, showActionable }: { tasks: HumanTask[]; onOpen: (id: string) => void; showActionable?: boolean }) {
+function TaskTable({ tasks, onOpen, environmentId, showActionable }: { tasks: HumanTask[]; onOpen: (id: string) => void; environmentId: string; showActionable?: boolean }) {
   return (
     <ListingTable>
       <ListingTable.Head>
@@ -112,7 +112,7 @@ function TaskTable({ tasks, onOpen, showActionable }: { tasks: HumanTask[]; onOp
               <Typography variant="body2">{t.parentWorkflowType ?? '—'}</Typography>
             </ListingTable.Cell>
             <ListingTable.Cell>
-              <Typography sx={{ fontFamily: 'monospace', fontSize: 12 }}>{t.parentWorkflowId ?? '—'}</Typography>
+              <WorkflowIdLink workflowId={t.parentWorkflowId} environmentId={environmentId} />
             </ListingTable.Cell>
             <ListingTable.Cell>
               <StatusChip status={taskDisplayStatus(t.status)} />
@@ -155,7 +155,7 @@ function MyTasks({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast)
       ) : tasks.length === 0 ? (
         <Typography sx={emptySx}>No pending tasks.</Typography>
       ) : (
-        <TaskTable tasks={tasks} onOpen={setOpenId} showActionable />
+        <TaskTable tasks={tasks} onOpen={setOpenId} environmentId={scope.environmentId} showActionable />
       )}
 
       {openId && <TaskDetailDialog scope={scope} taskId={openId} actionable onClose={() => setOpenId(null)} onToast={onToast} />}
@@ -193,7 +193,7 @@ function TaskHistory({ scope, onToast }: { scope: WorkflowScope; onToast: (t: To
       ) : tasks.length === 0 ? (
         <Typography sx={emptySx}>No tasks in this category.</Typography>
       ) : (
-        <TaskTable tasks={tasks} onOpen={setOpenId} />
+        <TaskTable tasks={tasks} onOpen={setOpenId} environmentId={scope.environmentId} />
       )}
 
       {openId && <TaskDetailDialog scope={scope} taskId={openId} onClose={() => setOpenId(null)} onToast={onToast} />}
@@ -207,23 +207,6 @@ function payloadDetailEntries(payload: unknown): Array<[string, string]> | null 
   const entries = Object.entries(payload as Record<string, unknown>);
   if (entries.length === 0) return null;
   return entries.map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)]);
-}
-
-function DetailRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <Stack direction="row" gap={2}>
-      <Typography variant="body2" sx={{ width: 140, flexShrink: 0, fontWeight: 600, color: 'text.disabled' }}>
-        {label}
-      </Typography>
-      {typeof children === 'string' ? (
-        <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-          {children}
-        </Typography>
-      ) : (
-        children
-      )}
-    </Stack>
-  );
 }
 
 function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { scope: WorkflowScope; taskId: string; actionable?: boolean; onClose: () => void; onToast: (t: Toast) => void }) {

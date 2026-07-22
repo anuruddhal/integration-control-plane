@@ -72,7 +72,11 @@ export function humanizeKey(key: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/** A flat form field derived from a JSON schema property, for generated forms. */
+/**
+ * A form field derived from a JSON schema property. Object properties that themselves declare
+ * `properties` become groups (`fields` set, rendered as a nested set of inputs) rather than a
+ * single JSON textarea. Leaf-field values are keyed by their dotted path (e.g. `orderInfo.id`).
+ */
 export interface FormField {
   name: string;
   type: string;
@@ -80,11 +84,41 @@ export interface FormField {
   required: boolean;
   description?: string;
   enumValues?: string[];
+  fields?: FormField[];
+}
+
+/** Joins a parent path and a field name into the dotted key used for a leaf field's value. */
+export const fieldPath = (prefix: string, name: string): string => (prefix ? `${prefix}.${name}` : name);
+
+/** Parses a JSON-schema object (already-parsed) into a field list, recursing into nested objects. */
+function parseObjectSchema(s: unknown): FormField[] | null {
+  if (s === null || typeof s !== 'object' || Array.isArray(s)) return null;
+  const obj = s as Record<string, unknown>;
+  const props = obj.properties;
+  if (props === null || typeof props !== 'object' || Array.isArray(props)) return null;
+  const required = new Set(Array.isArray(obj.required) ? obj.required.filter((r): r is string => typeof r === 'string') : []);
+  const fields = Object.entries(props as Record<string, unknown>).map(([name, def]): FormField => {
+    const d = (def !== null && typeof def === 'object' ? def : {}) as Record<string, unknown>;
+    const type = typeof d.type === 'string' ? d.type : 'string';
+    // An object with its own properties becomes a group; a freeform object stays a JSON textarea.
+    const nested = type === 'object' ? parseObjectSchema(d) : null;
+    return {
+      name,
+      type,
+      label: typeof d.title === 'string' ? d.title : humanizeKey(name),
+      required: required.has(name),
+      description: typeof d.description === 'string' ? d.description : undefined,
+      enumValues: Array.isArray(d.enum) ? d.enum.map(String) : undefined,
+      ...(nested ? { fields: nested } : {}),
+    };
+  });
+  return fields.length > 0 ? fields : null;
 }
 
 /**
- * Parses a JSON schema (an object, or a JSON string of one) into a flat field list for form
- * rendering. Returns null when absent or not an object schema with properties.
+ * Parses a JSON schema (an object, or a JSON string of one) into a field list for form rendering.
+ * Nested object schemas are expanded into nested field groups. Returns null when absent or not an
+ * object schema with properties.
  */
 export function parseFormSchema(schema: unknown): FormField[] | null {
   let s: unknown = schema;
@@ -95,63 +129,94 @@ export function parseFormSchema(schema: unknown): FormField[] | null {
       return null;
     }
   }
-  if (s === null || typeof s !== 'object' || Array.isArray(s)) return null;
-  const obj = s as Record<string, unknown>;
-  const props = obj.properties;
-  if (props === null || typeof props !== 'object' || Array.isArray(props)) return null;
-  const required = new Set(Array.isArray(obj.required) ? obj.required.filter((r): r is string => typeof r === 'string') : []);
-  const fields = Object.entries(props as Record<string, unknown>).map(([name, def]): FormField => {
-    const d = (def !== null && typeof def === 'object' ? def : {}) as Record<string, unknown>;
-    return {
-      name,
-      type: typeof d.type === 'string' ? d.type : 'string',
-      label: typeof d.title === 'string' ? d.title : humanizeKey(name),
-      required: required.has(name),
-      description: typeof d.description === 'string' ? d.description : undefined,
-      enumValues: Array.isArray(d.enum) ? d.enum.map(String) : undefined,
-    };
-  });
-  return fields.length > 0 ? fields : null;
+  return parseObjectSchema(s);
+}
+
+/** Coerces one leaf field's entered value to its schema type, recording any error by dotted path. */
+function coerceLeaf(f: FormField, path: string, values: Record<string, string | boolean>, result: Record<string, unknown>, errors: Record<string, string>): void {
+  if (f.type === 'boolean') {
+    const v = values[path];
+    if (typeof v === 'boolean') result[f.name] = v;
+    else if (f.required) errors[path] = `${f.label} is required.`;
+    return;
+  }
+  const raw = values[path];
+  const text = typeof raw === 'string' ? raw.trim() : '';
+  if (!text) {
+    if (f.required) errors[path] = `${f.label} is required.`;
+    return;
+  }
+  if (f.type === 'number' || f.type === 'integer') {
+    const n = Number(text);
+    if (Number.isNaN(n) || (f.type === 'integer' && !Number.isInteger(n))) {
+      errors[path] = f.type === 'integer' ? `${f.label} must be an integer.` : `${f.label} must be a number.`;
+      return;
+    }
+    result[f.name] = n;
+  } else if (f.type === 'object' || f.type === 'array') {
+    try {
+      result[f.name] = JSON.parse(text);
+    } catch {
+      errors[path] = `${f.label} must be valid JSON.`;
+    }
+  } else {
+    result[f.name] = text;
+  }
+}
+
+function buildLevel(fields: FormField[], values: Record<string, string | boolean>, prefix: string, errors: Record<string, string>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const f of fields) {
+    const path = fieldPath(prefix, f.name);
+    if (f.fields) {
+      result[f.name] = buildLevel(f.fields, values, path, errors);
+    } else {
+      coerceLeaf(f, path, values, result, errors);
+    }
+  }
+  return result;
 }
 
 /**
- * Validates generated-form values against their fields and coerces them to schema types.
- * Returns the coerced result object plus per-field error messages (empty when valid).
+ * Validates generated-form values against their fields and coerces them to schema types, rebuilding
+ * nested objects for grouped fields. Returns the coerced result object plus per-field error messages
+ * (keyed by dotted path, empty when valid).
  */
 export function buildFormResult(fields: FormField[], values: Record<string, string | boolean>): { result: Record<string, unknown>; errors: Record<string, string> } {
-  const result: Record<string, unknown> = {};
   const errors: Record<string, string> = {};
+  const result = buildLevel(fields, values, '', errors);
+  return { result, errors };
+}
+
+function fillValues(fields: FormField[], source: Record<string, unknown>, prefix: string, values: Record<string, string | boolean>): void {
   for (const f of fields) {
+    const path = fieldPath(prefix, f.name);
+    const v = source[f.name];
+    if (f.fields) {
+      fillValues(f.fields, v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}, path, values);
+      continue;
+    }
+    if (v === undefined || v === null) continue;
     if (f.type === 'boolean') {
-      const v = values[f.name];
-      if (typeof v === 'boolean') result[f.name] = v;
-      else if (f.required) errors[f.name] = `${f.label} is required.`;
-      continue;
-    }
-    const raw = values[f.name];
-    const text = typeof raw === 'string' ? raw.trim() : '';
-    if (!text) {
-      if (f.required) errors[f.name] = `${f.label} is required.`;
-      continue;
-    }
-    if (f.type === 'number' || f.type === 'integer') {
-      const n = Number(text);
-      if (Number.isNaN(n) || (f.type === 'integer' && !Number.isInteger(n))) {
-        errors[f.name] = f.type === 'integer' ? `${f.label} must be an integer.` : `${f.label} must be a number.`;
-        continue;
-      }
-      result[f.name] = n;
+      if (typeof v === 'boolean') values[path] = v;
     } else if (f.type === 'object' || f.type === 'array') {
-      try {
-        result[f.name] = JSON.parse(text);
-      } catch {
-        errors[f.name] = `${f.label} must be valid JSON.`;
-      }
+      values[path] = typeof v === 'string' ? v : jsonPretty(v);
     } else {
-      result[f.name] = text;
+      values[path] = typeof v === 'string' ? v : String(v);
     }
   }
-  return { result, errors };
+}
+
+/**
+ * Builds generated-form values (the shape `SchemaFormFields` expects, keyed by dotted path) from a
+ * source object — the inverse of `buildFormResult`. Used to pre-populate a form from existing
+ * arguments (e.g. a review activity's `activityArgs`). Object/array leaf fields are stringified to
+ * JSON; numbers become their string form; booleans pass through. Keys absent from the source are skipped.
+ */
+export function formValuesFromObject(fields: FormField[], source: Record<string, unknown>): Record<string, string | boolean> {
+  const values: Record<string, string | boolean> = {};
+  fillValues(fields, source, '', values);
+  return values;
 }
 
 /** Returns a copy of `items` sorted by their `startTime`, newest first (missing/invalid times last). */

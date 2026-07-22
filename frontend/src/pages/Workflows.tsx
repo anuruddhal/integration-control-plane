@@ -41,10 +41,21 @@ export default function Workflows(scope: ComponentScope): JSX.Element {
 
   // Optional deep-link params (e.g. from the Overview page's "View Instances" action or the
   // start-workflow success dialog): ?tab=admin&type=<workflowType>&workflowId=<id>&env=<environmentId>
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialWorkflowType = searchParams.get('type') ?? undefined;
   const initialWorkflowId = searchParams.get('workflowId') ?? undefined;
-  const [tabKey, setTabKey] = useState<'user' | 'admin'>(searchParams.get('tab') === 'admin' ? 'admin' : 'user');
+  // The active tab is driven by the URL, so navigating here from elsewhere (e.g. clicking a
+  // workflow ID in User Actions or Review Activities) switches tabs deterministically.
+  const tabKey: 'user' | 'admin' = searchParams.get('tab') === 'admin' ? 'admin' : 'user';
+  const setTabKey = (v: 'user' | 'admin') =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', v);
+        return next;
+      },
+      { replace: true },
+    );
   const [selectedEnvId, setSelectedEnvId] = useState(searchParams.get('env') ?? '');
 
   // Deep-link params seed component state once; remount the admin portal when they change so

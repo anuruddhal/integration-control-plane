@@ -16,29 +16,26 @@
  * under the License.
  */
 
-import { Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListingTable, MenuItem, Select, Snackbar, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
-import { Copy, Eye, Play, RefreshCw, RotateCcw, Plus } from '@wso2/oxygen-ui-icons-react';
-import { useMemo, useState } from 'react';
+import { Alert, Autocomplete, Box, Button, Card, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, ListingTable, MenuItem, Select, Snackbar, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
+import { Copy, Eye, Play, RefreshCw } from '@wso2/oxygen-ui-icons-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { resourceUrl, useScope } from '../../nav';
 import SearchField from '../SearchField';
 import SchemaFormFields from './SchemaFormFields';
 import WorkflowDetailDrawer from './WorkflowDetailDrawer';
-import { buildFormResult, formatTime, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, splitQualifiedName } from './helpers';
-import { SchemaDisclosure, StatusChip, type WorkflowScope } from './shared';
+import { buildFormResult, formatTime, formValuesFromObject, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, splitQualifiedName } from './helpers';
+import { DetailRow, SchemaDisclosure, StatusChip, WorkflowIdLink, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
-import { useRetryDecision, useRetryTasks, useStartWorkflow, useWorkflowDefinitions, useWorkflowInstances, type RetryDecision, type WorkflowDefinition } from '../../api/workflows';
+import { useReviewActivities, useReviewActivity, useReviewDecision, useStartWorkflow, useWorkflowDefinitions, useWorkflowInstances, type ReviewDecision, type WorkflowDefinition } from '../../api/workflows';
 
 const WORKFLOW_STATUSES = ['All', 'RUNNING', 'COMPLETED', 'FAILED', 'TERMINATED', 'CANCELED', 'TIMED_OUT'];
-const RETRY_TASK_STATUSES = ['All', 'PENDING', 'COMPLETED', 'CANCELED', 'TERMINATED'];
+// Rejecting a review activity completes it (there is no REJECTED status).
+const REVIEW_ACTIVITY_STATUSES = ['All', 'PENDING', 'COMPLETED', 'CANCELED', 'TERMINATED'];
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const;
 
 const statusLabel = (s: string) => (s === 'All' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' '));
-
-// Retry tasks report their child workflow's status, where a pending task is RUNNING.
-// Display it as PENDING to match the status filter values.
-const retryDisplayStatus = (s?: string) => (s === 'RUNNING' ? 'PENDING' : s);
 
 /** Converts a `datetime-local` input value to an ISO-8601 string, or undefined when empty/invalid. */
 const localToIso = (v: string): string | undefined => {
@@ -65,7 +62,7 @@ const TIME_PRESETS: { label: string; ms: number }[] = [
 
 export type Toast = { severity: 'success' | 'error'; message: string } | null;
 
-// ── Shared filter controls (used by the Workflows and Retry Tasks views) ─────
+// ── Shared filter controls (used by the Workflows and Review Activities views) ─────
 
 function StatusFilter({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) {
   return <Autocomplete size="small" sx={{ width: 180 }} options={options} value={value} disableClearable getOptionLabel={statusLabel} onChange={(_, v) => onChange(v ?? 'All')} renderInput={(params) => <TextField {...params} label="Status" />} />;
@@ -166,7 +163,7 @@ export default function AdminPortal({ componentId, environmentId, initialWorkflo
       {view === 'workflows' ? (
         <WorkflowsAdmin scope={scope} onToast={setToast} status={status} setStatus={setStatus} selectedType={selectedType} setSelectedType={setSelectedType} search={search} setSearch={setSearch} timeFilter={timeFilter} />
       ) : (
-        <RetryTasksAdmin scope={scope} onToast={setToast} />
+        <ReviewActivitiesAdmin scope={scope} onToast={setToast} />
       )}
 
       <Snackbar open={toast !== null} autoHideDuration={4000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
@@ -459,12 +456,13 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
   );
 }
 
-// ── Retry tasks ────────────────────────────────────────────────────────────────
+// ── Review activities ───────────────────────────────────────────────────────────
 
-function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast) => void }) {
+function ReviewActivitiesAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast) => void }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All');
   const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const timeFilter = useTimeRangeFilter();
   const { data: definitions = [] } = useWorkflowDefinitions(scope);
   const {
@@ -473,29 +471,17 @@ function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t
     error,
     refetch,
     isFetching,
-  } = useRetryTasks(scope, {
+  } = useReviewActivities(scope, {
     status: status === 'All' ? undefined : status,
     parentWorkflowId: search || undefined,
     startTimeFrom: timeFilter.bounds.startTimeFrom,
     startTimeTo: timeFilter.bounds.startTimeTo,
     limit: 50,
   });
-  const decide = useRetryDecision(scope);
-  const [inputTaskId, setInputTaskId] = useState<string | null>(null);
 
-  // The retry-task API has no workflow-name filter; the qualified task name carries it, so filter client-side.
+  // The review-activity API has no workflow-name filter; the qualified task name carries it, so filter client-side.
   const items = sortByStartTimeDesc((page?.items ?? []).filter((t) => !selectedType || splitQualifiedName(t.taskName ?? t.activityName).workflow === selectedType.workflowType));
   const hasFilters = status !== 'All' || !!selectedType || !!search || timeFilter.active;
-
-  const runDecision = (taskId: string, decision: RetryDecision, parsedInput?: unknown) => {
-    decide.mutate(
-      { taskId, decision, input: parsedInput },
-      {
-        onSuccess: () => onToast({ severity: 'success', message: `Retry task ${decision} submitted.` }),
-        onError: (e) => onToast({ severity: 'error', message: e instanceof Error ? e.message : 'Action failed.' }),
-      },
-    );
-  };
 
   return (
     <>
@@ -510,7 +496,7 @@ function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t
       </Stack>
 
       <Stack direction="row" gap={1.5} sx={{ mb: 2 }} flexWrap="wrap" alignItems="center">
-        <StatusFilter options={RETRY_TASK_STATUSES} value={status} onChange={setStatus} />
+        <StatusFilter options={REVIEW_ACTIVITY_STATUSES} value={status} onChange={setStatus} />
         <WorkflowNameFilter definitions={definitions} value={selectedType} onChange={setSelectedType} />
         {timeFilter.controls}
         {hasFilters && (
@@ -530,9 +516,9 @@ function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t
       {isLoading ? (
         <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
       ) : error ? (
-        <Typography sx={emptySx}>{error instanceof Error ? error.message : 'Failed to load retry tasks.'}</Typography>
+        <Typography sx={emptySx}>{error instanceof Error ? error.message : 'Failed to load review activities.'}</Typography>
       ) : items.length === 0 ? (
-        <Typography sx={emptySx}>No retry tasks found.</Typography>
+        <Typography sx={emptySx}>No review activities found.</Typography>
       ) : (
         <ListingTable>
           <ListingTable.Head>
@@ -542,7 +528,7 @@ function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t
               <ListingTable.Cell>Workflow ID</ListingTable.Cell>
               <ListingTable.Cell>Status</ListingTable.Cell>
               <ListingTable.Cell>Started</ListingTable.Cell>
-              <ListingTable.Cell>Actions</ListingTable.Cell>
+              <ListingTable.Cell>View</ListingTable.Cell>
             </ListingTable.Row>
           </ListingTable.Head>
           <ListingTable.Body>
@@ -557,30 +543,18 @@ function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t
                     <Typography variant="body2">{qualified.workflow ?? '—'}</Typography>
                   </ListingTable.Cell>
                   <ListingTable.Cell>
-                    <Typography sx={{ fontFamily: 'monospace', fontSize: 12 }}>{t.parentWorkflowId ?? '—'}</Typography>
+                    <WorkflowIdLink workflowId={t.parentWorkflowId} environmentId={scope.environmentId} />
                   </ListingTable.Cell>
                   <ListingTable.Cell>
-                    <StatusChip status={retryDisplayStatus(t.status)} />
+                    <StatusChip status={t.status} />
                   </ListingTable.Cell>
                   <ListingTable.Cell>{formatTime(t.startTime)}</ListingTable.Cell>
                   <ListingTable.Cell>
-                    <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
-                      <Stack direction="row" gap={0.5}>
-                        <Tooltip title="Retry with original input">
-                          <IconButton size="small" disabled={decide.isPending} onClick={() => runDecision(t.taskId, 'retry')} aria-label="Retry">
-                            <RotateCcw size={16} />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Retry with modified input">
-                          <IconButton size="small" disabled={decide.isPending} onClick={() => setInputTaskId(t.taskId)} aria-label="Retry with input">
-                            <Plus size={16} />
-                          </IconButton>
-                        </Tooltip>
-                        <Button size="small" color="error" disabled={decide.isPending} onClick={() => runDecision(t.taskId, 'fail')}>
-                          Fail
-                        </Button>
-                      </Stack>
-                    </Authorized>
+                    <Tooltip title="Open activity">
+                      <IconButton size="small" onClick={() => setOpenId(t.taskId)} aria-label="Open activity">
+                        <Eye size={16} />
+                      </IconButton>
+                    </Tooltip>
                   </ListingTable.Cell>
                 </ListingTable.Row>
               );
@@ -589,60 +563,165 @@ function RetryTasksAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t
         </ListingTable>
       )}
 
-      {inputTaskId && (
-        <RetryWithInputDialog
-          onClose={() => setInputTaskId(null)}
-          onSubmit={(parsed) => {
-            runDecision(inputTaskId, 'retry-with-input', parsed);
-            setInputTaskId(null);
-          }}
-        />
-      )}
+      {openId && <ReviewActivityDetailDialog scope={scope} taskId={openId} onClose={() => setOpenId(null)} onToast={onToast} />}
     </>
   );
 }
 
-function RetryWithInputDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (input: unknown) => void }) {
-  const [text, setText] = useState('{}');
-  const [err, setErr] = useState('');
+/**
+ * Display name for a review activity: the task part of its qualified name
+ * (e.g. `placeOrderWorkflow.validatePayment` → `validatePayment`), else the task ID.
+ */
+function reviewActivityDisplayName(taskName?: string, activityName?: string, fallback = ''): string {
+  const { task } = splitQualifiedName(taskName ?? activityName);
+  return task ?? fallback;
+}
+
+function ReviewActivityDetailDialog({ scope, taskId, onClose, onToast }: { scope: WorkflowScope; taskId: string; onClose: () => void; onToast: (t: Toast) => void }) {
+  const { data: activity, isLoading, error: loadError } = useReviewActivity(scope, taskId);
+  const decide = useReviewDecision(scope);
+  const [mode, setMode] = useState<'view' | 'reject'>('view');
+  const [formValues, setFormValues] = useState<Record<string, string | boolean>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [feedback, setFeedback] = useState('');
+
+  const formFields = parseFormSchema(activity?.formSchema);
+  // Only a PENDING activity can be acted on; COMPLETED/CANCELED/TERMINATED are view-only.
+  const canDecide = activity?.status === 'PENDING';
+  const { workflow } = splitQualifiedName(activity?.taskName ?? activity?.activityName);
+  const heading = activity?.title || reviewActivityDisplayName(activity?.taskName, activity?.activityName, taskId);
+
+  // Seed the form from the activity's arguments once the detail loads (activityArgs conforms to formSchema).
+  useEffect(() => {
+    if (!activity) return;
+    const fields = parseFormSchema(activity.formSchema);
+    setFormValues(fields ? formValuesFromObject(fields, activity.activityArgs ?? {}) : {});
+  }, [activity]);
+
+  const setFormValue = (name: string, value: string | boolean) => {
+    setFormValues((prev) => ({ ...prev, [name]: value }));
+    setFieldErrors((prev) => {
+      if (!(name in prev)) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  };
+
+  const runDecision = (decision: ReviewDecision, input?: unknown, feedbackText?: string) => {
+    decide.mutate(
+      { taskId, decision, input, feedback: feedbackText },
+      {
+        onSuccess: () => {
+          onToast({ severity: 'success', message: decision === 'reject' ? 'Activity rejected.' : 'Activity proceeded.' });
+          onClose();
+        },
+        onError: (e) => onToast({ severity: 'error', message: e instanceof Error ? e.message : 'Action failed.' }),
+      },
+    );
+  };
+
+  // Proceed always goes through proceed-with-input: with a form it submits the (possibly edited)
+  // values; without one it reruns with the original, unedited arguments.
+  const submitProceed = () => {
+    if (formFields) {
+      const { result, errors } = buildFormResult(formFields, formValues);
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors);
+        return;
+      }
+      runDecision('proceed-with-input', result);
+      return;
+    }
+    runDecision('proceed-with-input', activity?.activityArgs ?? {});
+  };
+
+  const busy = decide.isPending;
+
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Retry with Modified Input</DialogTitle>
+      <DialogTitle sx={sectionTitleSx}>
+        <Stack direction="row" alignItems="center" gap={1.5}>
+          <span>{heading}</span>
+          {activity?.status && <StatusChip status={activity.status} />}
+        </Stack>
+      </DialogTitle>
       <DialogContent>
-        <TextField
-          label="Input (JSON object)"
-          fullWidth
-          multiline
-          minRows={5}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setErr('');
-          }}
-          error={!!err}
-          helperText={err}
-          sx={{ mt: 1 }}
-          slotProps={{ input: { sx: { fontFamily: 'monospace', fontSize: 13 } } }}
-        />
+        {isLoading ? (
+          <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
+        ) : loadError || !activity ? (
+          <Typography sx={emptySx}>{loadError instanceof Error ? loadError.message : 'Failed to load activity details.'}</Typography>
+        ) : (
+          <Stack gap={2} sx={{ mt: 1 }}>
+            {activity.description && (
+              <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
+                <Typography variant="subtitle2" sx={{ px: 2, py: 1.5, ...sectionTitleSx }}>
+                  Description
+                </Typography>
+                <Divider />
+                <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2 }}>
+                  {activity.description}
+                </Typography>
+              </Card>
+            )}
+
+            <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
+              <Typography variant="subtitle2" sx={{ px: 2, py: 1.5, ...sectionTitleSx }}>
+                Activity Detail
+              </Typography>
+              <Divider />
+              <Stack gap={1.25} sx={{ px: 2, py: 2 }}>
+                <DetailRow label="Task Name">{reviewActivityDisplayName(activity.taskName, activity.activityName, '—')}</DetailRow>
+                <DetailRow label="Workflow Name">{workflow ?? '—'}</DetailRow>
+                <DetailRow label="Parent Workflow ID">
+                  <WorkflowIdLink workflowId={activity.parentWorkflowId} environmentId={scope.environmentId} onNavigate={onClose} />
+                </DetailRow>
+                <DetailRow label="Created">{formatTime(activity.startTime)}</DetailRow>
+                {activity.errorMessage && <DetailRow label="Error">{activity.errorMessage}</DetailRow>}
+              </Stack>
+            </Card>
+
+            {/* Editable form seeded from activityArgs when the activity is actionable; otherwise
+                the arguments are shown read-only. */}
+            {/* Fields generated from formSchema, populated from activityArgs. Editable when the
+                activity is actionable; disabled (read-only) once decided. Falls back to a JSON
+                view when there is no schema. */}
+            {mode === 'view' &&
+              (formFields ? (
+                <SchemaFormFields fields={formFields} values={formValues} errors={fieldErrors} onChange={setFormValue} disabled={!canDecide} />
+              ) : activity.activityArgs ? (
+                <SchemaDisclosure schema={JSON.stringify(activity.activityArgs, null, 2)} label="Activity arguments" />
+              ) : null)}
+
+            {mode === 'reject' && <TextField label="Feedback (optional)" fullWidth multiline minRows={2} value={feedback} onChange={(e) => setFeedback(e.target.value)} helperText="Relayed to the workflow as the rejection reason." />}
+          </Stack>
+        )}
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button
-          variant="contained"
-          onClick={() => {
-            try {
-              const parsed = JSON.parse(text);
-              if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-                setErr('Input must be a JSON object.');
-                return;
-              }
-              onSubmit(parsed);
-            } catch {
-              setErr('Invalid JSON.');
-            }
-          }}>
-          Retry
-        </Button>
+      <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
+        <Button onClick={onClose}>Close</Button>
+        {/* Deciding a review activity requires the workflow manage permission. */}
+        <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+          {canDecide && mode === 'view' && (
+            <>
+              <Button color="error" disabled={busy} onClick={() => setMode('reject')}>
+                Reject
+              </Button>
+              <Button variant="contained" disabled={busy} onClick={submitProceed}>
+                {busy ? 'Submitting…' : 'Proceed'}
+              </Button>
+            </>
+          )}
+          {canDecide && mode === 'reject' && (
+            <>
+              <Button disabled={busy} onClick={() => setMode('view')}>
+                Back
+              </Button>
+              <Button variant="contained" color="error" disabled={busy} onClick={() => runDecision('reject', undefined, feedback.trim() || undefined)}>
+                {busy ? 'Submitting…' : 'Submit Rejection'}
+              </Button>
+            </>
+          )}
+        </Authorized>
       </DialogActions>
     </Dialog>
   );
