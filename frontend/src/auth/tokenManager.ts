@@ -52,6 +52,12 @@ export function isAccessTokenExpired(): boolean {
   return Date.now() >= Number(expiresAt) - EXPIRY_BUFFER_MS;
 }
 
+export function isRefreshTokenExpired(): boolean {
+  const expiresAt = localStorage.getItem(REFRESH_TOKEN_EXPIRES_AT_KEY);
+  if (!expiresAt) return true;
+  return Date.now() >= Number(expiresAt) - EXPIRY_BUFFER_MS;
+}
+
 export async function refreshAccessToken(): Promise<void> {
   if (refreshPromise) {
     await refreshPromise;
@@ -60,7 +66,7 @@ export async function refreshAccessToken(): Promise<void> {
 
   refreshPromise = (async () => {
     const refreshToken = getRefreshToken();
-    if (!refreshToken) {
+    if (!refreshToken || isRefreshTokenExpired()) {
       clearTokens();
       onAuthFailure?.();
       return;
@@ -113,10 +119,14 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
   if (res.status === 401) {
     await refreshAccessToken();
     const retryToken = getAccessToken();
-    const retryHeaders = new Headers(options.headers);
-    if (retryToken) {
-      retryHeaders.set('Authorization', `Bearer ${retryToken}`);
+    if (!retryToken) {
+      // Refresh failed — onAuthFailure already triggered navigation to login.
+      // Return the original 401 so callers receive a clean non-ok response
+      // instead of an unauthenticated retry that keeps the UI stuck loading.
+      return res;
     }
+    const retryHeaders = new Headers(options.headers);
+    retryHeaders.set('Authorization', `Bearer ${retryToken}`);
     return fetch(url, { ...options, headers: retryHeaders });
   }
 
