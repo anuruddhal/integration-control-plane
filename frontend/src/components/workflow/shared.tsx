@@ -22,6 +22,7 @@ import { useState, type JSX, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { resourceUrl, useScope } from '../../nav';
 import CodeViewer from '../CodeViewer';
+import { STATUS_COLORS } from './helpers';
 
 export interface WorkflowScope {
   componentId: string;
@@ -57,21 +58,6 @@ export function WorkflowIdLink({ workflowId, environmentId, onNavigate }: { work
     </Link>
   );
 }
-
-type ChipColor = 'default' | 'primary' | 'success' | 'error' | 'warning' | 'info';
-
-const STATUS_COLORS: Record<string, ChipColor> = {
-  RUNNING: 'info',
-  COMPLETED: 'success',
-  FAILED: 'error',
-  TERMINATED: 'error',
-  CANCELED: 'warning',
-  CANCELLED: 'warning',
-  TIMED_OUT: 'warning',
-  CONTINUED_AS_NEW: 'default',
-  SUSPENDED: 'warning',
-  PENDING: 'info',
-};
 
 /** Renders a status string as a colour-coded chip. */
 export function StatusChip({ status }: { status?: string }): JSX.Element {

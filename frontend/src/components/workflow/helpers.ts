@@ -49,6 +49,23 @@ export function unescapeRoleName(role: string): string {
 /** Shared heading style for workflow cards, sections, and form/dialog titles: bold, muted gray. */
 export const sectionTitleSx = { fontWeight: 700, color: 'text.secondary' } as const;
 
+/** Oxygen chip/palette colour names used to convey workflow & task status. */
+export type ChipColor = 'default' | 'primary' | 'success' | 'error' | 'warning' | 'info';
+
+/** Maps a normalized (upper-case) workflow/task status to an Oxygen chip/palette colour. */
+export const STATUS_COLORS: Record<string, ChipColor> = {
+  RUNNING: 'info',
+  COMPLETED: 'success',
+  FAILED: 'error',
+  TERMINATED: 'error',
+  CANCELED: 'warning',
+  CANCELLED: 'warning',
+  TIMED_OUT: 'warning',
+  CONTINUED_AS_NEW: 'default',
+  SUSPENDED: 'warning',
+  PENDING: 'info',
+};
+
 /**
  * Splits a qualified task/activity name like `placeOrderWorkflow.approveOrder` (optionally
  * prefixed `workflow-`) into its workflow and task parts. Names without a qualifier map to
@@ -233,6 +250,199 @@ export function formatTime(value?: string): string {
   if (!value) return '—';
   const d = new Date(value);
   return isNaN(d.getTime()) ? value : d.toLocaleString();
+}
+
+/** Formats a millisecond duration compactly: `840ms`, `4.2s`, `1m 8s`, `2h 5m`. */
+export function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s < 10 ? s.toFixed(1) : Math.round(s)}s`;
+  const totalSec = Math.round(s);
+  const m = Math.floor(totalSec / 60);
+  if (m < 60) {
+    const rem = totalSec % 60;
+    return rem ? `${m}m ${rem}s` : `${m}m`;
+  }
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return mm ? `${h}h ${mm}m` : `${h}h`;
+}
+
+// ── Timeline reconstruction from workflow history events ──
+//
+// History events are Temporal-shaped (see extractWorkflowInput): each carries a short-form
+// `eventType` (e.g. WORKFLOW_EXECUTION_STARTED, ACTIVITY_TASK_SCHEDULED), an `eventId`, an event
+// time, and a generic `attributes` object holding the type-specific fields. The runtime's exact
+// timestamp key can vary, so parsing tries several. Duration bars are reconstructed by pairing each
+// lifecycle group by its id references: activities by the SCHEDULED event's id (echoed as
+// `scheduledEventId` on later events), timers by `timerId`, child workflows by the INITIATED event's
+// id (echoed as `initiatedEventId`). Anything that can't be paired still renders as an open bar
+// running to the last known event.
+
+export type SpanCategory = 'WORKFLOW' | 'ACTIVITY' | 'HUMAN_TASK' | 'TIMER' | 'CHILD_WORKFLOW';
+
+export interface TimelineSpan {
+  key: string;
+  label: string;
+  category: SpanCategory;
+  /** Normalized upper-case status (COMPLETED, FAILED, RUNNING, …), shared with StatusChip colours. */
+  status: string;
+  /** Epoch milliseconds. */
+  start: number;
+  end: number;
+  running: boolean;
+}
+
+export interface Timeline {
+  spans: TimelineSpan[];
+  start: number;
+  end: number;
+}
+
+const asRecord = (v: unknown): Record<string, unknown> => (v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+const asStr = (v: unknown): string | undefined => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : undefined);
+
+/** Normalizes an epoch number of unknown unit (ms/µs/ns) to milliseconds using magnitude heuristics. */
+function numberToMs(n: number): number {
+  if (n > 1e17) return Math.round(n / 1e6); // nanoseconds
+  if (n > 1e14) return Math.round(n / 1e3); // microseconds
+  return n; // already milliseconds
+}
+
+/** Reads an event's timestamp (trying common key names / formats) as epoch milliseconds, or null. */
+function eventTimeMs(e: Record<string, unknown>): number | null {
+  const raw = e['eventTime'] ?? e['timestamp'] ?? e['eventTimestamp'] ?? e['time'];
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number') return numberToMs(raw);
+  if (typeof raw === 'string') {
+    const parsed = Date.parse(raw);
+    if (!Number.isNaN(parsed)) return parsed;
+    const num = Number(raw);
+    return Number.isNaN(num) ? null : numberToMs(num);
+  }
+  return null;
+}
+
+const WF_TERMINAL_STATUS: Record<string, string> = {
+  WORKFLOW_EXECUTION_COMPLETED: 'COMPLETED',
+  WORKFLOW_EXECUTION_FAILED: 'FAILED',
+  WORKFLOW_EXECUTION_TIMED_OUT: 'TIMED_OUT',
+  WORKFLOW_EXECUTION_CANCELED: 'CANCELED',
+  WORKFLOW_EXECUTION_TERMINATED: 'TERMINATED',
+  WORKFLOW_EXECUTION_CONTINUED_AS_NEW: 'CONTINUED_AS_NEW',
+};
+
+const ACTIVITY_CLOSE_STATUS: Record<string, string> = {
+  ACTIVITY_TASK_COMPLETED: 'COMPLETED',
+  ACTIVITY_TASK_FAILED: 'FAILED',
+  ACTIVITY_TASK_TIMED_OUT: 'TIMED_OUT',
+  ACTIVITY_TASK_CANCELED: 'CANCELED',
+};
+
+const CHILD_CLOSE_STATUS: Record<string, string> = {
+  CHILD_WORKFLOW_EXECUTION_COMPLETED: 'COMPLETED',
+  CHILD_WORKFLOW_EXECUTION_FAILED: 'FAILED',
+  CHILD_WORKFLOW_EXECUTION_TIMED_OUT: 'TIMED_OUT',
+  CHILD_WORKFLOW_EXECUTION_CANCELED: 'CANCELED',
+  CHILD_WORKFLOW_EXECUTION_TERMINATED: 'TERMINATED',
+};
+
+interface Group {
+  label: string;
+  category: SpanCategory;
+  start: number;
+  end?: number;
+  status?: string;
+}
+
+/** Reconstructs a set of duration spans (a Gantt timeline) from a workflow's history events. */
+export function buildTimeline(events: ReadonlyArray<Record<string, unknown>>): Timeline {
+  const parsed = events.map((e, i) => ({
+    id: asStr(e['eventId']) ?? String(i),
+    type: (asStr(e['eventType']) ?? '').replace(/^EVENT_TYPE_/, '').toUpperCase(),
+    time: eventTimeMs(e),
+    attrs: asRecord(e['attributes']),
+  }));
+
+  const times = parsed.map((p) => p.time).filter((t): t is number => t !== null);
+  if (times.length === 0) return { spans: [], start: 0, end: 0 };
+  const overallStart = Math.min(...times);
+  const overallEnd = Math.max(...times);
+
+  const spans: TimelineSpan[] = [];
+  const pushGroup = (key: string, g: Group) => {
+    const running = g.end === undefined;
+    spans.push({ key, label: g.label, category: g.category, status: running ? 'RUNNING' : (g.status ?? 'COMPLETED'), start: g.start, end: g.end ?? overallEnd, running });
+  };
+
+  // Root workflow span: started → terminal event (or still running to the last event).
+  const startEv = parsed.find((p) => p.type === 'WORKFLOW_EXECUTION_STARTED');
+  if (startEv) {
+    const terminal = [...parsed].reverse().find((p) => p.type in WF_TERMINAL_STATUS);
+    pushGroup('workflow', {
+      label: asStr(asRecord(startEv.attrs['workflowType'])['name']) ?? 'Workflow',
+      category: 'WORKFLOW',
+      start: startEv.time ?? overallStart,
+      end: terminal?.time ?? undefined,
+      status: terminal ? WF_TERMINAL_STATUS[terminal.type] : undefined,
+    });
+  }
+
+  // Activities (human tasks surface as activities named `humantask-…`), keyed by SCHEDULED event id.
+  const activities = new Map<string, Group>();
+  for (const p of parsed) {
+    if (p.time === null) continue;
+    if (p.type === 'ACTIVITY_TASK_SCHEDULED') {
+      const name = asStr(asRecord(p.attrs['activityType'])['name']) ?? asStr(p.attrs['activityId']) ?? 'Activity';
+      activities.set(p.id, { label: name, category: /humantask/i.test(name) ? 'HUMAN_TASK' : 'ACTIVITY', start: p.time });
+    } else if (p.type in ACTIVITY_CLOSE_STATUS) {
+      const g = activities.get(asStr(p.attrs['scheduledEventId']) ?? '');
+      if (g) {
+        g.end = p.time;
+        g.status = ACTIVITY_CLOSE_STATUS[p.type];
+      }
+    }
+  }
+  activities.forEach((g, id) => pushGroup(`act-${id}`, g));
+
+  // Timers, keyed by timerId.
+  const timers = new Map<string, Group>();
+  for (const p of parsed) {
+    if (p.time === null) continue;
+    const timerId = asStr(p.attrs['timerId']);
+    if (!timerId) continue;
+    if (p.type === 'TIMER_STARTED') timers.set(timerId, { label: `Timer ${timerId}`, category: 'TIMER', start: p.time });
+    else if (p.type === 'TIMER_FIRED' || p.type === 'TIMER_CANCELED') {
+      const g = timers.get(timerId);
+      if (g) {
+        g.end = p.time;
+        g.status = p.type === 'TIMER_FIRED' ? 'COMPLETED' : 'CANCELED';
+      }
+    }
+  }
+  timers.forEach((g, id) => pushGroup(`timer-${id}`, g));
+
+  // Child workflows, keyed by the INITIATED event id.
+  const children = new Map<string, Group>();
+  for (const p of parsed) {
+    if (p.time === null) continue;
+    if (p.type === 'START_CHILD_WORKFLOW_EXECUTION_INITIATED') {
+      children.set(p.id, { label: asStr(asRecord(p.attrs['workflowType'])['name']) ?? 'Child Workflow', category: 'CHILD_WORKFLOW', start: p.time });
+    } else if (p.type in CHILD_CLOSE_STATUS) {
+      const g = children.get(asStr(p.attrs['initiatedEventId']) ?? '');
+      if (g) {
+        g.end = p.time;
+        g.status = CHILD_CLOSE_STATUS[p.type];
+      }
+    }
+  }
+  children.forEach((g, id) => pushGroup(`child-${id}`, g));
+
+  // Workflow first, then by start time so bars read top-to-bottom in execution order.
+  spans.sort((a, b) => (a.category === 'WORKFLOW' ? -1 : 0) - (b.category === 'WORKFLOW' ? -1 : 0) || a.start - b.start || a.end - b.end);
+
+  return { spans, start: overallStart, end: overallEnd };
 }
 
 /** Decodes a base64 string to UTF-8 text (handles multi-byte characters). */

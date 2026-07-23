@@ -20,13 +20,19 @@ import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogCont
 import { Ban, OctagonX, PauseCircle, PlayCircle, X } from '@wso2/oxygen-ui-icons-react';
 import { useState } from 'react';
 import CodeViewer from '../CodeViewer';
+import ExecutionGraph from './ExecutionGraph';
+import WorkflowTimeline from './WorkflowTimeline';
 import { useWorkflowExecutionGraph, useWorkflowHistory, useWorkflowInfo, useWorkflowLifecycle, type WorkflowLifecycleAction } from '../../api/workflows';
 import { extractWorkflowInput, jsonPretty } from './helpers';
 import { StatusChip, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
+import { useLayout } from '../../contexts/LayoutContext';
 
-const drawerSx = { '& .MuiDrawer-paper': { width: '60%', maxWidth: 760, minWidth: 420, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' } };
+// The drawer fills the main content area only — right-anchored, its left edge lands at the sidebar
+// width so the left navigation stays visible. `sidebarWidth` is supplied live so the panel tracks
+// the sidebar's collapsed/expanded state.
+const drawerPaperSx = (sidebarWidth: number) => ({ '& .MuiDrawer-paper': { width: `calc(100% - ${sidebarWidth}px)`, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' } });
 const headerSx = { px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' };
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' };
 
@@ -35,6 +41,7 @@ export default function WorkflowDetailDrawer({ scope, workflowId, onClose }: { s
   const [terminateOpen, setTerminateOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [toast, setToast] = useState<{ severity: 'success' | 'error'; message: string } | null>(null);
+  const { sidebarWidth } = useLayout();
 
   const { data: info, isLoading: loadingInfo, error: infoError } = useWorkflowInfo(scope, workflowId);
   // History is loaded eagerly: the Info tab derives the start input from it, and the History tab renders it.
@@ -69,7 +76,7 @@ export default function WorkflowDetailDrawer({ scope, workflowId, onClose }: { s
   const historyEventKeys = history.length > 0 ? Object.keys(history[0]).slice(0, 5) : [];
 
   return (
-    <Drawer anchor="right" open variant="persistent" sx={drawerSx} onClose={onClose}>
+    <Drawer anchor="right" open variant="persistent" sx={drawerPaperSx(sidebarWidth)} onClose={onClose}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={headerSx}>
         <Stack direction="row" alignItems="center" gap={1.5} sx={{ minWidth: 0 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 600, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -109,8 +116,9 @@ export default function WorkflowDetailDrawer({ scope, workflowId, onClose }: { s
       <Box sx={{ px: 2 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
           <Tab label="Info" />
-          <Tab label="History" />
+          <Tab label="Timeline" />
           <Tab label="Execution Graph" />
+          <Tab label="History" />
         </Tabs>
 
         {tab === 0 &&
@@ -141,6 +149,15 @@ export default function WorkflowDetailDrawer({ scope, workflowId, onClose }: { s
           ) : history.length === 0 ? (
             <Typography sx={emptySx}>No history events.</Typography>
           ) : (
+            <WorkflowTimeline events={history as Array<Record<string, unknown>>} />
+          ))}
+
+        {tab === 3 &&
+          (loadingHistory ? (
+            <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
+          ) : history.length === 0 ? (
+            <Typography sx={emptySx}>No history events.</Typography>
+          ) : (
             <ListingTable>
               <ListingTable.Head>
                 <ListingTable.Row>
@@ -165,14 +182,7 @@ export default function WorkflowDetailDrawer({ scope, workflowId, onClose }: { s
             </ListingTable>
           ))}
 
-        {tab === 2 &&
-          (loadingGraph ? (
-            <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
-          ) : !graph ? (
-            <Typography sx={emptySx}>No execution graph available.</Typography>
-          ) : (
-            <CodeViewer code={jsonPretty(graph)} language="json" title="Execution graph" maxHeight="60vh" showLineNumbers={false} />
-          ))}
+        {tab === 2 && (loadingGraph ? <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} /> : !graph ? <Typography sx={emptySx}>No execution graph available.</Typography> : <ExecutionGraph graph={graph} />)}
       </Box>
 
       <Dialog open={terminateOpen} onClose={() => setTerminateOpen(false)} maxWidth="xs" fullWidth>

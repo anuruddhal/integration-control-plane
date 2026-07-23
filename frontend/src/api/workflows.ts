@@ -93,6 +93,29 @@ export interface HistoryEvent {
   [key: string]: unknown;
 }
 
+// ── Execution graph (node-link DAG describing the run's dependency flow) ──
+
+export interface ExecutionGraphNode {
+  id: string;
+  label: string;
+  /** Node kind, e.g. WORKFLOW, ACTIVITY, HUMAN_TASK, SIGNAL, TIMER. */
+  type: string;
+  /** Same status vocabulary as workflow instances (RUNNING, COMPLETED, FAILED, …). */
+  status?: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface ExecutionGraphEdge {
+  source: string;
+  target: string;
+  label?: string | null;
+}
+
+export interface ExecutionGraph {
+  nodes: ExecutionGraphNode[];
+  edges: ExecutionGraphEdge[];
+}
+
 // ── Low-level request helper (mirrors logs.ts: timeout + error extraction) ──
 
 async function wfRequest<T>(componentId: string, environmentId: string, subpath: string, init: RequestInit = {}): Promise<T> {
@@ -195,7 +218,7 @@ export function useWorkflowHistory(s: Scope, workflowId: string | null) {
 export function useWorkflowExecutionGraph(s: Scope, workflowId: string | null) {
   return useQuery({
     queryKey: ['wf', 'graph', s.componentId, s.environmentId, workflowId],
-    queryFn: () => wfRequest<unknown>(s.componentId, s.environmentId, `workflows/${encodeURIComponent(workflowId!)}/execution-graph`),
+    queryFn: () => wfRequest<ExecutionGraph>(s.componentId, s.environmentId, `workflows/${encodeURIComponent(workflowId!)}/execution-graph`),
     enabled: enabledFor(s) && !!workflowId,
   });
 }

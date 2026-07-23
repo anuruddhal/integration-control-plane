@@ -56,6 +56,7 @@ import { useMultiEnvRuntimeStatusSubscription } from '../api/subscriptions';
 import { useNotificationPreferences } from '../hooks/useNotificationPreferences';
 import { useScope, useResource, resourceUrl, broaden, narrow, newProjectUrl, newComponentUrl, sidebarItems, hasProject, hasComponent, type Resource } from '../nav';
 import { useNotificationsContext } from '../contexts/NotificationsContext';
+import { LayoutProvider } from '../contexts/LayoutContext';
 import { cookiePolicyUrl, loginUrl, orgUrl, privacyPolicyUrl, profileUrl } from '../paths';
 import { useAuth } from '../auth/AuthContext';
 import { useAccessControl } from '../contexts/AccessControlContext';
@@ -579,7 +580,9 @@ export default function AppLayout(): JSX.Element {
       </AppShell.Sidebar>
 
       <AppShell.Main>
-        <Outlet />
+        <LayoutProvider value={{ sidebarWidth: shell.sidebarCollapsed ? shell.sidebarCollapsedWidth : shell.sidebarWidth }}>
+          <Outlet />
+        </LayoutProvider>
       </AppShell.Main>
 
       <AppShell.Footer>
