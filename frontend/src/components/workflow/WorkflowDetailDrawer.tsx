@@ -92,7 +92,7 @@ export default function WorkflowDetailDrawer({ scope, workflowId, onClose }: { s
       {/* Lifecycle actions — only for users who can manage workflow executions */}
       {showActions && (
         <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
-          <Stack direction="row" gap={1} sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', flexWrap: 'wrap' }}>
+          <Stack direction="row" gap={1} sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {isRunning && (
               <Button size="small" variant="outlined" startIcon={<PauseCircle size={14} />} disabled={lifecycle.isPending} onClick={() => runAction('suspend')}>
                 Suspend
@@ -114,7 +114,7 @@ export default function WorkflowDetailDrawer({ scope, workflowId, onClose }: { s
       )}
 
       <Box sx={{ px: 2 }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, '& .MuiTabs-flexContainer': { justifyContent: 'flex-end' } }}>
           <Tab label="Info" />
           <Tab label="Timeline" />
           <Tab label="Execution Graph" />
