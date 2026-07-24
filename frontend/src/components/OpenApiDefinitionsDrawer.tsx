@@ -96,7 +96,7 @@ interface OpenApiDefinitionsDrawerProps {
 }
 
 export function OpenApiDefinitionsDrawer({ runtimeId, onClose, serviceBasePath }: OpenApiDefinitionsDrawerProps): JSX.Element {
-  const { data: allDefinitions = [], isLoading } = useOpenApiDefinitionsByRuntime(runtimeId);
+  const { data: allDefinitions = [], isLoading, error } = useOpenApiDefinitionsByRuntime(runtimeId);
   const definitions = useMemo(() => (serviceBasePath ? allDefinitions.filter((d) => matchesServiceBasePath(d.fileName, serviceBasePath)) : allDefinitions), [allDefinitions, serviceBasePath]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selected = definitions[Math.min(selectedIndex, definitions.length - 1)];
@@ -117,6 +117,10 @@ export function OpenApiDefinitionsDrawer({ runtimeId, onClose, serviceBasePath }
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress />
           </Box>
+        ) : error ? (
+          <Alert severity="error" sx={{ m: 2 }}>
+            Failed to load OpenAPI definitions for this runtime.
+          </Alert>
         ) : definitions.length === 0 ? (
           <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
             {allDefinitions.length === 0 ? 'No OpenAPI definitions packed for this runtime.' : 'No OpenAPI definition packed for this service.'}

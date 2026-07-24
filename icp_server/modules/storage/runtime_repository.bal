@@ -912,12 +912,12 @@ public isolated function mapToRuntime(types:RuntimeDBRecord runtimeRecord) retur
 
     // Get log levels for BI runtimes only (null for MI runtimes)
     types:RuntimeLogLevelRecord[]? logLevels = ();
-    // Get packed OpenAPI definitions for BI runtimes only (null for MI runtimes)
-    types:OpenApiDefinitionRecord[]? openApiDefinitions = ();
     if runtimeRecord.runtime_type == types:BI {
         logLevels = check getLogLevelsForRuntime(runtimeRecord.runtime_id);
-        openApiDefinitions = check getOpenApiDefinitionsForRuntime(runtimeRecord.runtime_id);
     }
+    // Packed OpenAPI definitions are resolved on demand via the dedicated
+    // openApiDefinitionsByRuntime GraphQL query, not loaded on every runtime mapping.
+    types:OpenApiDefinitionRecord[]? openApiDefinitions = ();
 
     return {
         runtimeId: runtimeRecord.runtime_id,
