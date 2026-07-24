@@ -336,6 +336,7 @@ public type Heartbeat record {|
     string runtimeHash;
     time:Utc timestamp;
     map<log:Level> logLevels?; // BI log levels from heartbeat payload
+    map<json> openApiDefinitions?; // OpenAPI (Swagger) definitions packed into the runtime's JAR, keyed by file name
 |};
 
 // Shape of a single entry in the runtime's GET /workflow/definitions response.
@@ -691,6 +692,7 @@ public type Runtime record {
     string lastHeartbeat?;
     Artifacts artifacts?;
     RuntimeLogLevelRecord[] logLevels?;
+    OpenApiDefinitionRecord[] openApiDefinitions?;
 };
 
 public type ServiceRecordInDB record {
@@ -808,6 +810,20 @@ public type RuntimeLogLevelRecord record {
         name: "log_level"
     }
     string logLevel;
+};
+
+// OpenAPI (Swagger) definition packed into a BI runtime's JAR by the swagger-pack compiler
+// plugin, as persisted in bi_service_openapi_definitions. `definition` is the raw JSON text -
+// GraphQL has no JSON scalar in this schema, so it travels as a string for the frontend to parse.
+public type OpenApiDefinitionRecord record {
+    @sql:Column {
+        name: "file_name"
+    }
+    string fileName;
+    @sql:Column {
+        name: "definition"
+    }
+    string definition;
 };
 
 public type ResourceRecord record {

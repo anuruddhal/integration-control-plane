@@ -912,8 +912,11 @@ public isolated function mapToRuntime(types:RuntimeDBRecord runtimeRecord) retur
 
     // Get log levels for BI runtimes only (null for MI runtimes)
     types:RuntimeLogLevelRecord[]? logLevels = ();
+    // Get packed OpenAPI definitions for BI runtimes only (null for MI runtimes)
+    types:OpenApiDefinitionRecord[]? openApiDefinitions = ();
     if runtimeRecord.runtime_type == types:BI {
         logLevels = check getLogLevelsForRuntime(runtimeRecord.runtime_id);
+        openApiDefinitions = check getOpenApiDefinitionsForRuntime(runtimeRecord.runtime_id);
     }
 
     return {
@@ -953,7 +956,8 @@ public isolated function mapToRuntime(types:RuntimeDBRecord runtimeRecord) retur
             connectors: connectorList,
             registryResources: resourceList
         },
-        logLevels: logLevels
+        logLevels: logLevels,
+        openApiDefinitions: openApiDefinitions
     };
 }
 
@@ -1012,6 +1016,23 @@ public isolated function mapToService(types:ServiceRecordInDB serviceRecord, str
 }
 
 // Get log levels for a specific runtime
+public isolated function getOpenApiDefinitionsForRuntime(string runtimeId) returns types:OpenApiDefinitionRecord[]|error {
+    types:OpenApiDefinitionRecord[] definitionList = [];
+    stream<types:OpenApiDefinitionRecord, sql:Error?> definitionStream = dbClient->query(`
+        SELECT file_name, definition
+        FROM bi_service_openapi_definitions
+        WHERE runtime_id = ${runtimeId}
+        ORDER BY file_name
+    `);
+
+    check from types:OpenApiDefinitionRecord definitionRecord in definitionStream
+        do {
+            definitionList.push(definitionRecord);
+        };
+
+    return definitionList;
+}
+
 public isolated function getLogLevelsForRuntime(string runtimeId) returns types:RuntimeLogLevelRecord[]|error {
     types:RuntimeLogLevelRecord[] logLevelList = [];
     stream<types:RuntimeLogLevelRecord, sql:Error?> logLevelStream = dbClient->query(`

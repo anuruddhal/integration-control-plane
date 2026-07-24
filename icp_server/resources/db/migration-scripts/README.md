@@ -2,7 +2,7 @@
 
 This directory contains two kinds of SQL scripts:
 
-1. **In-place v2 schema upgrades** (`add_workflow_feature_<engine>.sql`) — bring an existing ICP v2 database up to the current schema.
+1. **In-place v2 schema upgrades** (`add_workflow_feature_<engine>.sql`, `add_openapi_definitions_<engine>.sql`) — bring an existing ICP v2 database up to the current schema.
 2. **ICP v1 → v2 user migration** (`v1_to_v2_<engine>.sql`) — migrate user accounts, credentials, and role assignments from ICP v1.
 
 ---
@@ -53,6 +53,55 @@ sqlcmd -S <server> -U <user> -P <password> -d <icp_db_name> -i add_workflow_feat
 
 # Oracle (run as the ICP schema owner)
 sqlplus <icp_schema_user>/<password>@//<host>:1521/<service_name> @add_workflow_feature_oracle.sql
+```
+
+---
+
+## Upgrading an existing ICP v2 deployment: packed OpenAPI definitions
+
+Deployments whose database was initialised **before BI runtimes could report packed OpenAPI
+(Swagger) definitions** must run the OpenAPI definitions upgrade script once against the
+**main ICP DB**. Fresh installs do not need it — the `*_init.sql` scripts already contain
+everything.
+
+Without it, heartbeats from BI runtimes built with the swagger-pack compiler plugin
+(`icp-runtime-bridge` with `remoteManagement = true` and at least one HTTP service) still work,
+but their `openApiDefinitions` are silently dropped rather than persisted.
+
+Pick the script matching your database engine:
+
+| Engine | Script |
+|---|---|
+| H2 | `add_openapi_definitions_h2.sql` |
+| MySQL / MariaDB | `add_openapi_definitions_mysql.sql` |
+| PostgreSQL | `add_openapi_definitions_postgresql.sql` |
+| Microsoft SQL Server | `add_openapi_definitions_mssql.sql` |
+| Oracle (19c+) | `add_openapi_definitions_oracle.sql` |
+
+Each script adds the `bi_service_openapi_definitions` table (one row per packed OpenAPI file per
+runtime, keyed by `(runtime_id, file_name)`, cascade-deleted with the runtime).
+
+The scripts are **idempotent** — safe to re-run. No server restart is required; the next
+heartbeat from an updated `icp-runtime-bridge` agent starts populating the table.
+
+```bash
+# H2 (server may stay running thanks to AUTO_SERVER)
+java -cp <path-to-h2.jar> org.h2.tools.RunScript \
+  -url "jdbc:h2:file:./database/icp_db;MODE=MySQL;AUTO_SERVER=TRUE" \
+  -user <db_user> -password <db_password> \
+  -script add_openapi_definitions_h2.sql
+
+# MySQL
+mysql -u <admin_user> -p <icp_db_name> < add_openapi_definitions_mysql.sql
+
+# PostgreSQL
+psql -U <admin_user> -d <icp_db_name> -f add_openapi_definitions_postgresql.sql
+
+# Microsoft SQL Server
+sqlcmd -S <server> -U <user> -P <password> -d <icp_db_name> -i add_openapi_definitions_mssql.sql
+
+# Oracle (run as the ICP schema owner)
+sqlplus <icp_schema_user>/<password>@//<host>:1521/<service_name> @add_openapi_definitions_oracle.sql
 ```
 
 ---
