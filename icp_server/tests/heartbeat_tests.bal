@@ -92,7 +92,7 @@ function cleanupRuntime(string runtimeId) {
     groups: ["heartbeat", "service-listener"]
 }
 function testServiceListenerBindingRoundTrip() returns error? {
-    string runtimeId = "aa000001-test-test-test-000000000009";
+    string runtimeId = "aa000001-test-test-test-000000000010";
     cleanupRuntime(runtimeId);
 
     types:Heartbeat heartbeat = buildHeartbeat(runtimeId, "hb-service-listener-runtime");

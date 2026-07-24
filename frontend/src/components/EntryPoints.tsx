@@ -342,109 +342,109 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         {/* Header row — hidden when this artifact type has no controls (e.g. a BI service) */}
         {hasHeaderControls && (
           <Stack direction="row" alignItems="center" gap={1.5} sx={{ px: 2, py: 1.5 }}>
-          {compositeApp && <Chip label={`Composite App: ${compositeApp}`} size="small" variant="outlined" sx={{ bgcolor: '#e8eaf6', color: '#3949ab', fontSize: 11 }} />}
-          {compositeApp && <Divider orientation="vertical" flexItem />}
-          {showStatusChip && artifactState && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
-                Status
-              </Typography>
-              {artifactType === 'Listener' || artifactType === 'RestApi' ? (
-                <Stack direction="row" alignItems="center" gap={0.75}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: toEnabled(artifact.state) ? 'success.main' : 'text.disabled' }} />
-                  <Typography variant="body2">{toEnabled(artifact.state) ? 'Enabled' : 'Disabled'}</Typography>
-                </Stack>
-              ) : (
-                <Chip label={artifactState.charAt(0).toUpperCase() + artifactState.slice(1).toLowerCase()} size="small" variant="outlined" color={toEnabled(artifact.state) ? 'success' : 'default'} sx={{ fontSize: '0.875rem' }} />
-              )}
-            </Box>
-          )}
-          {showStatusChip && artifactState && (showStatusToggle || showTracingToggle || showStatisticsToggle || showListenerToggle) && <Divider orientation="vertical" flexItem />}
-          {showStatusToggle && <SyncSwitch name="status" label="Status" checked={statusEnabled} inSync={artifact.stateInSync as boolean | null} onChange={handleToggleStatus} disabled={updateArtifactStatus.isPending} />}
-          {showStatusToggle && showTracingToggle && <Divider orientation="vertical" flexItem />}
-          {showTracingToggle && <SyncSwitch label="Tracing" checked={tracingEnabled} inSync={artifact.tracingInSync as boolean | null} onChange={handleToggleTracing} disabled={updateTracingStatus.isPending} />}
-          {showTracingToggle && showStatisticsToggle && <Divider orientation="vertical" flexItem />}
-          {showStatisticsToggle && <SyncSwitch label="Statistics" checked={statisticsEnabled} inSync={artifact.statisticsInSync as boolean | null} onChange={handleToggleStatistics} disabled={updateStatisticsStatus.isPending} />}
-          {showListenerToggle && !listenerEnabled && (
-            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Enable listener'}>
-              <span style={{ marginLeft: 'auto' }}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  color="success"
-                  startIcon={pendingListenerAction === 'START' ? <CircularProgress size={12} color="inherit" /> : <Play size={14} />}
-                  disabled={pendingListenerAction !== null || !hasRuntimes}
-                  onClick={() => handleToggleListener(true)}>
-                  {pendingListenerAction === 'START' ? 'Enabling…' : 'Enable'}
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-          {showListenerToggle && listenerEnabled && (
-            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Disable listener'}>
-              <span style={{ marginLeft: 'auto' }}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  color="error"
-                  startIcon={pendingListenerAction === 'STOP' ? <CircularProgress size={12} color="inherit" /> : <Square size={14} />}
-                  disabled={pendingListenerAction !== null || !hasRuntimes}
-                  onClick={() => handleToggleListener(false)}>
-                  {pendingListenerAction === 'STOP' ? 'Disabling…' : 'Disable'}
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-          {showTaskToggle && (
-            <>
-              {hasPrecedingControls && <Divider orientation="vertical" flexItem />}
-              <SyncSwitch label="Status" checked={statusEnabled} inSync={artifact.stateInSync as boolean | null} onChange={handleToggleStatus} disabled={updateArtifactStatus.isPending || !hasRuntimes} />
-            </>
-          )}
-          {showTaskTrigger && (
-            <>
-              {(hasPrecedingControls || showTaskToggle) && <Divider orientation="vertical" flexItem />}
-              <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Trigger task'}>
-                <Box>
-                  <IconButton size="small" onClick={handleTriggerTask} disabled={triggerTask.isPending || !hasRuntimes} aria-label="Trigger task" sx={{ color: hasRuntimes ? 'primary.main' : 'text.disabled' }}>
-                    <Play size={16} />
-                  </IconButton>
-                </Box>
+            {compositeApp && <Chip label={`Composite App: ${compositeApp}`} size="small" variant="outlined" sx={{ bgcolor: '#e8eaf6', color: '#3949ab', fontSize: 11 }} />}
+            {compositeApp && <Divider orientation="vertical" flexItem />}
+            {showStatusChip && artifactState && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+                  Status
+                </Typography>
+                {artifactType === 'Listener' || artifactType === 'RestApi' ? (
+                  <Stack direction="row" alignItems="center" gap={0.75}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: toEnabled(artifact.state) ? 'success.main' : 'text.disabled' }} />
+                    <Typography variant="body2">{toEnabled(artifact.state) ? 'Enabled' : 'Disabled'}</Typography>
+                  </Stack>
+                ) : (
+                  <Chip label={artifactState.charAt(0).toUpperCase() + artifactState.slice(1).toLowerCase()} size="small" variant="outlined" color={toEnabled(artifact.state) ? 'success' : 'default'} sx={{ fontSize: '0.875rem' }} />
+                )}
+              </Box>
+            )}
+            {showStatusChip && artifactState && (showStatusToggle || showTracingToggle || showStatisticsToggle || showListenerToggle) && <Divider orientation="vertical" flexItem />}
+            {showStatusToggle && <SyncSwitch name="status" label="Status" checked={statusEnabled} inSync={artifact.stateInSync as boolean | null} onChange={handleToggleStatus} disabled={updateArtifactStatus.isPending} />}
+            {showStatusToggle && showTracingToggle && <Divider orientation="vertical" flexItem />}
+            {showTracingToggle && <SyncSwitch label="Tracing" checked={tracingEnabled} inSync={artifact.tracingInSync as boolean | null} onChange={handleToggleTracing} disabled={updateTracingStatus.isPending} />}
+            {showTracingToggle && showStatisticsToggle && <Divider orientation="vertical" flexItem />}
+            {showStatisticsToggle && <SyncSwitch label="Statistics" checked={statisticsEnabled} inSync={artifact.statisticsInSync as boolean | null} onChange={handleToggleStatistics} disabled={updateStatisticsStatus.isPending} />}
+            {showListenerToggle && !listenerEnabled && (
+              <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Enable listener'}>
+                <span style={{ marginLeft: 'auto' }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    color="success"
+                    startIcon={pendingListenerAction === 'START' ? <CircularProgress size={12} color="inherit" /> : <Play size={14} />}
+                    disabled={pendingListenerAction !== null || !hasRuntimes}
+                    onClick={() => handleToggleListener(true)}>
+                    {pendingListenerAction === 'START' ? 'Enabling…' : 'Enable'}
+                  </Button>
+                </span>
               </Tooltip>
-            </>
-          )}
-          {showParametersButton && (
-            <Button variant="contained" size="small" startIcon={<Sliders size={14} />} onClick={() => onOpenDrawerTab('Parameters')} sx={{ ml: 'auto' }}>
-              View Parameters
-            </Button>
-          )}
-          {showWsdlButton && (
-            <Button variant="text" size="small" startIcon={<LinkIcon size={14} />} onClick={() => onOpenDrawerTab('Endpoints')} sx={{ textTransform: 'none', ml: showParametersButton ? 0 : 'auto' }}>
-              View Endpoints
-            </Button>
-          )}
-          {showWsdlButton && (
-            <Button variant="text" size="small" startIcon={<FileText size={14} />} onClick={() => onOpenDrawerTab('WSDL')} sx={{ textTransform: 'none' }}>
-              View WSDL
-            </Button>
-          )}
-          {showInstancesButton && (
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<LayoutGrid size={14} />}
-              onClick={() => navigate(`${resourceUrl(scope, 'workflows')}?tab=admin&type=${encodeURIComponent(artifactName)}&env=${encodeURIComponent(envId)}`)}
-              sx={{ ml: showParametersButton || showWsdlButton ? 0 : 'auto' }}>
-              View Instances
-            </Button>
-          )}
-          {showInstancesButton && (
-            <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
-              <Button variant="contained" size="small" startIcon={<Play size={14} />} onClick={() => setStartWorkflowOpen(true)}>
-                Start Workflow
+            )}
+            {showListenerToggle && listenerEnabled && (
+              <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Disable listener'}>
+                <span style={{ marginLeft: 'auto' }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    color="error"
+                    startIcon={pendingListenerAction === 'STOP' ? <CircularProgress size={12} color="inherit" /> : <Square size={14} />}
+                    disabled={pendingListenerAction !== null || !hasRuntimes}
+                    onClick={() => handleToggleListener(false)}>
+                    {pendingListenerAction === 'STOP' ? 'Disabling…' : 'Disable'}
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+            {showTaskToggle && (
+              <>
+                {hasPrecedingControls && <Divider orientation="vertical" flexItem />}
+                <SyncSwitch label="Status" checked={statusEnabled} inSync={artifact.stateInSync as boolean | null} onChange={handleToggleStatus} disabled={updateArtifactStatus.isPending || !hasRuntimes} />
+              </>
+            )}
+            {showTaskTrigger && (
+              <>
+                {(hasPrecedingControls || showTaskToggle) && <Divider orientation="vertical" flexItem />}
+                <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Trigger task'}>
+                  <Box>
+                    <IconButton size="small" onClick={handleTriggerTask} disabled={triggerTask.isPending || !hasRuntimes} aria-label="Trigger task" sx={{ color: hasRuntimes ? 'primary.main' : 'text.disabled' }}>
+                      <Play size={16} />
+                    </IconButton>
+                  </Box>
+                </Tooltip>
+              </>
+            )}
+            {showParametersButton && (
+              <Button variant="contained" size="small" startIcon={<Sliders size={14} />} onClick={() => onOpenDrawerTab('Parameters')} sx={{ ml: 'auto' }}>
+                View Parameters
               </Button>
-            </Authorized>
-          )}
+            )}
+            {showWsdlButton && (
+              <Button variant="text" size="small" startIcon={<LinkIcon size={14} />} onClick={() => onOpenDrawerTab('Endpoints')} sx={{ textTransform: 'none', ml: showParametersButton ? 0 : 'auto' }}>
+                View Endpoints
+              </Button>
+            )}
+            {showWsdlButton && (
+              <Button variant="text" size="small" startIcon={<FileText size={14} />} onClick={() => onOpenDrawerTab('WSDL')} sx={{ textTransform: 'none' }}>
+                View WSDL
+              </Button>
+            )}
+            {showInstancesButton && (
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<LayoutGrid size={14} />}
+                onClick={() => navigate(`${resourceUrl(scope, 'workflows')}?tab=admin&type=${encodeURIComponent(artifactName)}&env=${encodeURIComponent(envId)}`)}
+                sx={{ ml: showParametersButton || showWsdlButton ? 0 : 'auto' }}>
+                View Instances
+              </Button>
+            )}
+            {showInstancesButton && (
+              <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+                <Button variant="contained" size="small" startIcon={<Play size={14} />} onClick={() => setStartWorkflowOpen(true)}>
+                  Start Workflow
+                </Button>
+              </Authorized>
+            )}
           </Stack>
         )}
         {/* Overview columns */}
@@ -489,7 +489,11 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         {(ENTRY_POINT_DETAIL_TABS[artifactType] ?? []).includes('Resources') && (
           <Box sx={{ px: 2, pt: artifactType === 'Service' ? 0 : 1.5, pb: 1.5 }}>{artifactType === 'RestApi' ? <ArtifactApiDefinition {...tabProps} /> : <ServiceResources {...tabProps} />}</Box>
         )}
-        {(ENTRY_POINT_DETAIL_TABS[artifactType] ?? []).includes('Listeners') && <Box sx={{ px: 2, py: 1.5 }}><ServiceListeners {...tabProps} /></Box>}
+        {(ENTRY_POINT_DETAIL_TABS[artifactType] ?? []).includes('Listeners') && (
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <ServiceListeners {...tabProps} />
+          </Box>
+        )}
         {artifactType === 'ProxyService' && (
           <Box sx={{ px: 2, py: 1.5 }}>
             <ProxyApiReference {...tabProps} />
@@ -558,11 +562,7 @@ function EntryPointsList({
     () =>
       isMI
         ? [...apis.map((a) => ({ artifact: a, type: 'RestApi' })), ...proxies.map((a) => ({ artifact: a, type: 'ProxyService' })), ...inboundEps.map((a) => ({ artifact: a, type: 'InboundEndpoint' })), ...tasks.map((a) => ({ artifact: a, type: 'Task' }))]
-        : [
-            ...services.map((a) => ({ artifact: a, type: 'Service' })),
-            ...workflows.map((a) => ({ artifact: a, type: 'Workflow' })),
-            ...automations.map((a) => ({ artifact: a, type: 'Automation' })),
-          ],
+        : [...services.map((a) => ({ artifact: a, type: 'Service' })), ...workflows.map((a) => ({ artifact: a, type: 'Workflow' })), ...automations.map((a) => ({ artifact: a, type: 'Automation' }))],
     [isMI, apis, proxies, inboundEps, tasks, services, workflows, automations],
   );
 
@@ -633,14 +633,14 @@ function EntryPointsList({
             const entry = allEntryPoints.find(({ artifact: a, type }) => `${type}::${type === 'Automation' ? a.packageName : a.name}` === val);
             if (!entry) return '';
             const cfg = ENTRY_POINT_CONFIG[entry.type];
-            const raw = (cfg?.primaryDisplay && cfg.metaField ? entry.artifact[cfg.metaField]?.toString() ?? entry.artifact.name?.toString() : entry.type === 'Automation' ? entry.artifact.packageName?.toString() : entry.artifact.name?.toString()) ?? '';
+            const raw = (cfg?.primaryDisplay && cfg.metaField ? (entry.artifact[cfg.metaField]?.toString() ?? entry.artifact.name?.toString()) : entry.type === 'Automation' ? entry.artifact.packageName?.toString() : entry.artifact.name?.toString()) ?? '';
             // Chip is intentionally omitted here (closed box) — it would eat into the fixed-width
             // box's space and truncate long names. It only shows in the open dropdown list below.
             return raw.replace(/^\//, '');
           }}>
           {allEntryPoints.map(({ artifact: a, type }) => {
             const cfg = ENTRY_POINT_CONFIG[type];
-            const rawLabel = (cfg?.primaryDisplay && cfg.metaField ? a[cfg.metaField]?.toString() ?? a.name?.toString() : type === 'Automation' ? a.packageName?.toString() : a.name?.toString()) ?? '';
+            const rawLabel = (cfg?.primaryDisplay && cfg.metaField ? (a[cfg.metaField]?.toString() ?? a.name?.toString()) : type === 'Automation' ? a.packageName?.toString() : a.name?.toString()) ?? '';
             const label = rawLabel.replace(/^\//, '');
             const key = `${type}::${type === 'Automation' ? a.packageName : a.name}`;
             return (
@@ -659,7 +659,13 @@ function EntryPointsList({
         </Select>
 
         {(() => {
-          if (isProxy) return <><Box /><Box /></>;
+          if (isProxy)
+            return (
+              <>
+                <Box />
+                <Box />
+              </>
+            );
           const primaryValue = (isTask ? selectedEntry?.artifact.class : isMI ? selectedEntry?.artifact.url : selectedEntry?.artifact.package)?.toString();
           const secondaryValue = (isTask ? selectedEntry?.artifact.group : isMI ? selectedEntry?.artifact.context : selectedEntry?.artifact.name)?.toString();
           return (
@@ -776,22 +782,12 @@ export default function Environment({
           </Stack>
           <Stack direction="row" alignItems="center" gap={1} sx={{ flexShrink: 0 }}>
             {currentEntryPoint && showSourceButton && (componentType !== 'MI' || viewMode === 'entryPoints') && (
-              <Button
-                variant="text"
-                size="small"
-                startIcon={<Code size={14} />}
-                onClick={() => onOpenDrawerForTab(currentEntryPoint.artifact, currentEntryPoint.type, env.id, 'Source')}
-                sx={{ textTransform: 'none' }}>
+              <Button variant="text" size="small" startIcon={<Code size={14} />} onClick={() => onOpenDrawerForTab(currentEntryPoint.artifact, currentEntryPoint.type, env.id, 'Source')} sx={{ textTransform: 'none' }}>
                 View Source
               </Button>
             )}
             {currentEntryPoint && (componentType !== 'MI' || viewMode === 'entryPoints') && (
-              <Button
-                variant="text"
-                size="small"
-                startIcon={<Server size={14} />}
-                onClick={() => onOpenDrawerForTab(currentEntryPoint.artifact, currentEntryPoint.type, env.id, 'Runtimes')}
-                sx={{ textTransform: 'none' }}>
+              <Button variant="text" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerForTab(currentEntryPoint.artifact, currentEntryPoint.type, env.id, 'Runtimes')} sx={{ textTransform: 'none' }}>
                 View Runtimes
               </Button>
             )}

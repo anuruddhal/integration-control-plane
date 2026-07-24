@@ -160,15 +160,7 @@ export function ServiceResources({ artifact }: TabProps) {
     });
   });
 
-  return (
-    <Stack gap={0.75}>
-      {expandedItems.length === 0 ? (
-        <Typography sx={emptySx}>No resources available.</Typography>
-      ) : (
-        expandedItems.map((item, i) => <ResourceRow key={i} method={item.method} path={item.path} />)
-      )}
-    </Stack>
-  );
+  return <Stack gap={0.75}>{expandedItems.length === 0 ? <Typography sx={emptySx}>No resources available.</Typography> : expandedItems.map((item, i) => <ResourceRow key={i} method={item.method} path={item.path} />)}</Stack>;
 }
 
 // Listener(s) a service is attached to. Backed by Service.listeners, which the
@@ -176,8 +168,7 @@ export function ServiceResources({ artifact }: TabProps) {
 // runs on the same runtime(s) as the service, so we target the service's runtimes
 // for START/STOP. Disabling a listener stops the service(s) attached to it.
 export function ServiceListeners({ artifact, artifactType, envId, componentId }: TabProps) {
-  const listeners =
-    (artifact.listeners as Array<{ name?: string; package?: string; protocol?: string; host?: string; port?: number; state?: string }> | undefined) ?? [];
+  const listeners = (artifact.listeners as Array<{ name?: string; package?: string; protocol?: string; host?: string; port?: number; state?: string }> | undefined) ?? [];
   // A bound listener runs on the same runtime(s) as the service, so we reuse the
   // service's runtimes both for START/STOP and for the details view's Runtimes list.
   const serviceRuntimes = (artifact.runtimes as Array<{ runtimeId: string; runtimeName?: string; status?: string }> | undefined) ?? [];
@@ -256,10 +247,7 @@ export function ServiceListeners({ artifact, artifactType, envId, componentId }:
         const hostPort = [l.host, l.port].filter((v) => v !== undefined && v !== null && v !== '').join(':');
         const act = actions[name];
         return (
-          <Box
-            key={i}
-            sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 1, py: 0.75, border: '0.5px solid', borderColor: 'divider', borderRadius: 0.5 }}
-          >
+          <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 1, py: 0.75, border: '0.5px solid', borderColor: 'divider', borderRadius: 0.5 }}>
             <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
               {name || '—'}
             </Typography>
@@ -285,8 +273,7 @@ export function ServiceListeners({ artifact, artifactType, envId, componentId }:
                   color={enabled ? 'error' : 'success'}
                   startIcon={act ? <CircularProgress size={12} color="inherit" /> : enabled ? <Square size={14} /> : <Play size={14} />}
                   disabled={act != null || !hasRuntimes}
-                  onClick={() => setPending({ name, pkg: l.package, port: l.port, enable: !enabled })}
-                >
+                  onClick={() => setPending({ name, pkg: l.package, port: l.port, enable: !enabled })}>
                   {act === 'STOP' ? 'Disabling…' : act === 'START' ? 'Enabling…' : enabled ? 'Disable' : 'Enable'}
                 </Button>
               </span>
@@ -299,8 +286,7 @@ export function ServiceListeners({ artifact, artifactType, envId, componentId }:
         <DialogTitle>{pending?.enable ? 'Enable Listener' : 'Disable Listener'}</DialogTitle>
         <DialogContent>
           <Typography variant="body2">
-            Are you sure you want to {pending?.enable ? 'enable' : 'disable'} the listener <strong>{pending?.name}</strong>?
-            {!pending?.enable ? ' Any service attached to it will stop.' : ''}
+            Are you sure you want to {pending?.enable ? 'enable' : 'disable'} the listener <strong>{pending?.name}</strong>?{!pending?.enable ? ' Any service attached to it will stop.' : ''}
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -315,8 +301,7 @@ export function ServiceListeners({ artifact, artifactType, envId, componentId }:
         anchor="right"
         open={detail !== null}
         onClose={() => setDetail(null)}
-        sx={{ '& .MuiDrawer-paper': { width: '60%', maxWidth: 700, minWidth: 400, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' } }}
-      >
+        sx={{ '& .MuiDrawer-paper': { width: '60%', maxWidth: 700, minWidth: 400, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' } }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 600, fontFamily: 'monospace' }}>
             {detail?.name}
