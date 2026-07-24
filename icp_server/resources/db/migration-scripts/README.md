@@ -61,12 +61,14 @@ sqlplus <icp_schema_user>/<password>@//<host>:1521/<service_name> @add_workflow_
 
 Deployments whose database was initialised **before BI runtimes could report packed OpenAPI
 (Swagger) definitions** must run the OpenAPI definitions upgrade script once against the
-**main ICP DB**. Fresh installs do not need it — the `*_init.sql` scripts already contain
-everything.
+**main ICP DB** — **before** deploying this server version. Fresh installs do not need it —
+the `*_init.sql` scripts already contain everything.
 
-Without it, heartbeats from BI runtimes built with the swagger-pack compiler plugin
-(`icp-runtime-bridge` with `remoteManagement = true` and at least one HTTP service) still work,
-but their `openApiDefinitions` are silently dropped rather than persisted.
+Without it, every full heartbeat fails: `upsertOpenApiDefinitions` unconditionally issues
+`DELETE FROM bi_service_openapi_definitions` for the reporting runtime before checking whether
+the heartbeat carries any OpenAPI definitions, so a missing table errors out that statement and
+aborts the whole heartbeat transaction — for BI and MI runtimes alike, not just BI runtimes with
+`remoteManagement` enabled.
 
 Pick the script matching your database engine:
 
