@@ -80,6 +80,68 @@ function cleanupRuntime(string runtimeId) {
 }
 
 // =============================================================================
+// Test: service -> listener binding round-trips through the heartbeat.
+//
+// A BI heartbeat reports each service with the listener(s) it is attached to
+// (serviceDetail.listeners). This must be persisted and returned by
+// getServicesForRuntime, enriched with the listener's full detail (port, etc.).
+// Covers the many-to-many case the team lead called out: two services attached
+// to the SAME listener must both report it.
+// =============================================================================
+@test:Config {
+    groups: ["heartbeat", "service-listener"]
+}
+function testServiceListenerBindingRoundTrip() returns error? {
+    string runtimeId = "aa000001-test-test-test-000000000009";
+    cleanupRuntime(runtimeId);
+
+    types:Heartbeat heartbeat = buildHeartbeat(runtimeId, "hb-service-listener-runtime");
+    heartbeat.artifacts = {
+        listeners: [
+            {name: "httpListenerA", package: "app", protocol: "HTTP", host: "0.0.0.0", port: 8080, state: "enabled"},
+            {name: "httpListenerB", package: "app", protocol: "HTTP", host: "0.0.0.0", port: 8081, state: "enabled"}
+        ],
+        services: [
+            {
+                name: "orderService",
+                package: "app",
+                basePath: "/orders",
+                'type: "API",
+                resources: [],
+                // heartbeat sends listeners name-only (as the runtime bridge does)
+                listeners: [{name: "httpListenerA"}]
+            },
+            {
+                name: "inventoryService",
+                package: "app",
+                basePath: "/inventory",
+                'type: "API",
+                resources: [],
+                listeners: [{name: "httpListenerA"}] // same listener -> many-to-one
+            }
+        ]
+    };
+
+    types:HeartbeatResponse resp = check storage:processHeartbeat(heartbeat, preResolved = true);
+    test:assertTrue(resp.acknowledged, "Heartbeat should be acknowledged");
+
+    types:Service[] services = check storage:getServicesForRuntime(runtimeId);
+    test:assertEquals(services.length(), 2, "Both services should be stored");
+
+    foreach types:Service svc in services {
+        test:assertEquals(svc.listeners.length(), 1,
+                string `Service ${svc.name} should have exactly one bound listener`);
+        test:assertEquals(svc.listeners[0].name, "httpListenerA",
+                string `Service ${svc.name} should be bound to httpListenerA`);
+        // Enriched from the listener table, not just the name sent by the heartbeat.
+        test:assertEquals(svc.listeners[0].port, 8080,
+                string `Service ${svc.name} listener should carry the enriched port`);
+    }
+
+    cleanupRuntime(runtimeId);
+}
+
+// =============================================================================
 // Test 1: multi-replica null names — replicas must not delete each other
 //
 // Regression test for: https://github.com/wso2/product-integrator/issues/1780

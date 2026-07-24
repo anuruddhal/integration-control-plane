@@ -639,6 +639,22 @@ CREATE TABLE bi_runtime_listener_artifacts (
     INDEX idx_state (state)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+-- Service-to-listener bindings: which listener(s) each service is attached to.
+-- Populated from heartbeat.artifacts.services[].listeners (name-only) and keyed to
+-- bi_runtime_listener_artifacts by (runtime_id, listener_name). Many-to-many:
+-- a service may bind multiple listeners; a listener may serve multiple services.
+CREATE TABLE bi_service_listener_bindings (
+    runtime_id CHAR(36) NOT NULL,
+    service_name VARCHAR(100) NOT NULL,
+    service_package VARCHAR(200) NOT NULL,
+    listener_name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (runtime_id, service_name, service_package, listener_name),
+    CONSTRAINT fk_bi_slb_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE,
+    INDEX idx_slb_service (runtime_id, service_name, service_package),
+    INDEX idx_slb_listener (runtime_id, listener_name)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 -- Automation artifacts (main function) for BI integrations
 CREATE TABLE bi_automation_artifacts (
     runtime_id CHAR(36) NOT NULL,

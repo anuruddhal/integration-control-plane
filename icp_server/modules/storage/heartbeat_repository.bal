@@ -684,6 +684,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns string?|error
 isolated function insertRuntimeArtifacts(string runtimeId, types:Heartbeat heartbeat) returns error? {
     // Delete existing BI services and resources for this runtime before inserting
     _ = check dbClient->execute(`DELETE FROM bi_service_resource_artifacts WHERE runtime_id = ${runtimeId}`);
+    _ = check dbClient->execute(`DELETE FROM bi_service_listener_bindings WHERE runtime_id = ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM bi_service_artifacts WHERE runtime_id = ${runtimeId}`);
 
     // Insert services
@@ -697,6 +698,24 @@ isolated function insertRuntimeArtifacts(string runtimeId, types:Heartbeat heart
                 ${serviceDetail.state}
             )
         `);
+
+        // Persist which listener(s) this service is attached to (dedup by name).
+        // The heartbeat sends serviceDetail.listeners as name-only entries; we key
+        // them to bi_runtime_listener_artifacts by (runtime_id, listener_name).
+        string[] boundListenerNames = [];
+        foreach types:Listener boundListener in serviceDetail.listeners {
+            if boundListenerNames.indexOf(boundListener.name) is () {
+                boundListenerNames.push(boundListener.name);
+                _ = check dbClient->execute(`
+                    INSERT INTO bi_service_listener_bindings (
+                        runtime_id, service_name, service_package, listener_name
+                    ) VALUES (
+                        ${runtimeId}, ${serviceDetail.name},
+                        ${serviceDetail.package}, ${boundListener.name}
+                    )
+                `);
+            }
+        }
 
         // Group resources by URL and merge methods to handle duplicates
         map<string[]> resourcesByUrl = {};

@@ -815,6 +815,23 @@ CREATE INDEX idx_bi_runtime_listener_artifacts_protocol ON bi_runtime_listener_a
 
 CREATE INDEX idx_bi_runtime_listener_artifacts_state ON bi_runtime_listener_artifacts (state);
 
+-- Service-to-listener bindings: which listener(s) each service is attached to.
+-- Populated from heartbeat.artifacts.services[].listeners (name-only) and keyed to
+-- bi_runtime_listener_artifacts by (runtime_id, listener_name).
+CREATE TABLE bi_service_listener_bindings (
+    runtime_id CHAR(36) NOT NULL,
+    service_name VARCHAR(100) NOT NULL,
+    service_package VARCHAR(200) NOT NULL,
+    listener_name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (runtime_id, service_name, service_package, listener_name),
+    CONSTRAINT fk_bi_slb_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_slb_service ON bi_service_listener_bindings (runtime_id, service_name, service_package);
+
+CREATE INDEX idx_slb_listener ON bi_service_listener_bindings (runtime_id, listener_name);
+
 -- Automation artifacts (main function) for BI integrations
 CREATE TABLE bi_automation_artifacts (
     runtime_id CHAR(36) NOT NULL,
