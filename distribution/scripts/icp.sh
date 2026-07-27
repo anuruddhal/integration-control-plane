@@ -26,6 +26,7 @@ CONFIG_FILE="$PARENT_DIR/conf/deployment.toml"
 PID_FILE="$PARENT_DIR/icp.pid"
 LOG_DIR="$PARENT_DIR/logs"
 LOG_FILE="$LOG_DIR/icp.log"
+TMP_DIR="$PARENT_DIR/tmp"
 JAVA_OPTS=()
 
 resolve_version() {
@@ -56,11 +57,11 @@ resolve_version() {
 }
 
 detect_java_opts() {
-    JAVA_OPTS=()
+    JAVA_OPTS=("-Djava.io.tmpdir=$TMP_DIR")
     if [ -f /etc/alpine-release ] || (command -v ldd >/dev/null 2>&1 && ldd --version 2>&1 | grep -qi musl); then
         echo "Alpine Linux detected - disabling native Netty tcnative libraries"
         JAVA_OPTS+=(
-            "-Dio.netty.native.workdir=/tmp/netty-native"
+            "-Dio.netty.native.workdir=$TMP_DIR/netty-native"
             "-Dio.netty.transport.noNative=true"
             "-Dio.netty.handler.ssl.noOpenSsl=true"
         )
@@ -124,6 +125,14 @@ run_server() {
 
     detect_java_opts
     mkdir -p "$LOG_DIR"
+    if ! mkdir -p "$TMP_DIR"; then
+        echo "Error: Unable to create ICP temporary directory at $TMP_DIR" >&2
+        exit 1
+    fi
+    if [ ! -w "$TMP_DIR" ]; then
+        echo "Error: ICP temporary directory is not writable: $TMP_DIR" >&2
+        exit 1
+    fi
 
     cd "$SCRIPT_DIR" || exit 1
 
