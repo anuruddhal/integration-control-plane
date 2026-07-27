@@ -42,11 +42,11 @@ import {
   TablePagination,
   Typography,
 } from '@wso2/oxygen-ui';
-import { BookOpen, FileText, Key, Plus, RefreshCw, Trash2, X } from '@wso2/oxygen-ui-icons-react';
+import { FileText, Key, Plus, RefreshCw, Trash2, X } from '@wso2/oxygen-ui-icons-react';
 import CodeBoxWithCopy from '../components/CodeBoxWithCopy';
 import SearchField from '../components/SearchField';
 import { LogFilesDrawer } from '../components/LogFilesDrawer';
-import { lazy, Suspense, useCallback, useEffect, useState, type JSX } from 'react';
+import { useCallback, useEffect, useState, type JSX } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router';
 import { gql } from '../api/graphql';
@@ -58,10 +58,6 @@ import { workflowManagementToml } from '../utils/runtimeToml';
 import Authorized from '../components/Authorized';
 import { Permissions } from '../constants/permissions';
 import { useAccessControl } from '../contexts/AccessControlContext';
-
-// swagger-ui-react alone is ~1.3MB gzipped - code-split it out of the main bundle since it's
-// only needed when a user actually opens the API docs drawer for a BI runtime.
-const OpenApiDefinitionsDrawer = lazy(() => import('../components/OpenApiDefinitionsDrawer').then((m) => ({ default: m.OpenApiDefinitionsDrawer })));
 
 const drawerSx = {
   '& .MuiDrawer-paper': { width: '45%', maxWidth: 560, minWidth: 360, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' },
@@ -310,7 +306,6 @@ function EnvironmentRuntimeCard({
   projectId,
   onDelete,
   onViewLogs,
-  onViewApiDocs,
   autoOpenAddRuntime,
   onAutoOpenConsumed,
 }: {
@@ -323,7 +318,6 @@ function EnvironmentRuntimeCard({
   projectId: string;
   onDelete: (runtime: GqlRuntime, envId: string) => void;
   onViewLogs: (runtime: GqlRuntime) => void;
-  onViewApiDocs: (runtime: GqlRuntime) => void;
   autoOpenAddRuntime?: boolean;
   onAutoOpenConsumed?: () => void;
 }) {
@@ -544,11 +538,6 @@ function EnvironmentRuntimeCard({
                               <FileText size={16} />
                             </IconButton>
                           )}
-                          {r.runtimeType === 'BI' && (
-                            <IconButton size="small" color="primary" aria-label={`View API docs for ${r.runtimeId}`} onClick={() => onViewApiDocs(r)} title="View API Docs">
-                              <BookOpen size={16} />
-                            </IconButton>
-                          )}
                           <IconButton size="small" color="error" aria-label={`Delete runtime ${r.runtimeId}`} disabled={r.status === 'RUNNING'} onClick={() => onDelete(r, environmentId)}>
                             <Trash2 size={16} />
                           </IconButton>
@@ -605,7 +594,6 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
   const [deletingEnvId, setDeletingEnvId] = useState<string | null>(null);
   const [alsoRevoke, setAlsoRevoke] = useState(false);
   const [viewingLogs, setViewingLogs] = useState<GqlRuntime | null>(null);
-  const [viewingApiDocs, setViewingApiDocs] = useState<GqlRuntime | null>(null);
   const deleteMutation = useDeleteRuntime();
   const params = new URLSearchParams(location.search);
   const shouldAutoOpenAddRuntime = params.get('action') === 'add-runtime';
@@ -680,7 +668,6 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
             projectId={projectId}
             onDelete={handleStartDelete}
             onViewLogs={setViewingLogs}
-            onViewApiDocs={setViewingApiDocs}
             autoOpenAddRuntime={shouldAutoOpenAddRuntime && (autoOpenEnvironmentId ? env.id === autoOpenEnvironmentId : index === 0)}
             onAutoOpenConsumed={clearAutoOpenAction}
           />
@@ -688,11 +675,6 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
       )}
 
       {viewingLogs && <LogFilesDrawer runtimeId={viewingLogs.runtimeId} onClose={() => setViewingLogs(null)} />}
-      {viewingApiDocs && (
-        <Suspense fallback={null}>
-          <OpenApiDefinitionsDrawer runtimeId={viewingApiDocs.runtimeId} onClose={() => setViewingApiDocs(null)} />
-        </Suspense>
-      )}
 
       {deleting && (
         <Dialog

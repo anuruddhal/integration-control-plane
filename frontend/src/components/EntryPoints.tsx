@@ -65,6 +65,12 @@ import { resourceUrl, useScope } from '../nav';
 import { ENTRY_POINT_CONFIG, ENTRY_POINT_DETAIL_TABS, type SelectedArtifact, type TabProps } from './artifact-config';
 import SyncSwitch from './SyncSwitch';
 
+// Stable reference for useArtifacts' `data` fallback — a fresh `[]` literal on every render (the
+// default in `const { data: x = [] } = ...`) changes identity even when the query is disabled and
+// data is genuinely unchanged, which cascades through downstream useMemo/useEffect chains and can
+// trigger a render loop (e.g. EntryPointsList's onSelectionChange effect).
+const EMPTY_ARTIFACTS: GqlArtifact[] = [];
+
 function toEnabled(value: unknown) {
   if (typeof value === 'boolean') return value;
   const normalized = (value ?? '').toString().toLowerCase();
@@ -156,7 +162,19 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
 
   // Track if any preceding controls are visible for proper divider placement
   const hasPrecedingControls = compositeApp || showStatusToggle || showStatusChip || showTracingToggle || showStatisticsToggle || showListenerToggle;
-  const hasHeaderControls = !!compositeApp || showStatusChip || showStatusToggle || showTracingToggle || showStatisticsToggle || showListenerToggle || showParametersButton || showWsdlButton || showInstancesButton || showTaskToggle || showTaskTrigger || (showApiDocsButton && !!apiDocsRuntimeId);
+  const hasHeaderControls =
+    !!compositeApp ||
+    showStatusChip ||
+    showStatusToggle ||
+    showTracingToggle ||
+    showStatisticsToggle ||
+    showListenerToggle ||
+    showParametersButton ||
+    showWsdlButton ||
+    showInstancesButton ||
+    showTaskToggle ||
+    showTaskTrigger ||
+    (showApiDocsButton && !!apiDocsRuntimeId);
 
   const artifactName = artifactType === 'Automation' ? (artifact.packageName?.toString() ?? '') : (artifact.name?.toString() ?? '');
   const artifactKey = `${artifactType}-${artifactName}`;
@@ -572,13 +590,13 @@ function EntryPointsList({
   const scope = useScope();
   const isMI = componentType === 'MI';
 
-  const { data: apis = [], isLoading: loadingApis } = useArtifacts('RestApi', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: proxies = [], isLoading: loadingProxies } = useArtifacts('ProxyService', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: inboundEps = [], isLoading: loadingInbound } = useArtifacts('InboundEndpoint', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: tasks = [], isLoading: loadingTasks } = useArtifacts('Task', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: services = [], isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI, active: isOnline });
-  const { data: automations = [], isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI, active: isOnline });
-  const { data: workflows = [], isLoading: loadingWorkflows } = useArtifacts('Workflow', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: apis = EMPTY_ARTIFACTS, isLoading: loadingApis } = useArtifacts('RestApi', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: proxies = EMPTY_ARTIFACTS, isLoading: loadingProxies } = useArtifacts('ProxyService', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: inboundEps = EMPTY_ARTIFACTS, isLoading: loadingInbound } = useArtifacts('InboundEndpoint', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: tasks = EMPTY_ARTIFACTS, isLoading: loadingTasks } = useArtifacts('Task', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: services = EMPTY_ARTIFACTS, isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: automations = EMPTY_ARTIFACTS, isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: workflows = EMPTY_ARTIFACTS, isLoading: loadingWorkflows } = useArtifacts('Workflow', envId, componentId, { enabled: !isMI, active: isOnline });
 
   const isLoading = isMI ? loadingApis || loadingProxies || loadingInbound || loadingTasks : loadingServices || loadingAutomations || loadingWorkflows;
 
