@@ -21,17 +21,17 @@
 // (no component exports) so both views reuse them without tripping React Fast Refresh.
 
 import { type Theme } from '@wso2/oxygen-ui';
-import { Bell, CircleDot, Clock, User, Workflow, Zap } from '@wso2/oxygen-ui-icons-react';
+import { CircleDot, Database, GitBranch, SquareCheck, Timer, UserCheck, Workflow } from '@wso2/oxygen-ui-icons-react';
 import type { ComponentType } from 'react';
 import { humanizeKey, STATUS_COLORS, type ChipColor } from './helpers';
 
 const iconByType: Record<string, ComponentType<{ size?: number }>> = {
-  WORKFLOW: Workflow,
-  CHILD_WORKFLOW: Workflow,
-  ACTIVITY: Zap,
-  HUMAN_TASK: User,
-  SIGNAL: Bell,
-  TIMER: Clock,
+  WORKFLOW: Workflow, // orchestration root
+  CHILD_WORKFLOW: GitBranch, // a spawned sub-workflow
+  ACTIVITY: SquareCheck, // a task/step (☑ checked box)
+  HUMAN_TASK: UserCheck, // a person completing/approving
+  SIGNAL: Database, // an external signal carrying data
+  TIMER: Timer, // a durable timer
 };
 
 /** Icon component for a node/span kind (e.g. ACTIVITY, HUMAN_TASK), falling back to a generic dot. */

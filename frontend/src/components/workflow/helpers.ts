@@ -269,6 +269,17 @@ export function formatDuration(ms: number): string {
   return mm ? `${h}h ${mm}m` : `${h}h`;
 }
 
+/** Formats a duration as a stopwatch that always shows seconds: `0:04`, `1:08`, `1:05:08`. */
+export function formatStopwatch(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '0:00';
+  const totalSec = Math.floor(ms / 1000);
+  const s = totalSec % 60;
+  const m = Math.floor(totalSec / 60) % 60;
+  const h = Math.floor(totalSec / 3600);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
 // ── Timeline reconstruction from workflow history events ──
 //
 // History events are Temporal-shaped (see extractWorkflowInput): each carries a short-form
@@ -280,7 +291,7 @@ export function formatDuration(ms: number): string {
 // id (echoed as `initiatedEventId`). Anything that can't be paired still renders as an open bar
 // running to the last known event.
 
-export type SpanCategory = 'WORKFLOW' | 'ACTIVITY' | 'HUMAN_TASK' | 'TIMER' | 'CHILD_WORKFLOW';
+export type SpanCategory = 'WORKFLOW' | 'ACTIVITY' | 'HUMAN_TASK' | 'TIMER' | 'CHILD_WORKFLOW' | 'SIGNAL';
 
 export interface TimelineSpan {
   key: string;
@@ -348,6 +359,18 @@ const CHILD_CLOSE_STATUS: Record<string, string> = {
   CHILD_WORKFLOW_EXECUTION_TERMINATED: 'TERMINATED',
 };
 
+const TIMER_CLOSE_STATUS: Record<string, string> = {
+  TIMER_FIRED: 'COMPLETED',
+  TIMER_CANCELED: 'CANCELED',
+};
+
+interface ParsedEvent {
+  id: string;
+  type: string;
+  time: number | null;
+  attrs: Record<string, unknown>;
+}
+
 interface Group {
   label: string;
   category: SpanCategory;
@@ -356,9 +379,32 @@ interface Group {
   status?: string;
 }
 
+/**
+ * Pairs each "open" event with its matching "close" event into duration groups. `openKey` is the
+ * key an open event is stored under; `closeKey` is what a close event references (equal for timers,
+ * the open event's id for activities/child workflows). Open events without a key are skipped.
+ */
+function collectDurationGroups(parsed: ParsedEvent[], openType: string, closeStatus: Record<string, string>, openKey: (p: ParsedEvent) => string, closeKey: (p: ParsedEvent) => string, make: (p: ParsedEvent, time: number) => Group): Map<string, Group> {
+  const groups = new Map<string, Group>();
+  for (const p of parsed) {
+    if (p.time === null) continue;
+    if (p.type === openType) {
+      const key = openKey(p);
+      if (key) groups.set(key, make(p, p.time));
+    } else if (p.type in closeStatus) {
+      const g = groups.get(closeKey(p));
+      if (g) {
+        g.end = p.time;
+        g.status = closeStatus[p.type];
+      }
+    }
+  }
+  return groups;
+}
+
 /** Reconstructs a set of duration spans (a Gantt timeline) from a workflow's history events. */
 export function buildTimeline(events: ReadonlyArray<Record<string, unknown>>): Timeline {
-  const parsed = events.map((e, i) => ({
+  const parsed: ParsedEvent[] = events.map((e, i) => ({
     id: asStr(e['eventId']) ?? String(i),
     type: (asStr(e['eventType']) ?? '').replace(/^EVENT_TYPE_/, '').toUpperCase(),
     time: eventTimeMs(e),
@@ -389,55 +435,48 @@ export function buildTimeline(events: ReadonlyArray<Record<string, unknown>>): T
     });
   }
 
-  // Activities (human tasks surface as activities named `humantask-…`), keyed by SCHEDULED event id.
-  const activities = new Map<string, Group>();
-  for (const p of parsed) {
-    if (p.time === null) continue;
-    if (p.type === 'ACTIVITY_TASK_SCHEDULED') {
+  // Activities (human tasks surface as activities named `humantask-…`), keyed by the SCHEDULED event id.
+  const activities = collectDurationGroups(
+    parsed,
+    'ACTIVITY_TASK_SCHEDULED',
+    ACTIVITY_CLOSE_STATUS,
+    (p) => p.id,
+    (p) => asStr(p.attrs['scheduledEventId']) ?? '',
+    (p, time) => {
       const name = asStr(asRecord(p.attrs['activityType'])['name']) ?? asStr(p.attrs['activityId']) ?? 'Activity';
-      activities.set(p.id, { label: name, category: /humantask/i.test(name) ? 'HUMAN_TASK' : 'ACTIVITY', start: p.time });
-    } else if (p.type in ACTIVITY_CLOSE_STATUS) {
-      const g = activities.get(asStr(p.attrs['scheduledEventId']) ?? '');
-      if (g) {
-        g.end = p.time;
-        g.status = ACTIVITY_CLOSE_STATUS[p.type];
-      }
-    }
-  }
+      return { label: name, category: /humantask/i.test(name) ? 'HUMAN_TASK' : 'ACTIVITY', start: time };
+    },
+  );
   activities.forEach((g, id) => pushGroup(`act-${id}`, g));
 
-  // Timers, keyed by timerId.
-  const timers = new Map<string, Group>();
-  for (const p of parsed) {
-    if (p.time === null) continue;
-    const timerId = asStr(p.attrs['timerId']);
-    if (!timerId) continue;
-    if (p.type === 'TIMER_STARTED') timers.set(timerId, { label: `Timer ${timerId}`, category: 'TIMER', start: p.time });
-    else if (p.type === 'TIMER_FIRED' || p.type === 'TIMER_CANCELED') {
-      const g = timers.get(timerId);
-      if (g) {
-        g.end = p.time;
-        g.status = p.type === 'TIMER_FIRED' ? 'COMPLETED' : 'CANCELED';
-      }
-    }
-  }
+  // Timers, keyed by timerId (present on both the started and fired/canceled events).
+  const timerId = (p: ParsedEvent) => asStr(p.attrs['timerId']) ?? '';
+  const timers = collectDurationGroups(parsed, 'TIMER_STARTED', TIMER_CLOSE_STATUS, timerId, timerId, (p, time) => ({ label: `Timer ${timerId(p)}`, category: 'TIMER', start: time }));
   timers.forEach((g, id) => pushGroup(`timer-${id}`, g));
 
-  // Child workflows, keyed by the INITIATED event id.
-  const children = new Map<string, Group>();
-  for (const p of parsed) {
-    if (p.time === null) continue;
-    if (p.type === 'START_CHILD_WORKFLOW_EXECUTION_INITIATED') {
-      children.set(p.id, { label: asStr(asRecord(p.attrs['workflowType'])['name']) ?? 'Child Workflow', category: 'CHILD_WORKFLOW', start: p.time });
-    } else if (p.type in CHILD_CLOSE_STATUS) {
-      const g = children.get(asStr(p.attrs['initiatedEventId']) ?? '');
-      if (g) {
-        g.end = p.time;
-        g.status = CHILD_CLOSE_STATUS[p.type];
-      }
-    }
-  }
+  // Child workflows, keyed by the INITIATED event id. Review activities are human-in-the-loop steps
+  // run as child workflows whose id/type is prefixed `reviewactivity-`; show them as human tasks.
+  const children = collectDurationGroups(
+    parsed,
+    'START_CHILD_WORKFLOW_EXECUTION_INITIATED',
+    CHILD_CLOSE_STATUS,
+    (p) => p.id,
+    (p) => asStr(p.attrs['initiatedEventId']) ?? '',
+    (p, time) => {
+      const wfName = asStr(asRecord(p.attrs['workflowType'])['name']) ?? '';
+      const wfId = asStr(p.attrs['workflowId']) ?? '';
+      const isReview = /^reviewactivity-/i.test(wfId) || /^reviewactivity-/i.test(wfName);
+      const label = (wfName || wfId || 'Child Workflow').replace(/^reviewactivity-/i, '');
+      return { label, category: isReview ? 'HUMAN_TASK' : 'CHILD_WORKFLOW', start: time };
+    },
+  );
   children.forEach((g, id) => pushGroup(`child-${id}`, g));
+
+  // Signals are point-in-time events (no duration): start === end, rendered as a marker.
+  for (const p of parsed) {
+    if (p.time === null || p.type !== 'WORKFLOW_EXECUTION_SIGNALED') continue;
+    spans.push({ key: `signal-${p.id}`, label: asStr(p.attrs['signalName']) ?? 'Signal', category: 'SIGNAL', status: '', start: p.time, end: p.time, running: false });
+  }
 
   // Workflow first, then by start time so bars read top-to-bottom in execution order.
   spans.sort((a, b) => (a.category === 'WORKFLOW' ? -1 : 0) - (b.category === 'WORKFLOW' ? -1 : 0) || a.start - b.start || a.end - b.end);
