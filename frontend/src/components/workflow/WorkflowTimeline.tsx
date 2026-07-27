@@ -70,7 +70,7 @@ function SpanBar({ span, total, rangeStart, now }: { span: TimelineSpan; total: 
     return (
       <Box sx={{ position: 'relative', height: ROW_H }}>
         <Tooltip title={`${span.label} — ${typeLabel(span.category)}`} placement="top" arrow>
-          <Box sx={{ position: 'absolute', top: '50%', left: `${leftPct}%`, transform: 'translate(-50%, -50%)', ...markerSx }}>
+          <Box sx={{ position: 'absolute', top: '50%', left: `clamp(10px, ${leftPct}%, calc(100% - 10px))`, transform: 'translate(-50%, -50%)', ...markerSx }}>
             <Icon size={13} />
           </Box>
         </Tooltip>

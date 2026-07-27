@@ -149,7 +149,7 @@ function buildWorkflowHeartbeat(string runtimeId, string runtimeName, string com
     return heartbeat;
 }
 
-@test:BeforeSuite
+@test:BeforeGroups {value: ["workflow"]}
 function setupWorkflowTests() returns error? {
     cleanupRuntime(WF_RUNTIME_ID);
 
@@ -170,7 +170,7 @@ function setupWorkflowTests() returns error? {
     wfViewerToken = check generateV2Token(WF_VIEWER_USER_ID, "readonlyviewer", []);
 }
 
-@test:AfterSuite {alwaysRun: true}
+@test:AfterGroups {value: ["workflow"], alwaysRun: true}
 function teardownWorkflowTests() {
     cleanupRuntime(WF_RUNTIME_ID);
     cleanupRuntime(WF_ST_RUNTIME_ID);
