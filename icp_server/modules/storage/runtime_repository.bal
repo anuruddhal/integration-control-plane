@@ -983,6 +983,23 @@ public isolated function mapToService(types:ServiceRecordInDB serviceRecord, str
             resourceList.push(resourceItem);
         };
 
+    // Fetch the listener(s) this service is attached to, enriched with full listener
+    // detail. Column list mirrors getListenersForRuntime so rows map into types:Listener.
+    types:Listener[] serviceListeners = [];
+    stream<types:Listener, sql:Error?> boundListenerStream = dbClient->query(`
+        SELECT l.listener_name, l.listener_package, l.protocol, l.state, l.listener_host, l.listener_port
+        FROM bi_service_listener_bindings b
+        JOIN bi_runtime_listener_artifacts l
+            ON l.runtime_id = b.runtime_id AND l.listener_name = b.listener_name
+        WHERE b.runtime_id = ${runtimeId}
+            AND b.service_name = ${serviceName}
+            AND b.service_package = ${serviceRecord.service_package}
+    `);
+    check from types:Listener boundListener in boundListenerStream
+        do {
+            serviceListeners.push(boundListener);
+        };
+
     return {
         name: serviceRecord.service_name,
         package: serviceRecord.service_package,
@@ -990,7 +1007,7 @@ public isolated function mapToService(types:ServiceRecordInDB serviceRecord, str
         state: "enabled", // Default state
         'type: "API", // Default type
         resources: resourceList,
-        listeners: [] // Empty listeners array
+        listeners: serviceListeners
     };
 }
 

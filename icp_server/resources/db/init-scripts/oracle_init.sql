@@ -768,6 +768,18 @@ END;
 /
 
 -- Listeners bound to a runtime (e.g., HTTP/HTTPS)
+CREATE TABLE bi_service_listener_bindings (
+  runtime_id       CHAR(36) NOT NULL,
+  service_name     VARCHAR2(100 CHAR) NOT NULL,
+  service_package  VARCHAR2(200 CHAR) NOT NULL,
+  listener_name    VARCHAR2(100 CHAR) NOT NULL,
+  created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  PRIMARY KEY (runtime_id, service_name, service_package, listener_name),
+  CONSTRAINT fk_bi_slb_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE
+);
+CREATE INDEX idx_slb_service ON bi_service_listener_bindings (runtime_id, service_name, service_package);
+CREATE INDEX idx_slb_listener ON bi_service_listener_bindings (runtime_id, listener_name);
+
 CREATE TABLE bi_runtime_listener_artifacts (
     runtime_id CHAR(36) NOT NULL,
     listener_name VARCHAR2(100 CHAR) NOT NULL,

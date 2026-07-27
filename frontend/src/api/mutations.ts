@@ -307,7 +307,13 @@ export function useUpdateListenerState() {
           port: input.port,
           action: input.action,
         },
-      }).then((d) => d.updateListenerState),
+      }).then((d) => {
+        // The backend signals failure via `success: false` on an otherwise-200 response
+        // (unlike a thrown GraphQL error), so that has to be checked explicitly here —
+        // otherwise a rejected action looks identical to a successful one to react-query.
+        if (!d.updateListenerState.success) throw new Error(d.updateListenerState.message || 'Failed to update listener state');
+        return d.updateListenerState;
+      }),
     onSuccess: () => {
       // Invalidate all listener queries to refetch the updated state
       qc.invalidateQueries({ queryKey: ['artifacts', 'Listener'] });

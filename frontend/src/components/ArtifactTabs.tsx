@@ -16,41 +16,71 @@
  * under the License.
  */
 
-import { Accordion, AccordionSummary, AccordionDetails, Box, Card, CardContent, Chip, CircularProgress, Divider, Stack, Typography } from '@wso2/oxygen-ui';
+import { Accordion, AccordionSummary, AccordionDetails, Box, Button, Card, CardContent, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, Stack, Tooltip, Typography } from '@wso2/oxygen-ui';
 import SearchField from './SearchField';
-import { ChevronDown } from '@wso2/oxygen-ui-icons-react';
-import { useMemo, useState } from 'react';
+import { ChevronDown, Play, Square, X } from '@wso2/oxygen-ui-icons-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useArtifactSource, useArtifactParams, useArtifactWsdl, useLocalEntryValue, useDataSourceOverview, useDataServiceOverview, useMessageProcessorOverview, ARTIFACT_TYPE_TO_SOURCE_TYPE } from '../api/queries';
 import { WSDL_NS, SOAP_NS, SOAP12_NS } from '../paths';
 import CodeViewer from './CodeViewer';
 import { ListingTable, TablePagination } from '@wso2/oxygen-ui';
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' };
+import { useUpdateListenerState } from '../api/mutations';
+import { useQueryClient } from '@tanstack/react-query';
 import type { TabProps } from './artifact-config';
 
 // Shared style for resource/method display boxes
-const RESOURCE_BOX_SX = {
-  bgcolor: 'action.hover',
-  p: 1.5,
-  borderRadius: 1,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 1.5,
-  border: '1px solid',
-  borderColor: 'divider',
-} as const;
-
-const HTTP_METHOD_CHIP_SX: Record<string, { bgcolor: string; color: string }> = {
-  GET: { bgcolor: '#2e7d32', color: '#fff' },
-  POST: { bgcolor: '#1565c0', color: '#fff' },
-  PUT: { bgcolor: '#b54708', color: '#fff' },
-  DELETE: { bgcolor: '#d32f2f', color: '#fff' },
-  PATCH: { bgcolor: '#6a1b9a', color: '#fff' },
+const HTTP_METHOD_BADGE_COLORS: Record<string, string> = {
+  GET: '#0095FF',
+  POST: '#36B475',
+  PUT: '#FF9D52',
+  DELETE: '#FE523C',
+  PATCH: '#01CEB5',
 };
 
-const getMethodChipSx = (method: string) => ({
-  ...(HTTP_METHOD_CHIP_SX[method.toUpperCase()] ?? { bgcolor: '#546e7a', color: '#fff' }),
-  fontWeight: 700,
-});
+const DEFAULT_METHOD_BADGE_COLOR = '#9e9e9e';
+
+const getMethodBadgeColor = (method: string) => HTTP_METHOD_BADGE_COLORS[method.toUpperCase()] ?? DEFAULT_METHOD_BADGE_COLOR;
+
+const getResourceRowSx = (method: string) => {
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1.5,
+    px: 1,
+    py: 0.75,
+    border: '0.5px solid',
+    borderColor: getMethodBadgeColor(method),
+    borderRadius: 0.5,
+  } as const;
+};
+
+const getMethodBadgeSx = (method: string) =>
+  ({
+    bgcolor: getMethodBadgeColor(method),
+    color: '#fff',
+    fontWeight: 700,
+    fontSize: '11px',
+    minWidth: 72,
+    px: 1,
+    py: 0.5,
+    borderRadius: 0.5,
+    textAlign: 'center',
+    flexShrink: 0,
+  }) as const;
+
+const RESOURCE_LABEL_SX = { flex: 1, fontSize: '13px', fontWeight: 500, wordBreak: 'break-word', color: 'text.primary' } as const;
+
+function ResourceRow({ method, path }: { method: string; path: string }) {
+  const upperMethod = method.toUpperCase();
+
+  return (
+    <Box sx={{ ...getResourceRowSx(upperMethod), flexWrap: 'wrap' }}>
+      <Box sx={getMethodBadgeSx(upperMethod)}>{upperMethod}</Box>
+      <Typography sx={RESOURCE_LABEL_SX}>{path}</Typography>
+    </Box>
+  );
+}
 
 export function ArtifactSource({ envId, componentId, artifactType, artifact }: TabProps) {
   const sourceType = ARTIFACT_TYPE_TO_SOURCE_TYPE[artifactType] ?? artifactType.toLowerCase();
@@ -78,14 +108,9 @@ export function ArtifactApiDefinition({ artifact }: TabProps) {
   });
 
   return (
-    <Stack gap={1}>
+    <Stack gap={0.75}>
       {expandedItems.map((item, i) => (
-        <Box key={i} sx={RESOURCE_BOX_SX}>
-          <Chip label={item.method} size="small" sx={getMethodChipSx(item.method)} />
-          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
-            {item.path}
-          </Typography>
-        </Box>
+        <ResourceRow key={i} method={item.method} path={item.path} />
       ))}
     </Stack>
   );
@@ -125,29 +150,212 @@ export function ArtifactEndpoints({ artifact }: TabProps) {
 
 export function ServiceResources({ artifact }: TabProps) {
   const resources = (artifact.resources as Array<{ url?: string; methods?: string[] }> | undefined) ?? [];
-  const basePath = (artifact.basePath ?? '/').toString();
+
+  const expandedItems: Array<{ method: string; path: string }> = [];
+  resources.forEach((r) => {
+    const raw = r.methods ?? [];
+    const methods = Array.isArray(raw) ? raw : [String(raw)];
+    methods.forEach((method) => {
+      expandedItems.push({ method: method.toUpperCase(), path: r.url ?? '' });
+    });
+  });
+
+  return <Stack gap={0.75}>{expandedItems.length === 0 ? <Typography sx={emptySx}>No resources available.</Typography> : expandedItems.map((item, i) => <ResourceRow key={i} method={item.method} path={item.path} />)}</Stack>;
+}
+
+// Listener(s) a service is attached to. Backed by Service.listeners, which the
+// heartbeat now carries. Each row has an Enable/Disable toggle — a bound listener
+// runs on the same runtime(s) as the service, so we target the service's runtimes
+// for START/STOP. Disabling a listener stops the service(s) attached to it.
+export function ServiceListeners({ artifact, artifactType, envId, componentId }: TabProps) {
+  const listeners = (artifact.listeners as Array<{ name?: string; package?: string; protocol?: string; host?: string; port?: number; state?: string }> | undefined) ?? [];
+  // A bound listener runs on the same runtime(s) as the service, so we reuse the
+  // service's runtimes both for START/STOP and for the details view's Runtimes list.
+  const serviceRuntimes = (artifact.runtimes as Array<{ runtimeId: string; runtimeName?: string; status?: string }> | undefined) ?? [];
+  const runtimeIds = serviceRuntimes.map((r) => r.runtimeId);
+  const hasRuntimes = runtimeIds.length > 0;
+
+  const queryClient = useQueryClient();
+  const updateListenerState = useUpdateListenerState();
+  const [pending, setPending] = useState<{ name: string; pkg?: string; port?: number; enable: boolean } | null>(null);
+  // Per-listener in-flight action. Enable/disable is eventually-consistent — the
+  // backend records the intent and the state flips after the next reconcile/heartbeat —
+  // so we keep the "Enabling…/Disabling…" busy state until the state actually reflects it.
+  const [actions, setActions] = useState<Record<string, 'START' | 'STOP'>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<{ name?: string; package?: string; protocol?: string; host?: string; port?: number; state?: string } | null>(null);
+
+  const isEnabled = (s?: string) => String(s ?? '').toLowerCase() === 'enabled';
+
+  // Clear a listener's busy state once its reported state matches the requested action.
+  useEffect(() => {
+    setActions((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const l of listeners) {
+        const name = l.name ?? '';
+        const act = next[name];
+        if (act && isEnabled(l.state) === (act === 'START')) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [listeners]);
+
+  const confirmToggle = () => {
+    if (!pending) return;
+    const action: 'START' | 'STOP' = pending.enable ? 'START' : 'STOP';
+    const name = pending.name;
+    setActions((prev) => ({ ...prev, [name]: action }));
+    setError(null);
+    updateListenerState.mutate(
+      { runtimeIds, listenerName: name, listenerPackage: pending.pkg, port: typeof pending.port === 'number' ? pending.port : undefined, action },
+      {
+        onError: (err) => {
+          setActions((prev) => {
+            const n = { ...prev };
+            delete n[name];
+            return n;
+          });
+          setError(err instanceof Error ? err.message : 'Failed to update listener state');
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: ['artifacts', artifactType, envId, componentId] });
+          queryClient.invalidateQueries({ queryKey: ['artifacts', 'Listener', envId, componentId] });
+        },
+      },
+    );
+    setPending(null);
+  };
+
+  if (listeners.length === 0) {
+    return <Typography sx={emptySx}>This service is not attached to any listener.</Typography>;
+  }
 
   return (
-    <Stack gap={1}>
-      {resources.length === 0 ? (
-        <Typography sx={emptySx}>No resources available.</Typography>
-      ) : (
-        resources.map((r, i) => {
-          const raw = r.methods ?? [];
-          const methods = Array.isArray(raw) ? raw : [String(raw)];
-          return (
-            <Box key={i} sx={{ ...RESOURCE_BOX_SX, flexWrap: 'wrap' }}>
-              {methods.map((method, idx) => (
-                <Chip key={idx} label={method.toUpperCase()} size="small" sx={getMethodChipSx(method)} />
-              ))}
-              <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
-                {basePath}
-                {r.url ?? ''}
+    <Stack gap={0.75}>
+      {error ? (
+        <Typography variant="caption" color="error">
+          {error}
+        </Typography>
+      ) : null}
+      {listeners.map((l, i) => {
+        const name = l.name ?? '';
+        const enabled = isEnabled(l.state);
+        const hostPort = [l.host, l.port].filter((v) => v !== undefined && v !== null && v !== '').join(':');
+        const act = actions[name];
+        return (
+          <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 1, py: 0.75, border: '0.5px solid', borderColor: 'divider', borderRadius: 0.5 }}>
+            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
+              {name || '—'}
+            </Typography>
+            {l.protocol ? <Chip size="small" label={String(l.protocol)} sx={{ height: 20 }} /> : null}
+            {hostPort ? (
+              <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
+                {hostPort}
               </Typography>
-            </Box>
-          );
-        })
-      )}
+            ) : null}
+            <Box sx={{ flexGrow: 1 }} />
+            <Stack direction="row" alignItems="center" gap={0.75}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: enabled ? 'success.main' : 'text.disabled' }} />
+              <Typography variant="body2">{enabled ? 'Enabled' : 'Disabled'}</Typography>
+            </Stack>
+            <Button variant="text" size="small" onClick={() => setDetail(l)} sx={{ fontSize: '12px', flexShrink: 0, textTransform: 'none' }}>
+              View Details
+            </Button>
+            <Tooltip title={!hasRuntimes ? 'No runtimes available' : enabled ? 'Disable listener (stops the service)' : 'Enable listener'}>
+              <span>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  color={enabled ? 'error' : 'success'}
+                  startIcon={act ? <CircularProgress size={12} color="inherit" /> : enabled ? <Square size={14} /> : <Play size={14} />}
+                  disabled={act != null || !hasRuntimes}
+                  onClick={() => setPending({ name, pkg: l.package, port: l.port, enable: !enabled })}>
+                  {act === 'STOP' ? 'Disabling…' : act === 'START' ? 'Enabling…' : enabled ? 'Disable' : 'Enable'}
+                </Button>
+              </span>
+            </Tooltip>
+          </Box>
+        );
+      })}
+
+      <Dialog open={pending !== null} onClose={() => setPending(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>{pending?.enable ? 'Enable Listener' : 'Disable Listener'}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            Are you sure you want to {pending?.enable ? 'enable' : 'disable'} the listener <strong>{pending?.name}</strong>?{!pending?.enable ? ' Any service attached to it will stop.' : ''}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPending(null)}>Cancel</Button>
+          <Button variant="contained" color={pending?.enable ? 'success' : 'error'} onClick={confirmToggle}>
+            {pending?.enable ? 'Enable' : 'Disable'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Drawer
+        anchor="right"
+        open={detail !== null}
+        onClose={() => setDetail(null)}
+        sx={{ '& .MuiDrawer-paper': { width: '60%', maxWidth: 700, minWidth: 400, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' } }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, fontFamily: 'monospace' }}>
+            {detail?.name}
+          </Typography>
+          <IconButton size="small" aria-label="close" onClick={() => setDetail(null)}>
+            <X size={16} />
+          </IconButton>
+        </Stack>
+        <Box sx={{ p: 2, overflowY: 'auto' }}>
+          <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10, fontWeight: 600, display: 'block', mb: 1 }}>
+            Overview
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', columnGap: 3, rowGap: 2, mb: 3 }}>
+            {(
+              [
+                ['Package', detail?.package],
+                ['Protocol', detail?.protocol],
+                ['Host', detail?.host],
+                ['Port', detail?.port],
+                ['State', detail?.state],
+              ] as Array<[string, unknown]>
+            ).map(([label, v]) => (
+              <Box key={label}>
+                <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10, fontWeight: 600, display: 'block' }}>
+                  {label}
+                </Typography>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.25 }}>
+                  {v !== undefined && v !== null && v !== '' ? String(v) : '—'}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10, fontWeight: 600, display: 'block', mb: 1 }}>
+            Runtimes
+          </Typography>
+          {serviceRuntimes.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No runtimes.
+            </Typography>
+          ) : (
+            <Stack gap={0.5}>
+              {serviceRuntimes.map((r) => (
+                <Box key={r.runtimeId} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: String(r.status).toUpperCase() === 'RUNNING' ? 'success.main' : 'text.disabled' }} />
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                    {r.runtimeName || r.runtimeId}
+                  </Typography>
+                  {r.status ? <Chip size="small" label={String(r.status)} sx={{ height: 20 }} /> : null}
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </Box>
+      </Drawer>
     </Stack>
   );
 }

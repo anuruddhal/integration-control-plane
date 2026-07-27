@@ -290,6 +290,7 @@ type Service {
   basePath: String!
   state: ArtifactState!
   resources: [Resource!]!
+  listeners: [Listener!]!
   runtimes: [ArtifactRuntimeInfo]
 }
 
@@ -300,6 +301,8 @@ type Listener {
   name: String!
   package: String!
   protocol: String!
+  host: String
+  port: Int
   state: ArtifactState!
   runtimes: [ArtifactRuntimeInfo]
 }

@@ -535,7 +535,7 @@ const ARTIFACT_QUERY_MAP: Record<string, { queryName: string; field: string; fie
     queryName: 'servicesByEnvironmentAndComponent',
     field: 'servicesByEnvironmentAndComponent',
     fields: 'name, package, basePath, type',
-    gqlFields: 'name, package, basePath, type, state, stateInSync, runtimes { runtimeId, runtimeName, status }, resources { path, method, url, methods }',
+    gqlFields: 'name, package, basePath, type, state, stateInSync, runtimes { runtimeId, runtimeName, status }, resources { path, method, url, methods }, listeners { name, package, protocol, host, port, state }',
   },
   Automation: {
     queryName: 'automationsByEnvironmentAndComponent',
