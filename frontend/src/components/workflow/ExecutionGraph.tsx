@@ -16,16 +16,21 @@
  * under the License.
  */
 
-import { alpha, Box, Stack, Tooltip, Typography, useTheme } from '@wso2/oxygen-ui';
+import { alpha, Box, IconButton, Stack, Tooltip, Typography, useTheme } from '@wso2/oxygen-ui';
+import { Clock, X } from '@wso2/oxygen-ui-icons-react';
+import { useMemo, useState } from 'react';
 import type { ExecutionGraph, ExecutionGraphEdge, ExecutionGraphNode } from '../../api/workflows';
-import { humanizeKey, splitQualifiedName } from './helpers';
+import CodeViewer from '../CodeViewer';
+import { extractNodeExecutionDetail, formatDuration, humanizeKey, splitQualifiedName, type NodeExecutionDetail } from './helpers';
+import { StatusChip } from './shared';
 import { iconForType, paletteColor, statusColorName, typeLabel } from './graphVisuals';
 
-// ── Layout constants (px). The graph flows left→right, one column per dependency layer. ──
+// ── Layout constants (px). The graph flows top→bottom, one row per dependency layer, and each row is
+// centred horizontally against the widest one so a linear run reads as a single centred column. ──
 const NODE_W = 220;
 const NODE_H = 66;
-const COL_GAP = 76; // horizontal space between layers
-const ROW_GAP = 26; // vertical space between nodes within a layer
+const V_GAP = 54; // vertical space between layers
+const H_GAP = 32; // horizontal space between sibling nodes within a layer
 const PAD = 24; // canvas padding around the node block
 
 interface PositionedNode extends ExecutionGraphNode {
@@ -41,10 +46,10 @@ interface Layout {
 }
 
 /**
- * Lays a DAG out into left→right columns using longest-path layering, then orders nodes within each
- * column by the barycenter (mean position) of their already-placed predecessors to reduce edge
- * crossings. Cyclic/unreachable nodes (a DAG shouldn't have them) fall back to column 0 so nothing
- * is dropped. Columns are vertically centred against the tallest one.
+ * Lays a DAG out into top→bottom layers using longest-path layering, then orders nodes within each
+ * layer by the barycenter (mean position) of their already-placed predecessors to reduce edge
+ * crossings. Cyclic/unreachable nodes (a DAG shouldn't have them) fall back to layer 0 so nothing is
+ * dropped. Each layer is centred horizontally against the widest one.
  */
 function layoutDag(graph: ExecutionGraph): Layout {
   const nodes = graph.nodes ?? [];
@@ -65,7 +70,7 @@ function layoutDag(graph: ExecutionGraph): Layout {
     indeg.set(e.target, (indeg.get(e.target) ?? 0) + 1);
   });
 
-  // Longest-path layering via Kahn's algorithm: a node sits one column right of its deepest parent.
+  // Longest-path layering via Kahn's algorithm: a node sits one layer below its deepest parent.
   const layer = new Map<string, number>();
   const remaining = new Map(indeg);
   const queue = nodes.filter((n) => (indeg.get(n.id) ?? 0) === 0).map((n) => n.id);
@@ -83,18 +88,18 @@ function layoutDag(graph: ExecutionGraph): Layout {
     if (!layer.has(n.id)) layer.set(n.id, 0); // cycle guard: never drop a node
   });
 
-  // Group by column, preserving input order as the initial within-column order.
-  const columns = new Map<number, string[]>();
+  // Group by layer, preserving input order as the initial within-layer order.
+  const layers = new Map<number, string[]>();
   nodes.forEach((n) => {
     const l = layer.get(n.id)!;
-    (columns.get(l) ?? columns.set(l, []).get(l)!).push(n.id);
+    (layers.get(l) ?? layers.set(l, []).get(l)!).push(n.id);
   });
-  const maxLayer = Math.max(0, ...columns.keys());
+  const maxLayer = Math.max(0, ...layers.keys());
 
-  // Barycenter ordering, sweeping left→right so each column sees final positions of the previous ones.
+  // Barycenter ordering, sweeping top→bottom so each layer sees final positions of the previous ones.
   const order = new Map<string, number>();
   for (let l = 0; l <= maxLayer; l++) {
-    let ids = columns.get(l) ?? [];
+    let ids = layers.get(l) ?? [];
     if (l > 0) {
       ids = ids
         .map((id, i) => {
@@ -105,23 +110,23 @@ function layoutDag(graph: ExecutionGraph): Layout {
         })
         .sort((a, b) => a.bary - b.bary || a.i - b.i)
         .map((o) => o.id);
-      columns.set(l, ids);
+      layers.set(l, ids);
     }
     ids.forEach((id, i) => order.set(id, i));
   }
 
-  const colHeight = (count: number) => count * NODE_H + Math.max(0, count - 1) * ROW_GAP;
-  const maxColHeight = Math.max(0, ...[...columns.values()].map((ids) => colHeight(ids.length)));
+  const rowWidth = (count: number) => count * NODE_W + Math.max(0, count - 1) * H_GAP;
+  const maxRowWidth = Math.max(NODE_W, ...[...layers.values()].map((ids) => rowWidth(ids.length)));
 
   const positioned: PositionedNode[] = [];
   for (let l = 0; l <= maxLayer; l++) {
-    const ids = columns.get(l) ?? [];
-    const yOffset = (maxColHeight - colHeight(ids.length)) / 2;
+    const ids = layers.get(l) ?? [];
+    const xOffset = (maxRowWidth - rowWidth(ids.length)) / 2;
     ids.forEach((id, i) => {
       positioned.push({
         ...byId.get(id)!,
-        x: PAD + l * (NODE_W + COL_GAP),
-        y: PAD + yOffset + i * (NODE_H + ROW_GAP),
+        x: PAD + xOffset + i * (NODE_W + H_GAP),
+        y: PAD + l * (NODE_H + V_GAP),
       });
     });
   }
@@ -129,22 +134,22 @@ function layoutDag(graph: ExecutionGraph): Layout {
   return {
     nodes: positioned,
     edges,
-    width: PAD * 2 + maxLayer * (NODE_W + COL_GAP) + NODE_W,
-    height: PAD * 2 + maxColHeight,
+    width: PAD * 2 + maxRowWidth,
+    height: PAD * 2 + maxLayer * (NODE_H + V_GAP) + NODE_H,
   };
 }
 
-/** Cubic-bezier path from the right edge of the source node to the left edge of the target. */
+/** Cubic-bezier path from the bottom edge of the source node to the top edge of the target. */
 function edgePath(s: PositionedNode, t: PositionedNode): string {
-  const sx = s.x + NODE_W;
-  const sy = s.y + NODE_H / 2;
-  const tx = t.x;
-  const ty = t.y + NODE_H / 2;
-  const dx = Math.max(COL_GAP * 0.6, (tx - sx) * 0.5);
-  return `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
+  const sx = s.x + NODE_W / 2;
+  const sy = s.y + NODE_H;
+  const tx = t.x + NODE_W / 2;
+  const ty = t.y;
+  const dy = Math.max(V_GAP * 0.6, (ty - sy) * 0.5);
+  return `M ${sx} ${sy} C ${sx} ${sy + dy}, ${tx} ${ty - dy}, ${tx} ${ty}`;
 }
 
-function GraphNodeCard({ node }: { node: PositionedNode }) {
+function GraphNodeCard({ node, selected, durationMs, onSelect }: { node: PositionedNode; selected: boolean; durationMs: number | null; onSelect: () => void }) {
   const theme = useTheme();
   const color = paletteColor(theme, statusColorName(node.status));
   // Only the task name is shown; the workflow qualifier is dropped because every node in a graph
@@ -159,6 +164,16 @@ function GraphNodeCard({ node }: { node: PositionedNode }) {
   return (
     <Tooltip title={tooltip} placement="top" arrow>
       <Box
+        role="button"
+        tabIndex={0}
+        aria-pressed={selected}
+        onClick={onSelect}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
         sx={{
           position: 'absolute',
           left: node.x,
@@ -173,11 +188,14 @@ function GraphNodeCard({ node }: { node: PositionedNode }) {
           gap: 1,
           borderRadius: 1.5,
           border: '1px solid',
-          borderColor: 'divider',
+          borderColor: selected ? color : 'divider',
           borderLeft: `4px solid ${color}`,
           bgcolor: 'background.paper',
-          boxShadow: 1,
-          transition: 'box-shadow 0.15s',
+          boxShadow: selected ? 6 : 1,
+          outline: selected ? `2px solid ${alpha(color, 0.5)}` : 'none',
+          outlineOffset: 2,
+          cursor: 'pointer',
+          transition: 'box-shadow 0.15s, outline-color 0.15s',
           '&:hover': { boxShadow: 4 },
         }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 1, flexShrink: 0, color, bgcolor: alpha(color, 0.12) }}>
@@ -187,9 +205,17 @@ function GraphNodeCard({ node }: { node: PositionedNode }) {
           <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {task ?? node.label}
           </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {subtitle}
-          </Typography>
+          <Stack direction="row" alignItems="center" gap={0.5} sx={{ minWidth: 0 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {subtitle}
+            </Typography>
+            {durationMs != null && (
+              <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+                <Clock size={11} />
+                {formatDuration(durationMs)}
+              </Typography>
+            )}
+          </Stack>
         </Stack>
         {node.status && <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: color }} aria-label={node.status} />}
       </Box>
@@ -197,38 +223,119 @@ function GraphNodeCard({ node }: { node: PositionedNode }) {
   );
 }
 
-/** Renders a workflow execution's dependency graph as a left→right node-link DAG. */
-export default function ExecutionGraph({ graph }: { graph: ExecutionGraph }) {
+/** Side panel showing a selected node's execution time, input and result, mapped from the history. */
+function NodeDetailPanel({ node, detail, hasHistory, onClose }: { node: ExecutionGraphNode; detail: NodeExecutionDetail; hasHistory: boolean; onClose: () => void }) {
+  const { task } = splitQualifiedName(node.label);
+
+  return (
+    <Box sx={{ width: { xs: '100%', md: '45%' }, flexShrink: 0, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', alignSelf: 'stretch' }}>
+      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={1} sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Stack sx={{ minWidth: 0 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={node.label}>
+            {task ?? node.label}
+          </Typography>
+          <Stack direction="row" alignItems="center" gap={1} sx={{ mt: 0.5 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              {typeLabel(node.type)}
+            </Typography>
+            {detail.status && <StatusChip status={detail.status} />}
+            {detail.durationMs != null && (
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Clock size={13} />
+                {formatDuration(detail.durationMs)}
+              </Typography>
+            )}
+          </Stack>
+        </Stack>
+        <IconButton size="small" aria-label="close node details" onClick={onClose}>
+          <X size={16} />
+        </IconButton>
+      </Stack>
+
+      <Stack gap={2} sx={{ p: 2 }}>
+        {!hasHistory ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            History is not available, so this step's input and result can't be shown.
+          </Typography>
+        ) : (
+          <>
+            {detail.error && (
+              <Box sx={{ px: 1.5, py: 1, borderRadius: 1, border: '1px solid', borderColor: 'error.main', color: 'error.main', bgcolor: (t) => alpha(t.palette.error.main, 0.08) }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>
+                  Error
+                </Typography>
+                <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                  {detail.error}
+                </Typography>
+              </Box>
+            )}
+            {detail.input !== null ? (
+              <CodeViewer code={detail.input} language="json" title="Input" height="30vh" expandable showLineNumbers={false} />
+            ) : (
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                No input recorded for this step.
+              </Typography>
+            )}
+            {detail.result !== null ? (
+              <CodeViewer code={detail.result} language="json" title="Result" height="30vh" expandable showLineNumbers={false} />
+            ) : (
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {detail.status === 'COMPLETED' ? 'This step completed with no return value.' : detail.status ? 'No result — this step has not completed.' : 'No result recorded for this step.'}
+              </Typography>
+            )}
+          </>
+        )}
+      </Stack>
+    </Box>
+  );
+}
+
+/**
+ * Renders a workflow execution's dependency graph as a top→bottom, centre-aligned node-link DAG.
+ * Clicking a node opens a side panel with that step's input and result, recovered from `events`
+ * (the raw workflow history) by matching the node to its scheduled/initiated + close events.
+ */
+export default function ExecutionGraph({ graph, events = [] }: { graph: ExecutionGraph; events?: Array<Record<string, unknown>> }) {
   const theme = useTheme();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Resolve each node's execution detail (input / result / status / duration) once from the history.
+  const detailById = useMemo(() => new Map((graph.nodes ?? []).map((n) => [n.id, extractNodeExecutionDetail(n, events)])), [graph, events]);
+
   if (!graph.nodes || graph.nodes.length === 0) {
     return <Typography sx={{ py: 4, textAlign: 'center', color: 'text.secondary' }}>No execution graph available.</Typography>;
   }
 
   const layout = layoutDag(graph);
   const nodeById = new Map(layout.nodes.map((n) => [n.id, n]));
+  const selectedNode = selectedId ? nodeById.get(selectedId) : undefined;
+  const selectedDetail = selectedNode ? detailById.get(selectedNode.id) : undefined;
   const edgeColor = theme.palette.text.disabled;
   const markerId = 'wf-graph-arrow';
 
   return (
-    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'auto', maxHeight: '60vh', bgcolor: 'action.hover' }}>
-      <Box sx={{ position: 'relative', width: layout.width, height: layout.height }}>
-        <svg width={layout.width} height={layout.height} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden>
-          <defs>
-            <marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" fill={edgeColor} />
-            </marker>
-          </defs>
-          {layout.edges.map((e, i) => {
-            const s = nodeById.get(e.source);
-            const t = nodeById.get(e.target);
-            if (!s || !t) return null;
-            return <path key={i} d={edgePath(s, t)} fill="none" stroke={edgeColor} strokeWidth={1.5} markerEnd={`url(#${markerId})`} />;
-          })}
-        </svg>
-        {layout.nodes.map((n) => (
-          <GraphNodeCard key={n.id} node={n} />
-        ))}
+    <Stack direction={{ xs: 'column', md: 'row' }} gap={2} alignItems="flex-start">
+      <Box sx={{ flex: 1, minWidth: 0, border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'auto', maxHeight: '60vh', bgcolor: 'action.hover' }}>
+        <Box sx={{ position: 'relative', width: layout.width, height: layout.height, mx: 'auto' }}>
+          <svg width={layout.width} height={layout.height} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden>
+            <defs>
+              <marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill={edgeColor} />
+              </marker>
+            </defs>
+            {layout.edges.map((e, i) => {
+              const s = nodeById.get(e.source);
+              const t = nodeById.get(e.target);
+              if (!s || !t) return null;
+              return <path key={i} d={edgePath(s, t)} fill="none" stroke={edgeColor} strokeWidth={1.5} markerEnd={`url(#${markerId})`} />;
+            })}
+          </svg>
+          {layout.nodes.map((n) => (
+            <GraphNodeCard key={n.id} node={n} selected={n.id === selectedId} durationMs={detailById.get(n.id)?.durationMs ?? null} onSelect={() => setSelectedId((cur) => (cur === n.id ? null : n.id))} />
+          ))}
+        </Box>
       </Box>
-    </Box>
+      {selectedNode && selectedDetail && <NodeDetailPanel node={selectedNode} detail={selectedDetail} hasHistory={events.length > 0} onClose={() => setSelectedId(null)} />}
+    </Stack>
   );
 }

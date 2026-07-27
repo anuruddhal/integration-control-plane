@@ -181,7 +181,14 @@ export default function WorkflowDetailDrawer({ scope, workflowId, onClose }: { s
             </ListingTable>
           ))}
 
-        {tab === 1 && (loadingGraph ? <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} /> : !graph ? <Typography sx={emptySx}>No execution graph available.</Typography> : <ExecutionGraph graph={graph} />)}
+        {tab === 1 &&
+          (loadingGraph ? (
+            <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
+          ) : !graph ? (
+            <Typography sx={emptySx}>No execution graph available.</Typography>
+          ) : (
+            <ExecutionGraph graph={graph} events={history as Array<Record<string, unknown>>} />
+          ))}
       </Box>
 
       <Dialog open={terminateOpen} onClose={() => setTerminateOpen(false)} maxWidth="xs" fullWidth>

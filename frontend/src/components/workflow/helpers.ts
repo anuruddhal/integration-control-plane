@@ -491,6 +491,44 @@ function base64ToUtf8(b64: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+/** One Temporal payload: base64 `data` with a base64 `metadata.encoding` describing its type. */
+interface Payload {
+  data?: unknown;
+  metadata?: { encoding?: unknown };
+}
+
+/** Decodes one payload's base64 `data`, parsing `json/plain` payloads into objects. */
+function decodePayload(p: Payload): unknown {
+  if (typeof p?.data !== 'string') return p?.data === undefined ? null : p.data;
+  try {
+    const text = base64ToUtf8(p.data);
+    const encoding = typeof p?.metadata?.encoding === 'string' ? base64ToUtf8(p.metadata.encoding) : '';
+    if (encoding.includes('json')) {
+      try {
+        return JSON.parse(text);
+      } catch {
+        return text;
+      }
+    }
+    // A `binary/null` payload (used for a void result) has no data and decodes to null.
+    if (encoding.includes('null')) return null;
+    return text;
+  } catch {
+    return p;
+  }
+}
+
+/**
+ * Decodes a Temporal payload container (`{ payloads: [...] }`) into a single value (one payload) or
+ * an array (many). Returns null when there are no payloads. Used for start/activity inputs and results.
+ */
+export function decodePayloads(container: unknown): unknown {
+  const payloads = asRecord(container)['payloads'];
+  if (!Array.isArray(payloads) || payloads.length === 0) return null;
+  const decoded = payloads.map((p) => decodePayload(p as Payload));
+  return decoded.length === 1 ? decoded[0] : decoded;
+}
+
 /**
  * Extracts the start input from a workflow history's WORKFLOW_EXECUTION_STARTED event.
  * Temporal carries inputs as payloads with base64 `data` (and a base64 `metadata.encoding`);
@@ -500,25 +538,85 @@ function base64ToUtf8(b64: string): string {
 export function extractWorkflowInput(events: ReadonlyArray<Record<string, unknown>>): string | null {
   const started = events.find((e) => e['eventType'] === 'WORKFLOW_EXECUTION_STARTED');
   if (!started) return null;
-  const attrs = started['attributes'] as { input?: { payloads?: Array<{ data?: unknown; metadata?: { encoding?: unknown } }> } } | undefined;
-  const payloads = attrs?.input?.payloads;
-  if (!Array.isArray(payloads) || payloads.length === 0) return null;
-  const decoded = payloads.map((p) => {
-    if (typeof p?.data !== 'string') return p;
-    try {
-      const text = base64ToUtf8(p.data);
-      const encoding = typeof p?.metadata?.encoding === 'string' ? base64ToUtf8(p.metadata.encoding) : '';
-      if (encoding.includes('json')) {
-        try {
-          return JSON.parse(text);
-        } catch {
-          return text;
-        }
-      }
-      return text;
-    } catch {
-      return p;
-    }
-  });
-  return jsonPretty(decoded.length === 1 ? decoded[0] : decoded);
+  const decoded = decodePayloads(asRecord(started['attributes'])['input']);
+  return decoded === null ? null : jsonPretty(decoded);
+}
+
+// ── Execution-graph node → history mapping ──
+//
+// A graph node's `id` is the history `eventId` of the event that OPENED that step:
+//   ACTIVITY      → ACTIVITY_TASK_SCHEDULED               (input in attributes.input)
+//   HUMAN_TASK    → START_CHILD_WORKFLOW_EXECUTION_INITIATED (input in attributes.input)
+//   WORKFLOW root → WORKFLOW_EXECUTION_STARTED
+// The matching CLOSE event carries the result and echoes the open event's id — activities via
+// `scheduledEventId`, child workflows / human tasks via `initiatedEventId`. From those two events we
+// recover the step's input, result, final status and any failure message.
+
+export interface NodeExecutionDetail {
+  /** Pretty-printed JSON of the step's input, or null when none was recorded. */
+  input: string | null;
+  /** Pretty-printed JSON of the step's result, or null when none/not finished. */
+  result: string | null;
+  /** Normalized upper-case status derived from the close event (falls back to the node's status). */
+  status?: string;
+  /** Failure message when the step failed, else null. */
+  error: string | null;
+  /** Wall-clock duration open→close in milliseconds, or null when the step hasn't closed / has no times. */
+  durationMs: number | null;
+  /** Epoch ms of the open (scheduled/initiated/started) event, or null. */
+  startTimeMs: number | null;
+  /** Epoch ms of the close event, or null when still running. */
+  endTimeMs: number | null;
+}
+
+const eventTypeOf = (e: Record<string, unknown>): string => (asStr(e['eventType']) ?? '').replace(/^EVENT_TYPE_/, '').toUpperCase();
+
+/** Reduces a close-event type to a bare status token, e.g. ACTIVITY_TASK_COMPLETED → COMPLETED. */
+const statusFromCloseType = (type: string): string => type.replace(/^(ACTIVITY_TASK_|CHILD_WORKFLOW_EXECUTION_|WORKFLOW_EXECUTION_)/, '');
+
+/**
+ * Maps one execution-graph node to its input / result / status / duration by pairing the open event
+ * (eventId === node.id) with its matching CLOSE event in the workflow history. `events` is the raw
+ * history array. Only terminal event types count as the close event — a step's `*_STARTED` event also
+ * echoes the open event's id, so matching on the id alone would wrongly pick STARTED (which carries no
+ * result) over COMPLETED/FAILED.
+ */
+export function extractNodeExecutionDetail(node: { id: string; type: string; status?: string }, events: ReadonlyArray<Record<string, unknown>>): NodeExecutionDetail {
+  const nodeType = (node.type ?? '').toUpperCase();
+  let open = events.find((e) => asStr(e['eventId']) === node.id);
+  if (!open && nodeType === 'WORKFLOW') open = events.find((e) => eventTypeOf(e) === 'WORKFLOW_EXECUTION_STARTED');
+  const inputDecoded = open ? decodePayloads(asRecord(open['attributes'])['input']) : null;
+
+  const isCloseType = (t: string) => t in ACTIVITY_CLOSE_STATUS || t in CHILD_CLOSE_STATUS;
+  const close =
+    nodeType === 'WORKFLOW'
+      ? [...events].reverse().find((e) => eventTypeOf(e) in WF_TERMINAL_STATUS)
+      : events.find((e) => {
+          if (!isCloseType(eventTypeOf(e))) return false;
+          const a = asRecord(e['attributes']);
+          return asStr(a['scheduledEventId']) === node.id || asStr(a['initiatedEventId']) === node.id;
+        });
+
+  let resultDecoded: unknown = null;
+  let error: string | null = null;
+  if (close) {
+    const a = asRecord(close['attributes']);
+    resultDecoded = decodePayloads(a['result']);
+    const failure = asRecord(a['failure']);
+    error = asStr(failure['message']) ?? null;
+  }
+
+  const startTimeMs = open ? eventTimeMs(open) : null;
+  const endTimeMs = close ? eventTimeMs(close) : null;
+  const durationMs = startTimeMs !== null && endTimeMs !== null ? endTimeMs - startTimeMs : null;
+
+  return {
+    input: inputDecoded === null ? null : jsonPretty(inputDecoded),
+    result: resultDecoded === null ? null : jsonPretty(resultDecoded),
+    status: close ? statusFromCloseType(eventTypeOf(close)) : node.status,
+    error,
+    durationMs,
+    startTimeMs,
+    endTimeMs,
+  };
 }
