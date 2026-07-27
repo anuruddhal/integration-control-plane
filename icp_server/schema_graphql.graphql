@@ -14,6 +14,7 @@ type Query {
   runtime(runtimeId: String!): Runtime
   services(runtimeId: String!, pagination: PaginationInput): ServicesPage!
   listeners(runtimeId: String!, pagination: PaginationInput): ListenersPage!
+  openApiDefinitionsByRuntime(runtimeId: String!): [OpenApiDefinition!]!
 
   # Org Secret Queries
   orgSecrets(environmentId: String, pagination: PaginationInput): OrgSecretsPage!
@@ -265,6 +266,14 @@ type Runtime {
   lastHeartbeat: String
   artifacts: Artifacts
   logLevels: [RuntimeLogLevel!]
+  openApiDefinitions: [OpenApiDefinition!]
+}
+
+# OpenAPI (Swagger) definition packed into a BI runtime's JAR by the swagger-pack compiler
+# plugin. `definition` is the raw OpenAPI document as a JSON string (parse client-side).
+type OpenApiDefinition {
+  fileName: String!
+  definition: String!
 }
 
 # ============================================

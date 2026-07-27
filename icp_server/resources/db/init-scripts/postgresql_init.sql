@@ -667,6 +667,23 @@ CREATE INDEX idx_sr_method_first ON bi_service_resource_artifacts(method_first);
 CREATE TRIGGER update_bi_service_resource_artifacts_updated_at BEFORE UPDATE ON bi_service_resource_artifacts
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- OpenAPI (Swagger) definitions packed into a BI runtime's JAR by the swagger-pack compiler
+-- plugin, reported via the full heartbeat's optional openApiDefinitions field.
+CREATE TABLE bi_service_openapi_definitions (
+    runtime_id CHAR(36) NOT NULL,
+    file_name VARCHAR(300) NOT NULL,
+    definition JSONB NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (runtime_id, file_name),
+    CONSTRAINT fk_bi_service_openapi_definitions_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes(runtime_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_openapi_def_runtime_id ON bi_service_openapi_definitions(runtime_id);
+
+CREATE TRIGGER update_bi_service_openapi_definitions_updated_at BEFORE UPDATE ON bi_service_openapi_definitions
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Listeners bound to a runtime (e.g., HTTP/HTTPS)
 CREATE TABLE bi_service_listener_bindings (
     runtime_id CHAR(36) NOT NULL,

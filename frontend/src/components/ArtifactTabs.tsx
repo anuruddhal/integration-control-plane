@@ -28,18 +28,9 @@ const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' };
 import { useUpdateListenerState } from '../api/mutations';
 import { useQueryClient } from '@tanstack/react-query';
 import type { TabProps } from './artifact-config';
+import { HTTP_METHOD_BADGE_COLORS, DEFAULT_METHOD_BADGE_COLOR, METHOD_BADGE_TEXT_SX, RESOURCE_LABEL_TEXT_SX } from '../constants/methodBadgeStyles';
 
 // Shared style for resource/method display boxes
-const HTTP_METHOD_BADGE_COLORS: Record<string, string> = {
-  GET: '#0095FF',
-  POST: '#36B475',
-  PUT: '#FF9D52',
-  DELETE: '#FE523C',
-  PATCH: '#01CEB5',
-};
-
-const DEFAULT_METHOD_BADGE_COLOR = '#9e9e9e';
-
 const getMethodBadgeColor = (method: string) => HTTP_METHOD_BADGE_COLORS[method.toUpperCase()] ?? DEFAULT_METHOD_BADGE_COLOR;
 
 const getResourceRowSx = (method: string) => {
@@ -57,19 +48,15 @@ const getResourceRowSx = (method: string) => {
 
 const getMethodBadgeSx = (method: string) =>
   ({
+    ...METHOD_BADGE_TEXT_SX,
     bgcolor: getMethodBadgeColor(method),
     color: '#fff',
-    fontWeight: 700,
-    fontSize: '11px',
-    minWidth: 72,
     px: 1,
     py: 0.5,
-    borderRadius: 0.5,
-    textAlign: 'center',
     flexShrink: 0,
   }) as const;
 
-const RESOURCE_LABEL_SX = { flex: 1, fontSize: '13px', fontWeight: 500, wordBreak: 'break-word', color: 'text.primary' } as const;
+const RESOURCE_LABEL_SX = { ...RESOURCE_LABEL_TEXT_SX, flex: 1, color: 'text.primary' } as const;
 
 function ResourceRow({ method, path }: { method: string; path: string }) {
   const upperMethod = method.toUpperCase();
@@ -647,6 +634,7 @@ export function ArtifactCarbonArtifacts({ artifact }: TabProps) {
 
 export function ArtifactRuntimes({ artifact }: TabProps) {
   const runtimes = (artifact.runtimes as Array<{ runtimeId: string; runtimeName?: string; status: string }> | undefined) ?? [];
+
   return (
     <ListingTable>
       <ListingTable.Head>

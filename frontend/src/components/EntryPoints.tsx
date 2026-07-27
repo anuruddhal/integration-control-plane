@@ -47,8 +47,8 @@ import {
   Tooltip,
   Typography,
 } from '@wso2/oxygen-ui';
-import { RefreshCw, ListFilter, LayoutGrid, Server, Settings, Play, Square, Plus, X, Trash2, UserPlus, Code, Sliders, Link as LinkIcon, FileText, Package, Tag, Check, Copy, Layers } from '@wso2/oxygen-ui-icons-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RefreshCw, ListFilter, LayoutGrid, Server, Settings, Play, Square, Plus, X, Trash2, UserPlus, Code, Sliders, Link as LinkIcon, FileText, BookOpen, Package, Tag, Check, Copy, Layers } from '@wso2/oxygen-ui-icons-react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useArtifacts, useRefreshEnvironmentArtifacts, useComponentRuntimes, type GqlArtifact, type GqlEnvironment } from '../api/queries';
@@ -64,6 +64,12 @@ import { Permissions } from '../constants/permissions';
 import { resourceUrl, useScope } from '../nav';
 import { ENTRY_POINT_CONFIG, ENTRY_POINT_DETAIL_TABS, type SelectedArtifact, type TabProps } from './artifact-config';
 import SyncSwitch from './SyncSwitch';
+
+// Stable reference for useArtifacts' `data` fallback — a fresh `[]` literal on every render (the
+// default in `const { data: x = [] } = ...`) changes identity even when the query is disabled and
+// data is genuinely unchanged, which cascades through downstream useMemo/useEffect chains and can
+// trigger a render loop (e.g. EntryPointsList's onSelectionChange effect).
+const EMPTY_ARTIFACTS: GqlArtifact[] = [];
 
 function toEnabled(value: unknown) {
   if (typeof value === 'boolean') return value;
@@ -101,6 +107,10 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     </Tooltip>
   );
 }
+
+// swagger-ui-react is ~1.3MB gzipped - code-split it out of the main bundle since it's only
+// needed when a user actually opens the API docs drawer for a BI service.
+const OpenApiDefinitionsDrawer = lazy(() => import('./OpenApiDefinitionsDrawer').then((m) => ({ default: m.OpenApiDefinitionsDrawer })));
 
 function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArtifact; onOpenDrawerTab: (tab: string) => void }) {
   const [tracingEnabled, setTracingEnabled] = useState(false);
@@ -142,10 +152,29 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const showTaskToggle = artifactType === 'Task';
   const showTaskTrigger = artifactType === 'Task';
   const hasRuntimes = artifact.runtimes && Array.isArray(artifact.runtimes) && artifact.runtimes.length > 0;
+  const artifactRuntimes = (artifact.runtimes as Array<{ runtimeId: string; status: string }> | undefined) ?? [];
+  const showApiDocsButton = artifactType === 'Service' && Boolean(hasRuntimes);
+  // A Service can have multiple runtime instances (e.g. one per environment/replica); they all
+  // run the same deployed code, so any instance's packed OpenAPI docs are representative. Prefer
+  // a RUNNING one so the "Try it out" requests in the drawer have somewhere to actually land.
+  const apiDocsRuntimeId = artifactRuntimes.find((r) => r.status === 'RUNNING')?.runtimeId ?? artifactRuntimes[0]?.runtimeId;
+  const [viewingApiDocs, setViewingApiDocs] = useState(false);
 
   // Track if any preceding controls are visible for proper divider placement
   const hasPrecedingControls = compositeApp || showStatusToggle || showStatusChip || showTracingToggle || showStatisticsToggle || showListenerToggle;
-  const hasHeaderControls = !!compositeApp || showStatusChip || showStatusToggle || showTracingToggle || showStatisticsToggle || showListenerToggle || showParametersButton || showWsdlButton || showInstancesButton || showTaskToggle || showTaskTrigger;
+  const hasHeaderControls =
+    !!compositeApp ||
+    showStatusChip ||
+    showStatusToggle ||
+    showTracingToggle ||
+    showStatisticsToggle ||
+    showListenerToggle ||
+    showParametersButton ||
+    showWsdlButton ||
+    showInstancesButton ||
+    showTaskToggle ||
+    showTaskTrigger ||
+    (showApiDocsButton && !!apiDocsRuntimeId);
 
   const artifactName = artifactType === 'Automation' ? (artifact.packageName?.toString() ?? '') : (artifact.name?.toString() ?? '');
   const artifactKey = `${artifactType}-${artifactName}`;
@@ -448,6 +477,11 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
                 </Button>
               </Authorized>
             )}
+            {showApiDocsButton && apiDocsRuntimeId && (
+              <Button variant="contained" size="small" startIcon={<BookOpen size={14} />} onClick={() => setViewingApiDocs(true)} sx={{ ml: 'auto' }}>
+                View API Docs
+              </Button>
+            )}
           </Stack>
         )}
         {/* Overview columns */}
@@ -519,6 +553,11 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         </Alert>
       </Snackbar>
       {startWorkflowOpen && <StartWorkflowDialog scope={{ componentId, environmentId: envId }} initialWorkflowType={artifactName} onClose={() => setStartWorkflowOpen(false)} onToast={setWorkflowToast} />}
+      {viewingApiDocs && apiDocsRuntimeId && (
+        <Suspense fallback={null}>
+          <OpenApiDefinitionsDrawer runtimeId={apiDocsRuntimeId} onClose={() => setViewingApiDocs(false)} serviceBasePath={artifact.basePath?.toString()} />
+        </Suspense>
+      )}
       <Snackbar open={workflowToast !== null} autoHideDuration={4000} onClose={() => setWorkflowToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         {/* Alert stays mounted so the Snackbar's exit transition can play after the toast clears. */}
         <Alert severity={workflowToast?.severity ?? 'success'} onClose={() => setWorkflowToast(null)} sx={{ width: '100%' }}>
@@ -551,13 +590,13 @@ function EntryPointsList({
   const scope = useScope();
   const isMI = componentType === 'MI';
 
-  const { data: apis = [], isLoading: loadingApis } = useArtifacts('RestApi', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: proxies = [], isLoading: loadingProxies } = useArtifacts('ProxyService', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: inboundEps = [], isLoading: loadingInbound } = useArtifacts('InboundEndpoint', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: tasks = [], isLoading: loadingTasks } = useArtifacts('Task', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: services = [], isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI, active: isOnline });
-  const { data: automations = [], isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI, active: isOnline });
-  const { data: workflows = [], isLoading: loadingWorkflows } = useArtifacts('Workflow', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: apis = EMPTY_ARTIFACTS, isLoading: loadingApis } = useArtifacts('RestApi', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: proxies = EMPTY_ARTIFACTS, isLoading: loadingProxies } = useArtifacts('ProxyService', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: inboundEps = EMPTY_ARTIFACTS, isLoading: loadingInbound } = useArtifacts('InboundEndpoint', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: tasks = EMPTY_ARTIFACTS, isLoading: loadingTasks } = useArtifacts('Task', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: services = EMPTY_ARTIFACTS, isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: automations = EMPTY_ARTIFACTS, isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: workflows = EMPTY_ARTIFACTS, isLoading: loadingWorkflows } = useArtifacts('Workflow', envId, componentId, { enabled: !isMI, active: isOnline });
 
   const isLoading = isMI ? loadingApis || loadingProxies || loadingInbound || loadingTasks : loadingServices || loadingAutomations || loadingWorkflows;
 

@@ -949,6 +949,32 @@ export function useLogFileContent(runtimeId: string, fileName: string, enabled =
   });
 }
 
+// ── OpenAPI Definitions ──
+// Packed by the swagger-pack compiler plugin (icp-runtime-bridge) and reported via the full
+// heartbeat; only BI runtimes with remoteManagement=true and at least one HTTP service have any.
+
+export interface GqlOpenApiDefinition {
+  fileName: string;
+  /** Raw OpenAPI document as a JSON string (no JSON scalar in this schema) - parse client-side. */
+  definition: string;
+}
+
+const OPENAPI_DEFINITIONS_BY_RUNTIME_QUERY = `
+  query OpenApiDefinitionsByRuntime($runtimeId: String!) {
+    openApiDefinitionsByRuntime(runtimeId: $runtimeId) {
+      fileName
+      definition
+    }
+  }`;
+
+export function useOpenApiDefinitionsByRuntime(runtimeId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['openApiDefinitions', runtimeId],
+    queryFn: () => gql<{ openApiDefinitionsByRuntime: GqlOpenApiDefinition[] }>(OPENAPI_DEFINITIONS_BY_RUNTIME_QUERY, { runtimeId }).then((d) => d.openApiDefinitionsByRuntime),
+    enabled: enabled && !!runtimeId,
+  });
+}
+
 // ============================================
 // Registry Browser Queries
 // ============================================

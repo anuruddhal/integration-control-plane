@@ -617,6 +617,19 @@ method_first  VARCHAR(20)
   INDEX idx_method_first (method_first)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- OpenAPI (Swagger) definitions packed into a BI runtime's JAR by the swagger-pack compiler
+-- plugin, reported via the full heartbeat's optional openApiDefinitions field.
+CREATE TABLE bi_service_openapi_definitions (
+  runtime_id  CHAR(36) NOT NULL,
+  file_name   VARCHAR(300) NOT NULL,
+  definition  JSON NOT NULL,
+  created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (runtime_id, file_name),
+  CONSTRAINT fk_bi_service_openapi_definitions_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes(runtime_id) ON DELETE CASCADE,
+  INDEX idx_runtime_id (runtime_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Listeners bound to a runtime (e.g., HTTP/HTTPS)
 CREATE TABLE bi_runtime_listener_artifacts (
     runtime_id CHAR(36) NOT NULL,
