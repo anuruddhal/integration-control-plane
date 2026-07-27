@@ -35,6 +35,9 @@ const string HB_REPLICA3_ID = "aa000001-test-test-test-000000000003";
 const string HB_RESTART_OLD_ID = "aa000001-test-test-test-000000000007";
 const string HB_RESTART_NEW_ID = "aa000001-test-test-test-000000000008";
 const string HB_RESTART_NAME = "hb-restart-test-unique-runtime";
+// Service-listener binding test: dedicated ID cleaned up via an AfterGroups
+// teardown so rows never leak when an assertion aborts the test.
+const string HB_SERVICE_LISTENER_ID = "aa000001-test-test-test-000000000010";
 
 // =============================================================================
 // Helpers
@@ -92,7 +95,7 @@ function cleanupRuntime(string runtimeId) {
     groups: ["heartbeat", "service-listener"]
 }
 function testServiceListenerBindingRoundTrip() returns error? {
-    string runtimeId = "aa000001-test-test-test-000000000010";
+    string runtimeId = HB_SERVICE_LISTENER_ID;
     cleanupRuntime(runtimeId);
 
     types:Heartbeat heartbeat = buildHeartbeat(runtimeId, "hb-service-listener-runtime");
@@ -137,8 +140,14 @@ function testServiceListenerBindingRoundTrip() returns error? {
         test:assertEquals(svc.listeners[0].port, 8080,
                 string `Service ${svc.name} listener should carry the enriched port`);
     }
+    // Cleanup is handled by afterServiceListenerTests (runs even if an assert aborts).
+}
 
-    cleanupRuntime(runtimeId);
+@test:AfterGroups {
+    value: ["service-listener"]
+}
+function afterServiceListenerTests() {
+    cleanupRuntime(HB_SERVICE_LISTENER_ID);
 }
 
 // =============================================================================

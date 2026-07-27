@@ -84,11 +84,14 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(resetTimer.current), []);
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(value).then(() => {
-      setCopied(true);
-      clearTimeout(resetTimer.current);
-      resetTimer.current = setTimeout(() => setCopied(false), 2000);
-    });
+    void navigator.clipboard
+      ?.writeText(value)
+      .then(() => {
+        setCopied(true);
+        clearTimeout(resetTimer.current);
+        resetTimer.current = setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => setCopied(false));
   }, [value]);
   return (
     <Tooltip title={copied ? 'Copied!' : `Copy ${label}`}>
@@ -628,6 +631,7 @@ function EntryPointsList({
           size="small"
           value={activeKey}
           onChange={(e) => setSelectedKey(e.target.value)}
+          inputProps={{ 'aria-label': 'Endpoint' }}
           sx={{ fontSize: '13px', width: '100%' }}
           renderValue={(val) => {
             const entry = allEntryPoints.find(({ artifact: a, type }) => `${type}::${type === 'Automation' ? a.packageName : a.name}` === val);
