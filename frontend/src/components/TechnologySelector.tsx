@@ -17,7 +17,7 @@
  */
 
 import { Box, Card, CardContent, Typography } from '@wso2/oxygen-ui';
-import type { JSX } from 'react';
+import { useRef, type JSX } from 'react';
 import { TECH_OPTIONS, type Technology } from '../constants/technologies';
 
 interface TechnologySelectorProps {
@@ -29,15 +29,29 @@ interface TechnologySelectorProps {
  * Card picker for the integration runtime, mirroring the devant integration-create
  * flow. Exposed as a radio group so the choice is reachable by keyboard and
  * addressable by role in tests — the cards are not native inputs.
+ *
+ * Keyboard model is the standard radio-group one: a roving tabIndex puts a single
+ * stop in the tab order, and the arrow keys move the selection between options.
  */
 export default function TechnologySelector({ selected, onSelect }: TechnologySelectorProps): JSX.Element {
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const moveSelection = (from: number, delta: number) => {
+    const next = (from + delta + TECH_OPTIONS.length) % TECH_OPTIONS.length;
+    onSelect(TECH_OPTIONS[next].id);
+    cardRefs.current[next]?.focus();
+  };
+
   return (
     <Box role="radiogroup" aria-label="Technology" sx={{ display: 'flex', gap: 2 }}>
-      {TECH_OPTIONS.map((opt) => {
+      {TECH_OPTIONS.map((opt, index) => {
         const isActive = selected === opt.id;
         return (
           <Card
             key={opt.id}
+            ref={(el: HTMLDivElement | null) => {
+              cardRefs.current[index] = el;
+            }}
             role="radio"
             aria-checked={isActive}
             aria-label={opt.label}
@@ -47,6 +61,16 @@ export default function TechnologySelector({ selected, onSelect }: TechnologySel
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 onSelect(opt.id);
+                return;
+              }
+              if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                moveSelection(index, 1);
+                return;
+              }
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                moveSelection(index, -1);
               }
             }}
             sx={{

@@ -17,7 +17,7 @@
  */
 
 import { Box, Card, CardContent, Tooltip, Typography } from '@wso2/oxygen-ui';
-import type { JSX } from 'react';
+import { useRef, type JSX } from 'react';
 import { INTEGRATION_TYPES, type IntegrationType } from '../constants/integrationTypes';
 
 interface IntegrationTypeSelectorProps {
@@ -29,15 +29,29 @@ interface IntegrationTypeSelectorProps {
  * Tile picker for the integration type, mirroring the devant integration-create
  * flow. Exposed as a radio group so the choice is reachable by keyboard and
  * addressable by role in tests — the tiles are not native inputs.
+ *
+ * Keyboard model is the standard radio-group one: a roving tabIndex puts a single
+ * stop in the tab order, and the arrow keys move the selection between options.
  */
 export default function IntegrationTypeSelector({ selected, onSelect }: IntegrationTypeSelectorProps): JSX.Element {
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const moveSelection = (from: number, delta: number) => {
+    const next = (from + delta + INTEGRATION_TYPES.length) % INTEGRATION_TYPES.length;
+    onSelect(INTEGRATION_TYPES[next].id);
+    cardRefs.current[next]?.focus();
+  };
+
   return (
     <Box role="radiogroup" aria-label="Integration Type" sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-      {INTEGRATION_TYPES.map((opt) => {
+      {INTEGRATION_TYPES.map((opt, index) => {
         const isActive = selected === opt.id;
         return (
           <Card
             key={opt.id}
+            ref={(el: HTMLDivElement | null) => {
+              cardRefs.current[index] = el;
+            }}
             role="radio"
             aria-checked={isActive}
             aria-label={opt.title}
@@ -47,6 +61,16 @@ export default function IntegrationTypeSelector({ selected, onSelect }: Integrat
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 onSelect(opt.id);
+                return;
+              }
+              if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                moveSelection(index, 1);
+                return;
+              }
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                moveSelection(index, -1);
               }
             }}
             sx={{

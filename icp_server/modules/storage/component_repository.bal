@@ -21,6 +21,32 @@ import ballerina/sql;
 import ballerina/time;
 import ballerina/uuid;
 
+// Integration types ICP records, encoded as devant encodes them. `service` is the
+// legacy value written before integrations carried a type; the rest are produced
+// by the create form. Adding an integration type means adding its value here.
+final readonly & string[] SUPPORTED_DISPLAY_TYPES = [
+    "service",
+    "ballerinaService",
+    "miApiService",
+    "scheduledTask",
+    "miCronjob",
+    "ballerinaEventHandler",
+    "miEventHandler"
+];
+
+// Subtypes for the integration types that share a generic service display_type
+// and cannot be told apart by it alone.
+final readonly & string[] SUPPORTED_COMPONENT_SUB_TYPES = [
+    "ballerinaFileIntegration",
+    "miFileIntegration",
+    "aiAgent",
+    "MCP"
+];
+
+// display_types a subtype may accompany. A subtype exists only to disambiguate a
+// generic service, so pairing one with e.g. `scheduledTask` is contradictory.
+final readonly & string[] SUB_TYPED_DISPLAY_TYPES = ["service", "ballerinaService", "miApiService"];
+
 // Create a new component
 public isolated function createComponent(types:ComponentInput component) returns types:Component|error? {
     string componentId = uuid:createType1AsString();
@@ -33,6 +59,20 @@ public isolated function createComponent(types:ComponentInput component) returns
     // a component created without an explicit type is a plain service.
     string displayType = component?.displayType ?: "service";
     string? componentSubType = component?.componentSubType;
+
+    // The column only constrains length, so reject unknown values here rather than
+    // persisting metadata that would later render as the wrong integration type.
+    if SUPPORTED_DISPLAY_TYPES.indexOf(displayType) is () {
+        return error(string `Unsupported integration type: ${displayType}`);
+    }
+    if componentSubType is string {
+        if SUPPORTED_COMPONENT_SUB_TYPES.indexOf(componentSubType) is () {
+            return error(string `Unsupported integration subtype: ${componentSubType}`);
+        }
+        if SUB_TYPED_DISPLAY_TYPES.indexOf(displayType) is () {
+            return error(string `Integration subtype ${componentSubType} is not valid for integration type ${displayType}`);
+        }
+    }
 
     sql:ParameterizedQuery insertQuery = `INSERT INTO components (component_id, project_id, name, display_name, description, component_type, display_type, component_sub_type, created_by)
                                           VALUES (${componentId}, ${component.projectId}, ${component.name}, ${displayName}, ${component.description}, ${componentTypeValue}, ${displayType}, ${componentSubType}, ${component.createdBy})`;
