@@ -29,8 +29,13 @@ public isolated function createComponent(types:ComponentInput component) returns
     // Use displayName if provided, otherwise fall back to name
     string displayName = component?.displayName ?: component.name;
 
-    sql:ParameterizedQuery insertQuery = `INSERT INTO components (component_id, project_id, name, display_name, description, component_type, created_by) 
-                                          VALUES (${componentId}, ${component.projectId}, ${component.name}, ${displayName}, ${component.description}, ${componentTypeValue}, ${component.createdBy})`;
+    // "service" keeps pre-integration-type clients (and the DB default) working:
+    // a component created without an explicit type is a plain service.
+    string displayType = component?.displayType ?: "service";
+    string? componentSubType = component?.componentSubType;
+
+    sql:ParameterizedQuery insertQuery = `INSERT INTO components (component_id, project_id, name, display_name, description, component_type, display_type, component_sub_type, created_by)
+                                          VALUES (${componentId}, ${component.projectId}, ${component.name}, ${displayName}, ${component.description}, ${componentTypeValue}, ${displayType}, ${componentSubType}, ${component.createdBy})`;
     var result = dbClient->execute(insertQuery);
     if result is sql:Error {
         log:printError(string `Failed to create component: ${component.name}`, 'error = result);
@@ -69,7 +74,8 @@ public isolated function getComponents(string? projectId, types:ComponentOptions
     }
 
     sql:ParameterizedQuery selectClause = `SELECT c.component_id, c.project_id, c.name as component_name, c.display_name as component_display_name, c.description as component_description, 
-                                                  c.component_type, c.created_by as component_created_by, c.created_at as component_created_at, c.updated_at as component_updated_at,
+                                                  c.component_type, c.display_type as component_display_type, c.component_sub_type,
+                                                  c.created_by as component_created_by, c.created_at as component_created_at, c.updated_at as component_updated_at,
                                                   c.updated_by as component_updated_by,
                                                   p.org_id as project_org_id, p.name as project_name, p.version as project_version, 
                                                   p.created_date as project_created_date, p.handler as project_handler, p.region as project_region,
@@ -101,7 +107,8 @@ public isolated function getComponentsByProjectIds(string[] projectIds, types:Co
     types:Component[] components = [];
 
     sql:ParameterizedQuery selectClause = `SELECT c.component_id, c.project_id, c.name as component_name, c.display_name as component_display_name, c.description as component_description, 
-                                                  c.component_type, c.created_by as component_created_by, c.created_at as component_created_at, c.updated_at as component_updated_at,
+                                                  c.component_type, c.display_type as component_display_type, c.component_sub_type,
+                                                  c.created_by as component_created_by, c.created_at as component_created_at, c.updated_at as component_updated_at,
                                                   c.updated_by as component_updated_by,
                                                   p.org_id as project_org_id, p.name as project_name, p.version as project_version, 
                                                   p.created_date as project_created_date, p.handler as project_handler, p.region as project_region,
@@ -149,7 +156,8 @@ public isolated function getComponentsByIds(string[] componentIds) returns types
     types:Component[] components = [];
 
     sql:ParameterizedQuery selectClause = `SELECT c.component_id, c.project_id, c.name as component_name, c.display_name as component_display_name, c.description as component_description, 
-                                                  c.component_type, c.created_by as component_created_by, c.created_at as component_created_at, c.updated_at as component_updated_at,
+                                                  c.component_type, c.display_type as component_display_type, c.component_sub_type,
+                                                  c.created_by as component_created_by, c.created_at as component_created_at, c.updated_at as component_updated_at,
                                                   c.updated_by as component_updated_by,
                                                   p.org_id as project_org_id, p.name as project_name, p.version as project_version, 
                                                   p.created_date as project_created_date, p.handler as project_handler, p.region as project_region,
@@ -203,7 +211,8 @@ public isolated function getProjectIdByComponentId(string componentId) returns s
 public isolated function getComponentById(string componentId) returns types:Component|error {
     stream<types:ComponentInDB, sql:Error?> componentStream =
         dbClient->query(`SELECT c.component_id, c.project_id, c.name as component_name, c.display_name as component_display_name, c.description as component_description, 
-                                c.component_type, c.created_by as component_created_by, c.created_at as component_created_at, c.updated_at as component_updated_at,
+                                c.component_type, c.display_type as component_display_type, c.component_sub_type,
+                                c.created_by as component_created_by, c.created_at as component_created_at, c.updated_at as component_updated_at,
                                 c.updated_by as component_updated_by,
                                 p.org_id as project_org_id, p.name as project_name, p.version as project_version, 
                                 p.created_date as project_created_date, p.handler as project_handler, p.region as project_region,
@@ -262,7 +271,8 @@ public isolated function getComponentNameById(string componentId) returns string
 public isolated function getComponentByProjectAndHandler(string projectId, string handler) returns types:Component?|error {
     stream<types:ComponentInDB, sql:Error?> componentStream =
         dbClient->query(`SELECT c.component_id, c.project_id, c.name as component_name, c.display_name as component_display_name, c.description as component_description,
-                                c.component_type, c.created_by as component_created_by, c.created_at as component_created_at, c.updated_at as component_updated_at,
+                                c.component_type, c.display_type as component_display_type, c.component_sub_type,
+                                c.created_by as component_created_by, c.created_at as component_created_at, c.updated_at as component_updated_at,
                                 c.updated_by as component_updated_by,
                                 p.org_id as project_org_id, p.name as project_name, p.version as project_version,
                                 p.created_date as project_created_date, p.handler as project_handler, p.region as project_region,
@@ -558,7 +568,7 @@ isolated function mapToComponent(types:ComponentInDB component) returns types:Co
         name: component.component_name,
         handler: component.component_name,
         displayName: component.component_display_name ?: component.component_name,
-        displayType: "service",
+        displayType: component.component_display_type ?: "service",
         description: component.component_description,
         status: "active",
         initStatus: "completed",
@@ -566,7 +576,7 @@ isolated function mapToComponent(types:ComponentInDB component) returns types:Co
         createdAt: component.component_created_at ?: "",
         lastBuildDate: component.component_updated_at,
         updatedAt: component.component_updated_at,
-        componentSubType: (),
+        componentSubType: component.component_sub_type,
         componentType: component.component_type == "MI" ? types:MI : types:BI,
         labels: (),
         isSystemComponent: false,
