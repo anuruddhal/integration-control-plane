@@ -47,6 +47,23 @@ final readonly & string[] SUPPORTED_COMPONENT_SUB_TYPES = [
 // generic service, so pairing one with e.g. `scheduledTask` is contradictory.
 final readonly & string[] SUB_TYPED_DISPLAY_TYPES = ["service", "ballerinaService", "miApiService"];
 
+// The columns only constrain length, so reject unknown values before they are
+// persisted and later render as the wrong integration type.
+isolated function validateIntegrationMetadata(string displayType, string? componentSubType) returns error? {
+    if SUPPORTED_DISPLAY_TYPES.indexOf(displayType) is () {
+        return error(string `Unsupported integration type: ${displayType}`);
+    }
+    if componentSubType is string {
+        if SUPPORTED_COMPONENT_SUB_TYPES.indexOf(componentSubType) is () {
+            return error(string `Unsupported integration subtype: ${componentSubType}`);
+        }
+        if SUB_TYPED_DISPLAY_TYPES.indexOf(displayType) is () {
+            return error(string `Integration subtype ${componentSubType} is not valid for integration type ${displayType}`);
+        }
+    }
+    return ();
+}
+
 // Create a new component
 public isolated function createComponent(types:ComponentInput component) returns types:Component|error? {
     string componentId = uuid:createType1AsString();
@@ -60,19 +77,7 @@ public isolated function createComponent(types:ComponentInput component) returns
     string displayType = component?.displayType ?: "service";
     string? componentSubType = component?.componentSubType;
 
-    // The column only constrains length, so reject unknown values here rather than
-    // persisting metadata that would later render as the wrong integration type.
-    if SUPPORTED_DISPLAY_TYPES.indexOf(displayType) is () {
-        return error(string `Unsupported integration type: ${displayType}`);
-    }
-    if componentSubType is string {
-        if SUPPORTED_COMPONENT_SUB_TYPES.indexOf(componentSubType) is () {
-            return error(string `Unsupported integration subtype: ${componentSubType}`);
-        }
-        if SUB_TYPED_DISPLAY_TYPES.indexOf(displayType) is () {
-            return error(string `Integration subtype ${componentSubType} is not valid for integration type ${displayType}`);
-        }
-    }
+    check validateIntegrationMetadata(displayType, componentSubType);
 
     sql:ParameterizedQuery insertQuery = `INSERT INTO components (component_id, project_id, name, display_name, description, component_type, display_type, component_sub_type, created_by)
                                           VALUES (${componentId}, ${component.projectId}, ${component.name}, ${displayName}, ${component.description}, ${componentTypeValue}, ${displayType}, ${componentSubType}, ${component.createdBy})`;
@@ -376,7 +381,11 @@ public isolated function deleteComponent(string componentId) returns error? {
 }
 
 // Update component name and/or description
-public isolated function updateComponent(string componentId, string? name, string? displayName, string? description, string updatedBy) returns error? {
+// `displayType` and `componentSubType` are written as a pair: a subtype only
+// qualifies a display_type, so passing a displayType clears any stale subtype when
+// componentSubType is nil. Passing displayType as nil leaves both columns alone.
+public isolated function updateComponent(string componentId, string? name, string? displayName, string? description, string updatedBy,
+        string? displayType = (), string? componentSubType = ()) returns error? {
     sql:ParameterizedQuery whereClause = ` WHERE component_id = ${componentId} `;
     sql:ParameterizedQuery updateFields = ` SET updated_at = CURRENT_TIMESTAMP, updated_by = ${updatedBy} `;
 
@@ -388,6 +397,10 @@ public isolated function updateComponent(string componentId, string? name, strin
     }
     if description is string {
         updateFields = sql:queryConcat(updateFields, `, description = ${description} `);
+    }
+    if displayType is string {
+        check validateIntegrationMetadata(displayType, componentSubType);
+        updateFields = sql:queryConcat(updateFields, `, display_type = ${displayType}, component_sub_type = ${componentSubType} `);
     }
 
     sql:ParameterizedQuery updateQuery = sql:queryConcat(`UPDATE components `, updateFields, whereClause);

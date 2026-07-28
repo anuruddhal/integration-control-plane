@@ -2727,7 +2727,8 @@ service /graphql on graphqlListener {
         }
 
         // Call the existing backend method to maintain consistency
-        check storage:updateComponent(targetComponentId, targetName, targetDisplayName, targetDescription, userContext.userId);
+        check storage:updateComponent(targetComponentId, targetName, targetDisplayName, targetDescription, userContext.userId,
+                component.displayType, component.componentSubType);
         storage:logAuditEvent(storage:AUDIT_COMPONENT_UPDATE, userId = userContext.userId,
                 resourceType = storage:AUDIT_RESOURCE_COMPONENT, resourceId = targetComponentId,
                 details = string `Component '${targetName ?: targetComponentId}' updated by '${userContext.username}'`,
