@@ -74,11 +74,11 @@ export const ARTIFACT_TABS: Record<string, string[]> = {
 export const DEFAULT_ARTIFACT_TABS = ['Source', 'Runtimes'];
 
 export const ENTRY_POINT_CONFIG: Record<string, { label: string; detailLabel: string; color: string; bgColor: string; metaField?: string; primaryDisplay?: boolean; overviewFields?: string }> = {
-  RestApi: { label: 'API', detailLabel: 'REST API', color: '#1565c0', bgColor: '#e3f2fd', metaField: 'context', overviewFields: 'context, url' },
+  RestApi: { label: 'API', detailLabel: 'REST API', color: '#1565c0', bgColor: '#e3f2fd', metaField: 'context' },
   ProxyService: { label: 'Proxy', detailLabel: 'PROXY SERVICE', color: '#e65100', bgColor: '#fff3e0' },
   InboundEndpoint: { label: 'Inbound', detailLabel: 'INBOUND ENDPOINT', color: '#2e7d32', bgColor: '#e8f5e9', metaField: 'protocol', overviewFields: 'protocol, sequence, onError' },
-  Task: { label: 'Task', detailLabel: 'TASK', color: '#00695c', bgColor: '#e0f2f1', overviewFields: 'group, class' },
-  Service: { label: 'Service', detailLabel: 'SERVICE', color: '#4a148c', bgColor: '#f3e5f5', metaField: 'basePath', primaryDisplay: true, overviewFields: 'package, basePath, type' },
+  Task: { label: 'Task', detailLabel: 'TASK', color: '#00695c', bgColor: '#e0f2f1' },
+  Service: { label: 'Service', detailLabel: 'SERVICE', color: '#4a148c', bgColor: '#f3e5f5', metaField: 'basePath', primaryDisplay: true, overviewFields: 'package, type' },
   Listener: { label: 'Listener', detailLabel: 'LISTENER', color: '#bf360c', bgColor: '#fbe9e7', metaField: 'port', primaryDisplay: true, overviewFields: 'package, protocol, host, port' },
   Automation: { label: 'Automation', detailLabel: 'AUTOMATION', color: '#f57c00', bgColor: '#fff3e0', metaField: 'packageVersion', overviewFields: 'packageOrg, packageName, packageVersion' },
   Workflow: { label: 'Workflow', detailLabel: 'WORKFLOW', color: '#00838f', bgColor: '#e0f7fa', overviewFields: 'state, workerCount' },
@@ -89,7 +89,7 @@ export const ENTRY_POINT_DETAIL_TABS: Record<string, string[]> = {
   ProxyService: ['Overview', 'Runtimes'],
   InboundEndpoint: ['Overview', 'Runtimes'],
   Task: ['Runtimes'],
-  Service: ['Overview', 'Resources', 'Runtimes'],
+  Service: ['Overview', 'Resources', 'Listeners', 'Runtimes'],
   Listener: ['Overview', 'Runtimes'],
   Workflow: ['Overview', 'Runtimes'],
 };

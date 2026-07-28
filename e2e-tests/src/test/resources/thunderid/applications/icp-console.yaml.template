@@ -1,0 +1,53 @@
+id: 8b215f89-96f7-48dd-ae2b-3f9e3a6d15d1
+ouHandle: default
+name: ICP E2E Console
+url: {{BASE_URL}}
+contacts:
+  - admin@example.com
+authFlowHandle: default-flow
+isRegistrationFlowEnabled: false
+isRecoveryFlowEnabled: false
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+allowedUserTypes:
+  - Person
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: ICP_CONSOLE
+      clientSecret: icp-console-secret
+      redirectUris:
+        - {{BASE_URL}}/sso/callback
+      grantTypes:
+        - authorization_code
+      responseTypes:
+        - code
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+            attributes:
+              - email
+              - name
+        idToken:
+          validityPeriod: 3600
+          userAttributes:
+            - email
+            - name
+          responseType: JWT
+      userInfo:
+        responseType: JSON
+        userAttributes:
+          - email
+          - name
+      scopeClaims:
+        email:
+          - email
+        profile:
+          - name

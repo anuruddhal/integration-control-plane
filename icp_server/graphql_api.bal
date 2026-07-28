@@ -858,6 +858,35 @@ service /graphql on graphqlListener {
         return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
+    // Get the OpenAPI (Swagger) definitions packed into a BI runtime's JAR by the
+    // swagger-pack compiler plugin, reported via the full heartbeat.
+    isolated resource function get openApiDefinitionsByRuntime(graphql:Context context, string runtimeId) returns types:OpenApiDefinitionRecord[]|error {
+        types:UserContextV2 userContext = check extractUserContext(context);
+
+        // First, fetch the runtime to verify access to its environment
+        types:Runtime? runtime = check storage:getRuntimeById(runtimeId);
+
+        if runtime is () {
+            return error("Runtime not found");
+        }
+
+        // Build scope with project, integration, and environment
+        types:AccessScope scope = {
+            orgUuid: 1,
+            projectUuid: runtime.component.projectId,
+            integrationUuid: runtime.component.id,
+            envUuid: runtime.environment.id
+        };
+
+        // Verify user has view, edit, or manage permission
+        if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
+            log:printWarn("Attempt to access runtime OpenAPI definitions without permission", userId = userContext.userId, runtimeId = runtimeId);
+            return [];
+        }
+
+        return check storage:getOpenApiDefinitionsForRuntime(runtimeId);
+    }
+
     // Get services for a specific environment and component
     isolated resource function get servicesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:ServicesPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);

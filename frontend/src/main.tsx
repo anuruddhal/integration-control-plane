@@ -27,9 +27,18 @@ import { AuthProvider } from './auth/AuthContext';
 import { loadConfig } from './config/api';
 import { AccessControlProvider } from './contexts/AccessControlContext';
 import { NotificationsProvider } from './contexts/NotificationsContext';
+import { AuthError } from './api/graphql';
 import './index.css';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Never retry auth failures — the token is gone and navigation to login has already
+      // been triggered. Retrying only keeps the UI stuck in a loading state.
+      retry: (failureCount, error) => !(error instanceof AuthError) && failureCount < 3,
+    },
+  },
+});
 
 // Load runtime configuration before rendering the app
 loadConfig().then(() => {

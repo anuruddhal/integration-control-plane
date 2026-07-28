@@ -22,29 +22,24 @@ on:
       - main
 
 jobs:
-  test:
-    name: Run Ballerina Tests
+  build:
+    name: Build, test and coverage
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: "22.19.0"
+          persist-credentials: false
 
-      - name: Check Prettier formatting
-        run: |
-          cd frontend
-          npx prettier --check .
-
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "17"
+          java-version: "21"
 
       - name: Setup Ballerina
         uses: ballerina-platform/setup-ballerina@v1.1.0
@@ -61,6 +56,11 @@ jobs:
         with:
           version: 8
 
+      - name: Check Prettier formatting
+        run: |
+          cd frontend
+          npx prettier --check .
+
       - name: Install frontend dependencies
         run: |
           cd frontend
@@ -69,30 +69,32 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Build with Gradle
-        run: ./gradlew build
+      # OpenSearch (E2E observability) needs a higher mmap count than the runner default.
+      - name: Raise vm.max_map_count for OpenSearch
+        run: sudo sysctl -w vm.max_map_count=262144
 
-      - name: Initialize H2 Databases
-        run: |
-          cd icp_server
-          ../gradlew initH2Database initH2CredentialsDatabase
+      - name: Build (unit on H2 + E2E on MySQL + combined coverage)
+        # A single `build` runs the Ballerina unit tests (self-contained H2, no MySQL) and the E2E
+        # suite (MySQL via Testcontainers), then emits the combined line-coverage report from both
+        # dumps. Add -Picp.coverage.min=<pct> to gate on combined coverage.
+        run: ./gradlew --no-daemon -PplaywrightWithDeps build
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and run tests with Docker Compose
-        run: |
-          cd icp_server
-          docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from icp-server-test
-
-      - name: Get test results
+      - name: Upload combined coverage report
         if: always()
-        run: |
-          cd icp_server
-          docker compose -f docker-compose.test.yml logs icp-server-test
+        uses: actions/upload-artifact@v6
+        with:
+          name: combined-coverage
+          path: e2e-tests/build/reports/combined/coverage/
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Clean up
+      - name: Upload E2E reports
         if: always()
-        run: |
-          cd icp_server
-          docker compose -f docker-compose.test.yml down -v
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-reports
+          path: |
+            e2e-tests/build/reports/
+            e2e-tests/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

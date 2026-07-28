@@ -684,6 +684,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns string?|error
 isolated function insertRuntimeArtifacts(string runtimeId, types:Heartbeat heartbeat) returns error? {
     // Delete existing BI services and resources for this runtime before inserting
     _ = check dbClient->execute(`DELETE FROM bi_service_resource_artifacts WHERE runtime_id = ${runtimeId}`);
+    _ = check dbClient->execute(`DELETE FROM bi_service_listener_bindings WHERE runtime_id = ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM bi_service_artifacts WHERE runtime_id = ${runtimeId}`);
 
     // Insert services
@@ -697,6 +698,24 @@ isolated function insertRuntimeArtifacts(string runtimeId, types:Heartbeat heart
                 ${serviceDetail.state}
             )
         `);
+
+        // Persist which listener(s) this service is attached to (dedup by name).
+        // The heartbeat sends serviceDetail.listeners as name-only entries; we key
+        // them to bi_runtime_listener_artifacts by (runtime_id, listener_name).
+        string[] boundListenerNames = [];
+        foreach types:Listener boundListener in serviceDetail.listeners {
+            if boundListenerNames.indexOf(boundListener.name) is () {
+                boundListenerNames.push(boundListener.name);
+                _ = check dbClient->execute(`
+                    INSERT INTO bi_service_listener_bindings (
+                        runtime_id, service_name, service_package, listener_name
+                    ) VALUES (
+                        ${runtimeId}, ${serviceDetail.name},
+                        ${serviceDetail.package}, ${boundListener.name}
+                    )
+                `);
+            }
+        }
 
         // Group resources by URL and merge methods to handle duplicates
         map<string[]> resourcesByUrl = {};
@@ -812,6 +831,40 @@ isolated function insertRuntimeArtifacts(string runtimeId, types:Heartbeat heart
     check insertMIArtifacts(runtimeId, heartbeat);
     check insertAdditionalMIArtifacts(runtimeId, heartbeat);
     check insertRuntimeLogLevels(runtimeId, heartbeat);
+    check upsertOpenApiDefinitions(runtimeId, heartbeat);
+}
+
+// Delete existing packed OpenAPI (Swagger) definitions for this runtime and insert the ones
+// from this heartbeat, if any. Runtimes that don't report any (remoteManagement disabled, no
+// HTTP services, or non-BI runtime types) simply end up with no rows, same as before.
+isolated function upsertOpenApiDefinitions(string runtimeId, types:Heartbeat heartbeat) returns error? {
+    _ = check dbClient->execute(`DELETE FROM bi_service_openapi_definitions WHERE runtime_id = ${runtimeId}`);
+
+    map<json>? openApiDefinitions = heartbeat?.openApiDefinitions;
+    if openApiDefinitions is () {
+        return;
+    }
+
+    foreach [string, json] [fileName, definition] in openApiDefinitions.entries() {
+        string definitionJson = definition.toJsonString();
+        if dbType == POSTGRESQL {
+            _ = check dbClient->execute(`
+                INSERT INTO bi_service_openapi_definitions (
+                    runtime_id, file_name, definition
+                ) VALUES (
+                    ${runtimeId}, ${fileName}, ${definitionJson}::jsonb
+                )
+            `);
+        } else {
+            _ = check dbClient->execute(`
+                INSERT INTO bi_service_openapi_definitions (
+                    runtime_id, file_name, definition
+                ) VALUES (
+                    ${runtimeId}, ${fileName}, ${definitionJson}
+                )
+            `);
+        }
+    }
 }
 
 isolated function deleteMIArtifacts(string runtimeId) returns error? {
@@ -844,6 +897,7 @@ isolated function deleteExistingArtifacts(string runtimeId) returns error? {
     _ = check dbClient->execute(`DELETE FROM bi_automation_artifacts WHERE runtime_id = ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM bi_automation_execution_history WHERE runtime_id = ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM bi_runtime_log_levels WHERE runtime_id = ${runtimeId}`);
+    _ = check dbClient->execute(`DELETE FROM bi_service_openapi_definitions WHERE runtime_id = ${runtimeId}`);
     check deleteMIArtifacts(runtimeId);
 }
 

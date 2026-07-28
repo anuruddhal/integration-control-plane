@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inboundEndpoint xmlns="http://ws.apache.org/ns/synapse"
+                 name="SampleInboundEndpoint"
+                 sequence="SampleSequence"
+                 onError="fault"
+                 protocol="http"
+                 suspend="false">
+    <parameters>
+        <parameter name="inbound.http.port">{{INBOUND_PORT}}</parameter>
+    </parameters>
+</inboundEndpoint>

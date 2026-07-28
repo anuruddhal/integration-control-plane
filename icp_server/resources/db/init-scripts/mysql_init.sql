@@ -94,6 +94,8 @@ CREATE TABLE components (
     display_name VARCHAR(200) NOT NULL,
     description TEXT NULL,
     component_type ENUM('MI', 'BI') NOT NULL DEFAULT 'BI',
+    display_type VARCHAR(50) NOT NULL DEFAULT 'service',
+    component_sub_type VARCHAR(50) NULL,
     created_by CHAR(36) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_by CHAR(36) NULL,
@@ -617,6 +619,19 @@ method_first  VARCHAR(20)
   INDEX idx_method_first (method_first)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- OpenAPI (Swagger) definitions packed into a BI runtime's JAR by the swagger-pack compiler
+-- plugin, reported via the full heartbeat's optional openApiDefinitions field.
+CREATE TABLE bi_service_openapi_definitions (
+  runtime_id  CHAR(36) NOT NULL,
+  file_name   VARCHAR(300) NOT NULL,
+  definition  JSON NOT NULL,
+  created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (runtime_id, file_name),
+  CONSTRAINT fk_bi_service_openapi_definitions_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes(runtime_id) ON DELETE CASCADE,
+  INDEX idx_runtime_id (runtime_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Listeners bound to a runtime (e.g., HTTP/HTTPS)
 CREATE TABLE bi_runtime_listener_artifacts (
     runtime_id CHAR(36) NOT NULL,
@@ -637,6 +652,22 @@ CREATE TABLE bi_runtime_listener_artifacts (
     INDEX idx_listener_name (listener_name),
     INDEX idx_protocol (protocol),
     INDEX idx_state (state)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- Service-to-listener bindings: which listener(s) each service is attached to.
+-- Populated from heartbeat.artifacts.services[].listeners (name-only) and keyed to
+-- bi_runtime_listener_artifacts by (runtime_id, listener_name). Many-to-many:
+-- a service may bind multiple listeners; a listener may serve multiple services.
+CREATE TABLE bi_service_listener_bindings (
+    runtime_id CHAR(36) NOT NULL,
+    service_name VARCHAR(100) NOT NULL,
+    service_package VARCHAR(200) NOT NULL,
+    listener_name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (runtime_id, service_name, service_package, listener_name),
+    CONSTRAINT fk_bi_slb_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE,
+    INDEX idx_slb_service (runtime_id, service_name, service_package),
+    INDEX idx_slb_listener (runtime_id, listener_name)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- Automation artifacts (main function) for BI integrations

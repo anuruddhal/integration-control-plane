@@ -107,6 +107,8 @@ CREATE TABLE components (
     component_type VARCHAR(10) NOT NULL DEFAULT 'BI' CHECK (
         component_type IN ('MI', 'BI')
     ),
+    display_type VARCHAR(50) NOT NULL DEFAULT 'service',
+    component_sub_type VARCHAR(50),
     created_by CHAR(36),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_by CHAR(36),
@@ -792,6 +794,20 @@ CREATE INDEX idx_bi_service_resource_artifacts_resource_url ON bi_service_resour
 
 CREATE INDEX idx_bi_service_resource_artifacts_method_first ON bi_service_resource_artifacts (method_first);
 
+-- OpenAPI (Swagger) definitions packed into a BI runtime's JAR by the swagger-pack compiler
+-- plugin, reported via the full heartbeat's optional openApiDefinitions field.
+CREATE TABLE bi_service_openapi_definitions (
+    runtime_id CHAR(36) NOT NULL,
+    file_name VARCHAR(300) NOT NULL,
+    definition CLOB NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (runtime_id, file_name),
+    CONSTRAINT fk_bi_service_openapi_definitions_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_bi_service_openapi_definitions_runtime_id ON bi_service_openapi_definitions (runtime_id);
+
 -- Listeners bound to a runtime (e.g., HTTP/HTTPS)
 CREATE TABLE bi_runtime_listener_artifacts (
     runtime_id CHAR(36) NOT NULL,
@@ -814,6 +830,23 @@ CREATE INDEX idx_bi_runtime_listener_artifacts_listener_name ON bi_runtime_liste
 CREATE INDEX idx_bi_runtime_listener_artifacts_protocol ON bi_runtime_listener_artifacts (protocol);
 
 CREATE INDEX idx_bi_runtime_listener_artifacts_state ON bi_runtime_listener_artifacts (state);
+
+-- Service-to-listener bindings: which listener(s) each service is attached to.
+-- Populated from heartbeat.artifacts.services[].listeners (name-only) and keyed to
+-- bi_runtime_listener_artifacts by (runtime_id, listener_name).
+CREATE TABLE bi_service_listener_bindings (
+    runtime_id CHAR(36) NOT NULL,
+    service_name VARCHAR(100) NOT NULL,
+    service_package VARCHAR(200) NOT NULL,
+    listener_name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (runtime_id, service_name, service_package, listener_name),
+    CONSTRAINT fk_bi_slb_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_slb_service ON bi_service_listener_bindings (runtime_id, service_name, service_package);
+
+CREATE INDEX idx_slb_listener ON bi_service_listener_bindings (runtime_id, listener_name);
 
 -- Automation artifacts (main function) for BI integrations
 CREATE TABLE bi_automation_artifacts (

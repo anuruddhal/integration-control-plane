@@ -33,11 +33,12 @@ import {
   Drawer,
   FormControlLabel,
   IconButton,
-  InputAdornment,
   Link,
   List,
   ListItem,
   ListItemText,
+  MenuItem,
+  Select,
   Snackbar,
   Alert,
   Stack,
@@ -46,15 +47,15 @@ import {
   Tooltip,
   Typography,
 } from '@wso2/oxygen-ui';
-import { RefreshCw, ListFilter, LayoutGrid, Server, Settings, Play, Square, Plus, X, Trash2, UserPlus, Code, Sliders, Link as LinkIcon, FileText } from '@wso2/oxygen-ui-icons-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { RefreshCw, ListFilter, LayoutGrid, Server, Settings, Play, Square, Plus, X, Trash2, UserPlus, Code, Sliders, Link as LinkIcon, FileText, BookOpen, Package, Tag, Check, Copy, Layers } from '@wso2/oxygen-ui-icons-react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useArtifacts, useRefreshEnvironmentArtifacts, useComponentRuntimes, type GqlArtifact, type GqlEnvironment } from '../api/queries';
 import { useUpdateArtifactTracingStatus, useUpdateArtifactStatisticsStatus } from '../api/artifactToggleMutations';
 import { useUpdateArtifactStatus, useUpdateListenerState, useTriggerTask } from '../api/mutations';
 import { useListMiUsers, useCreateMiUser, useDeleteMiUser } from '../api/miUsers';
-import { ArtifactApiDefinition, ServiceResources, AutomationExecutions, ProxyApiReference } from './ArtifactTabs';
+import { ArtifactApiDefinition, ServiceResources, ServiceListeners, AutomationExecutions, ProxyApiReference } from './ArtifactTabs';
 import { SchemaDisclosure } from './workflow/shared';
 import { StartWorkflowDialog, type Toast as WorkflowToast } from './workflow/AdminPortal';
 import { ArtifactTypeSelector } from './ArtifactDetail';
@@ -64,14 +65,64 @@ import { resourceUrl, useScope } from '../nav';
 import { ENTRY_POINT_CONFIG, ENTRY_POINT_DETAIL_TABS, type SelectedArtifact, type TabProps } from './artifact-config';
 import SyncSwitch from './SyncSwitch';
 
+// Stable reference for useArtifacts' `data` fallback — a fresh `[]` literal on every render (the
+// default in `const { data: x = [] } = ...`) changes identity even when the query is disabled and
+// data is genuinely unchanged, which cascades through downstream useMemo/useEffect chains and can
+// trigger a render loop (e.g. EntryPointsList's onSelectionChange effect).
+const EMPTY_ARTIFACTS: GqlArtifact[] = [];
+
+function toEnabled(value: unknown) {
+  if (typeof value === 'boolean') return value;
+  const normalized = (value ?? '').toString().toLowerCase();
+  return normalized === 'enabled' || normalized === 'active' || normalized === 'true';
+}
+
+// Small colored tag identifying an entry point's artifact type (API, Proxy, Inbound, Task…) — used
+// in the MI entry point picker, where several artifact types are mixed into a single list.
+function EntryTypeChip({ cfg }: { cfg?: { label: string; color: string; bgColor: string } }) {
+  if (!cfg) return null;
+  return <Chip label={cfg.label} size="small" sx={{ bgcolor: cfg.bgColor, color: cfg.color, fontWeight: 700, fontSize: 11, minWidth: 60, justifyContent: 'center' }} />;
+}
+
+// Mirrors devant's EndpointUrlsPanel CopyButton — same 2s "Copied!" revert and icon sizing.
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(resetTimer.current), []);
+  const handleCopy = useCallback(() => {
+    void navigator.clipboard
+      ?.writeText(value)
+      .then(() => {
+        setCopied(true);
+        clearTimeout(resetTimer.current);
+        resetTimer.current = setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => setCopied(false));
+  }, [value]);
+  return (
+    <Tooltip title={copied ? 'Copied!' : `Copy ${label}`}>
+      <IconButton size="small" onClick={handleCopy} sx={{ p: 0.25, flexShrink: 0 }}>
+        {copied ? <Check size={13} /> : <Copy size={13} />}
+      </IconButton>
+    </Tooltip>
+  );
+}
+
+// swagger-ui-react is ~1.3MB gzipped - code-split it out of the main bundle since it's only
+// needed when a user actually opens the API docs drawer for a BI service.
+const OpenApiDefinitionsDrawer = lazy(() => import('./OpenApiDefinitionsDrawer').then((m) => ({ default: m.OpenApiDefinitionsDrawer })));
+
 function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArtifact; onOpenDrawerTab: (tab: string) => void }) {
   const [tracingEnabled, setTracingEnabled] = useState(false);
   const [statisticsEnabled, setStatisticsEnabled] = useState(false);
   const [statusEnabled, setStatusEnabled] = useState(false);
-  const [listenerEnabled, setListenerEnabled] = useState(false);
   const [pendingToggle, setPendingToggle] = useState<{ type: 'tracing' | 'statistics' | 'status'; checked: boolean } | null>(null);
+  const [listenerEnabled, setListenerEnabled] = useState(false);
   const [pendingListenerToggle, setPendingListenerToggle] = useState<{ checked: boolean } | null>(null);
-  const pendingActionRef = useRef<'START' | 'STOP' | null>(null);
+  // Which direction is actually in flight — drives each button's own busy label, so a
+  // Disable action in progress can't make the (now-visible) Enable button say "Enabling…".
+  const [pendingListenerAction, setPendingListenerAction] = useState<'START' | 'STOP' | null>(null);
+  const [listenerToggleError, setListenerToggleError] = useState<string | null>(null);
   const [triggerConfirmDialogOpen, setTriggerConfirmDialogOpen] = useState(false);
   const [triggerSuccessMessage, setTriggerSuccessMessage] = useState<string | null>(null);
   const [startWorkflowOpen, setStartWorkflowOpen] = useState(false);
@@ -91,9 +142,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const artifactState = artifact.state?.toString();
   const overviewFields = (config?.overviewFields ?? '').split(', ').filter(Boolean);
   const showTracingToggle = ['RestApi', 'ProxyService', 'InboundEndpoint'].includes(artifactType);
-  const showRuntimesButton = true; // Show View Runtimes button for all entry points
   const showParametersButton = artifactType === 'InboundEndpoint';
-  const showSourceButton = ['RestApi', 'ProxyService', 'InboundEndpoint', 'Task'].includes(artifactType);
   const showInstancesButton = artifactType === 'Workflow';
   const showWsdlButton = artifactType === 'ProxyService';
   const showStatisticsToggle = ['RestApi', 'ProxyService', 'InboundEndpoint'].includes(artifactType);
@@ -103,14 +152,29 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const showTaskToggle = artifactType === 'Task';
   const showTaskTrigger = artifactType === 'Task';
   const hasRuntimes = artifact.runtimes && Array.isArray(artifact.runtimes) && artifact.runtimes.length > 0;
+  const artifactRuntimes = (artifact.runtimes as Array<{ runtimeId: string; status: string }> | undefined) ?? [];
+  const showApiDocsButton = artifactType === 'Service' && Boolean(hasRuntimes);
+  // A Service can have multiple runtime instances (e.g. one per environment/replica); they all
+  // run the same deployed code, so any instance's packed OpenAPI docs are representative. Prefer
+  // a RUNNING one so the "Try it out" requests in the drawer have somewhere to actually land.
+  const apiDocsRuntimeId = artifactRuntimes.find((r) => r.status === 'RUNNING')?.runtimeId ?? artifactRuntimes[0]?.runtimeId;
+  const [viewingApiDocs, setViewingApiDocs] = useState(false);
 
   // Track if any preceding controls are visible for proper divider placement
   const hasPrecedingControls = compositeApp || showStatusToggle || showStatusChip || showTracingToggle || showStatisticsToggle || showListenerToggle;
-  const toEnabled = (value: unknown) => {
-    if (typeof value === 'boolean') return value;
-    const normalized = (value ?? '').toString().toLowerCase();
-    return normalized === 'enabled' || normalized === 'active' || normalized === 'true';
-  };
+  const hasHeaderControls =
+    !!compositeApp ||
+    showStatusChip ||
+    showStatusToggle ||
+    showTracingToggle ||
+    showStatisticsToggle ||
+    showListenerToggle ||
+    showParametersButton ||
+    showWsdlButton ||
+    showInstancesButton ||
+    showTaskToggle ||
+    showTaskTrigger ||
+    (showApiDocsButton && !!apiDocsRuntimeId);
 
   const artifactName = artifactType === 'Automation' ? (artifact.packageName?.toString() ?? '') : (artifact.name?.toString() ?? '');
   const artifactKey = `${artifactType}-${artifactName}`;
@@ -118,11 +182,23 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
     setTracingEnabled(toEnabled(artifact.tracing));
     setStatisticsEnabled(toEnabled(artifact.statistics));
     setStatusEnabled(toEnabled(artifact.state));
-    // Don't overwrite the optimistic listenerEnabled while a listener action is still in flight.
-    if (!pendingActionRef.current) {
+  }, [artifactKey, artifact.tracing, artifact.statistics, artifact.state]);
+
+  useEffect(() => {
+    if (showListenerToggle && !pendingListenerAction) {
       setListenerEnabled(toEnabled(artifact.state));
     }
-  }, [artifactKey, artifact.tracing, artifact.statistics, artifact.state]);
+  }, [showListenerToggle, artifact.state, pendingListenerAction]);
+
+  // Clear the busy state as soon as `state` itself reflects the requested change — the
+  // same field the status indicator below already uses, so both update in lockstep.
+  useEffect(() => {
+    if (!showListenerToggle || !pendingListenerAction) return;
+    const targetEnabled = pendingListenerAction === 'START';
+    if (toEnabled(artifact.state) === targetEnabled) {
+      setPendingListenerAction(null);
+    }
+  }, [showListenerToggle, artifact.state, pendingListenerAction]);
 
   const handleToggleTracing = (checked: boolean) => {
     if (!showTracingToggle) return;
@@ -137,11 +213,6 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   const handleToggleStatus = (checked: boolean) => {
     if (!showStatusToggle && !showTaskToggle) return;
     setPendingToggle({ type: 'status', checked });
-  };
-
-  const handleToggleListener = (checked: boolean) => {
-    if (!showListenerToggle) return;
-    setPendingListenerToggle({ checked });
   };
 
   const handleTriggerTask = () => {
@@ -202,23 +273,28 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
     setPendingToggle(null);
   };
 
-  const handleConfirmListenerToggle = () => {
-    if (!pendingListenerToggle) return;
+  const handleToggleListener = (checked: boolean) => {
+    if (!showListenerToggle) return;
+    setPendingListenerToggle({ checked });
+  };
 
-    const runtimes = artifact.runtimes;
-    if (!runtimes || !Array.isArray(runtimes) || runtimes.length === 0) {
-      console.error('No valid runtimes available for listener toggle');
+  const handleConfirmListenerToggle = () => {
+    const runtimes = artifact.runtimes as Array<{ runtimeId: string }> | undefined;
+    if (!pendingListenerToggle || !runtimes || runtimes.length === 0) {
       setPendingListenerToggle(null);
       return;
     }
 
-    const runtimeIds = runtimes.map((r: { runtimeId: string }) => r.runtimeId);
+    const runtimeIds = runtimes.map((r) => r.runtimeId);
     const action = pendingListenerToggle.checked ? 'START' : 'STOP';
-    const targetEnabled = pendingListenerToggle.checked;
     const artifactQueryKey = ['artifacts', artifactType, envId, componentId];
 
-    pendingActionRef.current = action;
-    setListenerEnabled(targetEnabled);
+    // Don't optimistically flip listenerEnabled here — that would swap which button is
+    // visible before the backend has confirmed anything. The clicked button stays put
+    // and shows its own busy label until the sync effect above updates listenerEnabled
+    // from the real (confirmed) artifact state once pendingListenerAction clears.
+    setPendingListenerAction(action);
+    setListenerToggleError(null);
 
     updateListenerState.mutate(
       {
@@ -229,13 +305,12 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         action,
       },
       {
-        onError: () => {
-          setListenerEnabled(!targetEnabled);
-          pendingActionRef.current = null;
+        onError: (err) => {
+          setPendingListenerAction(null);
+          setListenerToggleError(err instanceof Error ? err.message : 'Failed to update listener state');
         },
-        onSettled: async () => {
-          await queryClient.invalidateQueries({ queryKey: artifactQueryKey });
-          pendingActionRef.current = null;
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: artifactQueryKey });
         },
       },
     );
@@ -243,9 +318,10 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
     setPendingListenerToggle(null);
   };
 
+  const listenerToggleAction = pendingListenerToggle?.checked ? 'enable' : 'disable';
+
   const toggleLabel = pendingToggle?.type ?? 'status';
   const toggleAction = pendingToggle?.checked ? 'enable' : 'disable';
-  const listenerAction = pendingListenerToggle?.checked ? 'enable' : 'disable';
 
   return (
     <>
@@ -266,16 +342,16 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         </DialogActions>
       </Dialog>
       <Dialog open={pendingListenerToggle !== null} onClose={() => setPendingListenerToggle(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>{listenerAction === 'enable' ? 'Enable Listener' : 'Disable Listener'}</DialogTitle>
+        <DialogTitle>{listenerToggleAction === 'enable' ? 'Enable Listener' : 'Disable Listener'}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to {listenerAction} the listener <strong>{artifactName}</strong>?
+            Are you sure you want to {listenerToggleAction} the listener <strong>{artifactName}</strong>?
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPendingListenerToggle(null)}>Cancel</Button>
-          <Button variant="contained" color={listenerAction === 'disable' ? 'error' : 'success'} onClick={handleConfirmListenerToggle}>
-            {listenerAction === 'enable' ? 'Enable' : 'Disable'}
+          <Button variant="contained" color={listenerToggleAction === 'disable' ? 'error' : 'success'} onClick={handleConfirmListenerToggle}>
+            {listenerToggleAction === 'enable' ? 'Enable' : 'Disable'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -294,125 +370,122 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
           </Button>
         </DialogActions>
       </Dialog>
-      <Box sx={{ mt: 2 }}>
-        {/* Header row */}
-        <Stack direction="row" alignItems="center" gap={1.5} sx={{ px: 2, py: 1.5 }}>
-          {compositeApp && <Chip label={`Composite App: ${compositeApp}`} size="small" variant="outlined" sx={{ bgcolor: '#e8eaf6', color: '#3949ab', fontSize: 11 }} />}
-          {compositeApp && <Divider orientation="vertical" flexItem />}
-          {showStatusChip && artifactState && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
-                Status
-              </Typography>
-              {artifactType === 'Listener' ? (
-                <Stack direction="row" alignItems="center" gap={0.75}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: toEnabled(artifact.state) ? 'success.main' : 'text.disabled' }} />
-                  <Typography variant="body2">{toEnabled(artifact.state) ? 'Enabled' : 'Disabled'}</Typography>
-                </Stack>
-              ) : (
-                <Chip label={artifactState.charAt(0).toUpperCase() + artifactState.slice(1).toLowerCase()} size="small" variant="outlined" color={toEnabled(artifact.state) ? 'success' : 'default'} sx={{ fontSize: '0.875rem' }} />
-              )}
-            </Box>
-          )}
-          {showStatusChip && artifactState && (showStatusToggle || showTracingToggle || showStatisticsToggle || showListenerToggle) && <Divider orientation="vertical" flexItem />}
-          {showStatusToggle && <SyncSwitch name="status" label="Status" checked={statusEnabled} inSync={artifact.stateInSync as boolean | null} onChange={handleToggleStatus} disabled={updateArtifactStatus.isPending} />}
-          {showStatusToggle && showTracingToggle && <Divider orientation="vertical" flexItem />}
-          {showTracingToggle && <SyncSwitch label="Tracing" checked={tracingEnabled} inSync={artifact.tracingInSync as boolean | null} onChange={handleToggleTracing} disabled={updateTracingStatus.isPending} />}
-          {showTracingToggle && showStatisticsToggle && <Divider orientation="vertical" flexItem />}
-          {showStatisticsToggle && <SyncSwitch label="Statistics" checked={statisticsEnabled} inSync={artifact.statisticsInSync as boolean | null} onChange={handleToggleStatistics} disabled={updateStatisticsStatus.isPending} />}
-          {showListenerToggle && (updateListenerState.isPending ? pendingActionRef.current === 'START' : !listenerEnabled) && (
-            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Enable listener'}>
-              <span style={{ marginLeft: 'auto' }}>
-                <Button
-                  variant="contained"
-                  size="small"
-                  color="success"
-                  startIcon={updateListenerState.isPending || artifact.stateInSync === false ? <CircularProgress size={12} color="inherit" /> : <Play size={14} />}
-                  disabled={updateListenerState.isPending || !hasRuntimes}
-                  onClick={() => handleToggleListener(true)}>
-                  {updateListenerState.isPending ? 'Enabling…' : 'Enable'}
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-          {showListenerToggle && (updateListenerState.isPending ? pendingActionRef.current === 'STOP' : listenerEnabled) && (
-            <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Disable listener'}>
-              <span style={{ marginLeft: 'auto' }}>
-                <Button
-                  variant="contained"
-                  size="small"
-                  color="error"
-                  startIcon={updateListenerState.isPending || artifact.stateInSync === false ? <CircularProgress size={12} color="inherit" /> : <Square size={14} />}
-                  disabled={updateListenerState.isPending || !hasRuntimes}
-                  onClick={() => handleToggleListener(false)}>
-                  {updateListenerState.isPending ? 'Disabling…' : 'Disable'}
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-          {showTaskToggle && (
-            <>
-              {hasPrecedingControls && <Divider orientation="vertical" flexItem />}
-              <SyncSwitch label="Status" checked={statusEnabled} inSync={artifact.stateInSync as boolean | null} onChange={handleToggleStatus} disabled={updateArtifactStatus.isPending || !hasRuntimes} />
-            </>
-          )}
-          {showTaskTrigger && (
-            <>
-              {(hasPrecedingControls || showTaskToggle) && <Divider orientation="vertical" flexItem />}
-              <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Trigger task'}>
-                <Box>
-                  <IconButton size="small" onClick={handleTriggerTask} disabled={triggerTask.isPending || !hasRuntimes} aria-label="Trigger task" sx={{ color: hasRuntimes ? 'primary.main' : 'text.disabled' }}>
-                    <Play size={16} />
-                  </IconButton>
-                </Box>
+      <Box sx={{ mt: hasHeaderControls ? 2 : 0 }}>
+        {/* Header row — hidden when this artifact type has no controls (e.g. a BI service) */}
+        {hasHeaderControls && (
+          <Stack direction="row" alignItems="center" gap={1.5} sx={{ px: 2, py: 1.5 }}>
+            {compositeApp && <Chip label={`Composite App: ${compositeApp}`} size="small" variant="outlined" sx={{ bgcolor: '#e8eaf6', color: '#3949ab', fontSize: 11 }} />}
+            {compositeApp && <Divider orientation="vertical" flexItem />}
+            {showStatusChip && artifactState && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+                  Status
+                </Typography>
+                {artifactType === 'Listener' || artifactType === 'RestApi' ? (
+                  <Stack direction="row" alignItems="center" gap={0.75}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: toEnabled(artifact.state) ? 'success.main' : 'text.disabled' }} />
+                    <Typography variant="body2">{toEnabled(artifact.state) ? 'Enabled' : 'Disabled'}</Typography>
+                  </Stack>
+                ) : (
+                  <Chip label={artifactState.charAt(0).toUpperCase() + artifactState.slice(1).toLowerCase()} size="small" variant="outlined" color={toEnabled(artifact.state) ? 'success' : 'default'} sx={{ fontSize: '0.875rem' }} />
+                )}
+              </Box>
+            )}
+            {showStatusChip && artifactState && (showStatusToggle || showTracingToggle || showStatisticsToggle || showListenerToggle) && <Divider orientation="vertical" flexItem />}
+            {showStatusToggle && <SyncSwitch name="status" label="Status" checked={statusEnabled} inSync={artifact.stateInSync as boolean | null} onChange={handleToggleStatus} disabled={updateArtifactStatus.isPending} />}
+            {showStatusToggle && showTracingToggle && <Divider orientation="vertical" flexItem />}
+            {showTracingToggle && <SyncSwitch label="Tracing" checked={tracingEnabled} inSync={artifact.tracingInSync as boolean | null} onChange={handleToggleTracing} disabled={updateTracingStatus.isPending} />}
+            {showTracingToggle && showStatisticsToggle && <Divider orientation="vertical" flexItem />}
+            {showStatisticsToggle && <SyncSwitch label="Statistics" checked={statisticsEnabled} inSync={artifact.statisticsInSync as boolean | null} onChange={handleToggleStatistics} disabled={updateStatisticsStatus.isPending} />}
+            {showListenerToggle && !listenerEnabled && (
+              <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Enable listener'}>
+                <span style={{ marginLeft: 'auto' }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    color="success"
+                    startIcon={pendingListenerAction === 'START' ? <CircularProgress size={12} color="inherit" /> : <Play size={14} />}
+                    disabled={pendingListenerAction !== null || !hasRuntimes}
+                    onClick={() => handleToggleListener(true)}>
+                    {pendingListenerAction === 'START' ? 'Enabling…' : 'Enable'}
+                  </Button>
+                </span>
               </Tooltip>
-            </>
-          )}
-          {showSourceButton && (
-            <Button variant="contained" size="small" startIcon={<Code size={14} />} onClick={() => onOpenDrawerTab('Source')} sx={{ ml: 'auto' }}>
-              View Source
-            </Button>
-          )}
-          {showParametersButton && (
-            <Button variant="contained" size="small" startIcon={<Sliders size={14} />} onClick={() => onOpenDrawerTab('Parameters')} sx={{ ml: showSourceButton ? 0 : 'auto' }}>
-              View Parameters
-            </Button>
-          )}
-          {showWsdlButton && (
-            <Button variant="contained" size="small" startIcon={<LinkIcon size={14} />} onClick={() => onOpenDrawerTab('Endpoints')} sx={{ ml: showSourceButton || showParametersButton ? 0 : 'auto' }}>
-              View Endpoints
-            </Button>
-          )}
-          {showWsdlButton && (
-            <Button variant="contained" size="small" startIcon={<FileText size={14} />} onClick={() => onOpenDrawerTab('WSDL')}>
-              View WSDL
-            </Button>
-          )}
-          {showInstancesButton && (
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<LayoutGrid size={14} />}
-              onClick={() => navigate(`${resourceUrl(scope, 'workflows')}?tab=admin&type=${encodeURIComponent(artifactName)}&env=${encodeURIComponent(envId)}`)}
-              sx={{ ml: showSourceButton || showParametersButton || showWsdlButton ? 0 : 'auto' }}>
-              View Instances
-            </Button>
-          )}
-          {showInstancesButton && (
-            <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
-              <Button variant="contained" size="small" startIcon={<Play size={14} />} onClick={() => setStartWorkflowOpen(true)}>
-                Start Workflow
+            )}
+            {showListenerToggle && listenerEnabled && (
+              <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Disable listener'}>
+                <span style={{ marginLeft: 'auto' }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    color="error"
+                    startIcon={pendingListenerAction === 'STOP' ? <CircularProgress size={12} color="inherit" /> : <Square size={14} />}
+                    disabled={pendingListenerAction !== null || !hasRuntimes}
+                    onClick={() => handleToggleListener(false)}>
+                    {pendingListenerAction === 'STOP' ? 'Disabling…' : 'Disable'}
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+            {showTaskToggle && (
+              <>
+                {hasPrecedingControls && <Divider orientation="vertical" flexItem />}
+                <SyncSwitch label="Status" checked={statusEnabled} inSync={artifact.stateInSync as boolean | null} onChange={handleToggleStatus} disabled={updateArtifactStatus.isPending || !hasRuntimes} />
+              </>
+            )}
+            {showTaskTrigger && (
+              <>
+                {(hasPrecedingControls || showTaskToggle) && <Divider orientation="vertical" flexItem />}
+                <Tooltip title={!hasRuntimes ? 'No runtimes available' : 'Trigger task'}>
+                  <Box>
+                    <IconButton size="small" onClick={handleTriggerTask} disabled={triggerTask.isPending || !hasRuntimes} aria-label="Trigger task" sx={{ color: hasRuntimes ? 'primary.main' : 'text.disabled' }}>
+                      <Play size={16} />
+                    </IconButton>
+                  </Box>
+                </Tooltip>
+              </>
+            )}
+            {showParametersButton && (
+              <Button variant="contained" size="small" startIcon={<Sliders size={14} />} onClick={() => onOpenDrawerTab('Parameters')} sx={{ ml: 'auto' }}>
+                View Parameters
               </Button>
-            </Authorized>
-          )}
-          {showRuntimesButton && (
-            <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerTab('Runtimes')} sx={{ ml: showSourceButton || showParametersButton || showWsdlButton || showListenerToggle || showInstancesButton ? 0 : 'auto' }}>
-              View Runtimes
-            </Button>
-          )}
-        </Stack>
+            )}
+            {showWsdlButton && (
+              <Button variant="text" size="small" startIcon={<LinkIcon size={14} />} onClick={() => onOpenDrawerTab('Endpoints')} sx={{ textTransform: 'none', ml: showParametersButton ? 0 : 'auto' }}>
+                View Endpoints
+              </Button>
+            )}
+            {showWsdlButton && (
+              <Button variant="text" size="small" startIcon={<FileText size={14} />} onClick={() => onOpenDrawerTab('WSDL')} sx={{ textTransform: 'none' }}>
+                View WSDL
+              </Button>
+            )}
+            {showInstancesButton && (
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<LayoutGrid size={14} />}
+                onClick={() => navigate(`${resourceUrl(scope, 'workflows')}?tab=admin&type=${encodeURIComponent(artifactName)}&env=${encodeURIComponent(envId)}`)}
+                sx={{ ml: showParametersButton || showWsdlButton ? 0 : 'auto' }}>
+                View Instances
+              </Button>
+            )}
+            {showInstancesButton && (
+              <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+                <Button variant="contained" size="small" startIcon={<Play size={14} />} onClick={() => setStartWorkflowOpen(true)}>
+                  Start Workflow
+                </Button>
+              </Authorized>
+            )}
+            {showApiDocsButton && apiDocsRuntimeId && (
+              <Button variant="contained" size="small" startIcon={<BookOpen size={14} />} onClick={() => setViewingApiDocs(true)} sx={{ ml: 'auto' }}>
+                View API Docs
+              </Button>
+            )}
+          </Stack>
+        )}
         {/* Overview columns */}
-        {overviewFields.length > 0 && (
+        {overviewFields.length > 0 && artifactType !== 'Service' && (
           <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${overviewFields.length}, 1fr)` }}>
             {overviewFields.map((f, i) => (
               <Box key={f} sx={{ px: 2, py: 1.5, ...(i < overviewFields.length - 1 && { borderRight: '1px solid', borderColor: 'divider' }) }}>
@@ -447,7 +520,17 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
             )}
           </Box>
         )}
-        {(ENTRY_POINT_DETAIL_TABS[artifactType] ?? []).includes('Resources') && <Box sx={{ px: 2, py: 1.5 }}>{artifactType === 'RestApi' ? <ArtifactApiDefinition {...tabProps} /> : <ServiceResources {...tabProps} />}</Box>}
+        {/* pt: 0 for Service — it's the first block rendered (no header/overview above it here), so
+            the grid's own mb above already provides the gap; adding padding-top on top of that
+            margin doesn't collapse the way devant's stacked margins do, and reads as too much space. */}
+        {(ENTRY_POINT_DETAIL_TABS[artifactType] ?? []).includes('Resources') && (
+          <Box sx={{ px: 2, pt: artifactType === 'Service' ? 0 : 1.5, pb: 1.5 }}>{artifactType === 'RestApi' ? <ArtifactApiDefinition {...tabProps} /> : <ServiceResources {...tabProps} />}</Box>
+        )}
+        {(ENTRY_POINT_DETAIL_TABS[artifactType] ?? []).includes('Listeners') && (
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <ServiceListeners {...tabProps} />
+          </Box>
+        )}
         {artifactType === 'ProxyService' && (
           <Box sx={{ px: 2, py: 1.5 }}>
             <ProxyApiReference {...tabProps} />
@@ -464,7 +547,17 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
           {triggerSuccessMessage}
         </Alert>
       </Snackbar>
+      <Snackbar open={listenerToggleError !== null} autoHideDuration={6000} onClose={() => setListenerToggleError(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert onClose={() => setListenerToggleError(null)} severity="error" sx={{ width: '100%' }}>
+          {listenerToggleError}
+        </Alert>
+      </Snackbar>
       {startWorkflowOpen && <StartWorkflowDialog scope={{ componentId, environmentId: envId }} initialWorkflowType={artifactName} onClose={() => setStartWorkflowOpen(false)} onToast={setWorkflowToast} />}
+      {viewingApiDocs && apiDocsRuntimeId && (
+        <Suspense fallback={null}>
+          <OpenApiDefinitionsDrawer runtimeId={apiDocsRuntimeId} onClose={() => setViewingApiDocs(false)} serviceBasePath={artifact.basePath?.toString()} />
+        </Suspense>
+      )}
       <Snackbar open={workflowToast !== null} autoHideDuration={4000} onClose={() => setWorkflowToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         {/* Alert stays mounted so the Snackbar's exit transition can play after the toast clears. */}
         <Alert severity={workflowToast?.severity ?? 'success'} onClose={() => setWorkflowToast(null)} sx={{ width: '100%' }}>
@@ -482,6 +575,7 @@ function EntryPointsList({
   componentType,
   isOnline,
   onOpenDrawer,
+  onSelectionChange,
 }: {
   envId: string;
   componentId: string;
@@ -489,34 +583,29 @@ function EntryPointsList({
   componentType: string;
   isOnline: boolean;
   onOpenDrawer: (a: GqlArtifact, type: string, envId: string, tab: string) => void;
+  onSelectionChange?: (entry: { artifact: GqlArtifact; type: string } | null) => void;
 }) {
   const [selectedKey, setSelectedKey] = useState('');
   const navigate = useNavigate();
   const scope = useScope();
   const isMI = componentType === 'MI';
 
-  const { data: apis = [], isLoading: loadingApis } = useArtifacts('RestApi', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: proxies = [], isLoading: loadingProxies } = useArtifacts('ProxyService', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: inboundEps = [], isLoading: loadingInbound } = useArtifacts('InboundEndpoint', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: tasks = [], isLoading: loadingTasks } = useArtifacts('Task', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: services = [], isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI, active: isOnline });
-  const { data: listeners = [], isLoading: loadingListeners } = useArtifacts('Listener', envId, componentId, { enabled: !isMI, active: isOnline });
-  const { data: automations = [], isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI, active: isOnline });
-  const { data: workflows = [], isLoading: loadingWorkflows } = useArtifacts('Workflow', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: apis = EMPTY_ARTIFACTS, isLoading: loadingApis } = useArtifacts('RestApi', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: proxies = EMPTY_ARTIFACTS, isLoading: loadingProxies } = useArtifacts('ProxyService', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: inboundEps = EMPTY_ARTIFACTS, isLoading: loadingInbound } = useArtifacts('InboundEndpoint', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: tasks = EMPTY_ARTIFACTS, isLoading: loadingTasks } = useArtifacts('Task', envId, componentId, { enabled: isMI, active: isOnline });
+  const { data: services = EMPTY_ARTIFACTS, isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: automations = EMPTY_ARTIFACTS, isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: workflows = EMPTY_ARTIFACTS, isLoading: loadingWorkflows } = useArtifacts('Workflow', envId, componentId, { enabled: !isMI, active: isOnline });
 
-  const isLoading = isMI ? loadingApis || loadingProxies || loadingInbound || loadingTasks : loadingServices || loadingListeners || loadingAutomations || loadingWorkflows;
+  const isLoading = isMI ? loadingApis || loadingProxies || loadingInbound || loadingTasks : loadingServices || loadingAutomations || loadingWorkflows;
 
   const allEntryPoints = useMemo(
     () =>
       isMI
         ? [...apis.map((a) => ({ artifact: a, type: 'RestApi' })), ...proxies.map((a) => ({ artifact: a, type: 'ProxyService' })), ...inboundEps.map((a) => ({ artifact: a, type: 'InboundEndpoint' })), ...tasks.map((a) => ({ artifact: a, type: 'Task' }))]
-        : [
-            ...services.map((a) => ({ artifact: a, type: 'Service' })),
-            ...listeners.map((a) => ({ artifact: a, type: 'Listener' })),
-            ...workflows.map((a) => ({ artifact: a, type: 'Workflow' })),
-            ...automations.map((a) => ({ artifact: a, type: 'Automation' })),
-          ],
-    [isMI, apis, proxies, inboundEps, tasks, services, listeners, workflows, automations],
+        : [...services.map((a) => ({ artifact: a, type: 'Service' })), ...workflows.map((a) => ({ artifact: a, type: 'Workflow' })), ...automations.map((a) => ({ artifact: a, type: 'Automation' }))],
+    [isMI, apis, proxies, inboundEps, tasks, services, workflows, automations],
   );
 
   const allKeys = new Set(
@@ -536,6 +625,10 @@ function EntryPointsList({
     [allEntryPoints, activeKey],
   );
 
+  useEffect(() => {
+    onSelectionChange?.(selectedEntry ? { artifact: selectedEntry.artifact, type: selectedEntry.type } : null);
+  }, [selectedEntry, onSelectionChange]);
+
   if (isLoading) return <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />;
   if (allEntryPoints.length === 0)
     return (
@@ -551,76 +644,97 @@ function EntryPointsList({
       </Stack>
     );
 
+  // Which pair of fields to show depends on the selected entry's artifact type: Tasks have
+  // no URL/Context, only group/class; Proxies have neither; the remaining MI types (API/Inbound) do.
+  const isTask = selectedEntry?.type === 'Task';
+  const isProxy = selectedEntry?.type === 'ProxyService';
+  const primaryLabel = isProxy ? '' : isTask ? 'Class' : isMI ? 'URL' : 'Package';
+  const secondaryLabel = isProxy ? '' : isTask ? 'Group' : isMI ? 'Context' : 'API';
+
   return (
     <>
-      <Autocomplete
-        value={selectedEntry ?? null}
-        onChange={(_, newValue) => {
-          if (!newValue) {
-            setSelectedKey('');
-            return;
-          }
-          const artifactKey = newValue.type === 'Automation' ? newValue.artifact.packageName : newValue.artifact.name;
-          setSelectedKey(`${newValue.type}::${artifactKey}`);
-        }}
-        options={allEntryPoints}
-        autoHighlight
-        fullWidth
-        getOptionLabel={(option) => {
-          const cfg = ENTRY_POINT_CONFIG[option.type];
-          if (cfg?.primaryDisplay && cfg.metaField) return option.artifact[cfg.metaField]?.toString() ?? option.artifact.name?.toString() ?? '';
-          const displayName = option.type === 'Automation' ? option.artifact.packageName : option.artifact.name;
-          return displayName?.toString() ?? '';
-        }}
-        isOptionEqualToValue={(a, b) => {
-          const aName = a.type === 'Automation' ? a.artifact.packageName : a.artifact.name;
-          const bName = b.type === 'Automation' ? b.artifact.packageName : b.artifact.name;
-          return a.type === b.type && aName === bName;
-        }}
-        renderOption={(props, { artifact: a, type }) => {
-          const { key, ...optionProps } = props;
-          const cfg = ENTRY_POINT_CONFIG[type];
-          const meta = cfg?.metaField ? a[cfg.metaField]?.toString() : undefined;
-          const useMeta = cfg?.primaryDisplay && !!meta;
-          const displayName = useMeta ? meta : type === 'Automation' ? a.packageName?.toString() : a.name?.toString();
+      {/* Endpoint / Package / API grid — mirrors devant's endpoint panel layout. MI components
+          don't have a package/API concept, so they show URL/Context instead (or group/class for Tasks). */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: '220px 1fr 1fr', columnGap: 2, rowGap: 0.75, alignItems: 'start', mb: 2 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+          Endpoint
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+          {primaryLabel}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+          {secondaryLabel}
+        </Typography>
+
+        <Select
+          size="small"
+          value={activeKey}
+          onChange={(e) => setSelectedKey(e.target.value)}
+          inputProps={{ 'aria-label': 'Endpoint' }}
+          sx={{ fontSize: '13px', width: '100%' }}
+          renderValue={(val) => {
+            const entry = allEntryPoints.find(({ artifact: a, type }) => `${type}::${type === 'Automation' ? a.packageName : a.name}` === val);
+            if (!entry) return '';
+            const cfg = ENTRY_POINT_CONFIG[entry.type];
+            const raw = (cfg?.primaryDisplay && cfg.metaField ? (entry.artifact[cfg.metaField]?.toString() ?? entry.artifact.name?.toString()) : entry.type === 'Automation' ? entry.artifact.packageName?.toString() : entry.artifact.name?.toString()) ?? '';
+            // Chip is intentionally omitted here (closed box) — it would eat into the fixed-width
+            // box's space and truncate long names. It only shows in the open dropdown list below.
+            return raw.replace(/^\//, '');
+          }}>
+          {allEntryPoints.map(({ artifact: a, type }) => {
+            const cfg = ENTRY_POINT_CONFIG[type];
+            const rawLabel = (cfg?.primaryDisplay && cfg.metaField ? (a[cfg.metaField]?.toString() ?? a.name?.toString()) : type === 'Automation' ? a.packageName?.toString() : a.name?.toString()) ?? '';
+            const label = rawLabel.replace(/^\//, '');
+            const key = `${type}::${type === 'Automation' ? a.packageName : a.name}`;
+            return (
+              <MenuItem key={key} value={key} sx={{ fontSize: '13px' }}>
+                {isMI ? (
+                  <Stack direction="row" alignItems="center" gap={1}>
+                    <EntryTypeChip cfg={cfg} />
+                    <span>{label}</span>
+                  </Stack>
+                ) : (
+                  label
+                )}
+              </MenuItem>
+            );
+          })}
+        </Select>
+
+        {(() => {
+          if (isProxy)
+            return (
+              <>
+                <Box />
+                <Box />
+              </>
+            );
+          const primaryValue = (isTask ? selectedEntry?.artifact.class : isMI ? selectedEntry?.artifact.url : selectedEntry?.artifact.package)?.toString();
+          const secondaryValue = (isTask ? selectedEntry?.artifact.group : isMI ? selectedEntry?.artifact.context : selectedEntry?.artifact.name)?.toString();
           return (
-            <Box key={key} component="li" sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }} {...optionProps}>
-              <Chip label={cfg?.label} size="small" sx={{ bgcolor: cfg?.bgColor, color: cfg?.color, fontWeight: 700, fontSize: 11, minWidth: 60, justifyContent: 'center' }} />
-              <Typography variant="body2" sx={{ fontWeight: 500, flex: 1 }}>
-                {displayName}
-              </Typography>
-              {!useMeta && meta && (
-                <Typography variant="body2" color="text.secondary">
-                  {meta}
+            <>
+              <Stack direction="row" alignItems="center" gap={0.75} sx={{ minWidth: 0, alignSelf: 'center' }}>
+                <Box component="span" sx={{ display: 'flex', alignItems: 'center', color: 'primary.main' }}>
+                  {isTask ? <Layers size={15} /> : isMI ? <LinkIcon size={15} /> : <Package size={15} />}
+                </Box>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {primaryValue ?? '—'}
                 </Typography>
-              )}
-            </Box>
+                {primaryValue ? <CopyButton value={primaryValue} label={primaryLabel} /> : null}
+              </Stack>
+
+              <Stack direction="row" alignItems="center" gap={0.75} sx={{ alignSelf: 'center' }}>
+                <Box component="span" sx={{ display: 'flex', alignItems: 'center', color: 'primary.main' }}>
+                  <Tag size={15} />
+                </Box>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                  {secondaryValue ?? '—'}
+                </Typography>
+              </Stack>
+            </>
           );
-        }}
-        renderInput={(params) => {
-          const cfg = selectedEntry ? ENTRY_POINT_CONFIG[selectedEntry.type] : undefined;
-          const chipAdornment = cfg ? (
-            <InputAdornment position="start">
-              <Chip label={cfg.label} size="small" sx={{ bgcolor: cfg.bgColor, color: cfg.color, fontWeight: 700, fontSize: 11, minWidth: 60, justifyContent: 'center' }} />
-            </InputAdornment>
-          ) : null;
-          return (
-            <TextField
-              {...params}
-              placeholder="Search entry points..."
-              InputProps={{
-                ...params.InputProps,
-                startAdornment: (
-                  <>
-                    {chipAdornment}
-                    {params.InputProps.startAdornment}
-                  </>
-                ),
-              }}
-            />
-          );
-        }}
-      />
+        })()}
+      </Box>
       {selectedEntry && <EntryPointDetail selected={{ artifact: selectedEntry.artifact, artifactType: selectedEntry.type, envId, componentId, projectId }} onOpenDrawerTab={(tab) => onOpenDrawer(selectedEntry.artifact, selectedEntry.type, envId, tab)} />}
     </>
   );
@@ -646,6 +760,7 @@ export default function Environment({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'entryPoints' | 'allArtifacts'>('entryPoints');
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
+  const [currentEntryPoint, setCurrentEntryPoint] = useState<{ artifact: GqlArtifact; type: string } | null>(null);
 
   // MI users state
   const [selectedRuntimeId, setSelectedRuntimeId] = useState('');
@@ -689,16 +804,36 @@ export default function Environment({
   const onlineCount = runtimes.filter((r) => r.status === 'RUNNING').length;
   const totalCount = runtimes.length;
   const isOnline = onlineCount > 0;
+  const showSourceButton = currentEntryPoint ? ['RestApi', 'ProxyService', 'InboundEndpoint', 'Task'].includes(currentEntryPoint.type) : false;
 
   return (
     <Card variant="outlined" sx={{ mb: 3 }}>
       <CardContent>
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Typography variant="h5" component="h2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>
-            {env.name}
-          </Typography>
-          <Stack direction="row" alignItems="center" gap={1}>
-            {totalCount > 0 && <Chip label={`${onlineCount}/${totalCount} ${isOnline ? 'Online' : 'Offline'}`} size="small" color={isOnline ? 'success' : 'default'} />}
+        <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap">
+          <Stack direction="row" alignItems="center" gap={1.5} sx={{ minWidth: 0 }}>
+            <Typography variant="h5" component="h2" sx={{ fontWeight: 600, textTransform: 'capitalize', flexShrink: 0 }}>
+              {env.name}
+            </Typography>
+            {totalCount > 0 && (
+              <Stack direction="row" alignItems="center" gap={0.75} sx={{ flexShrink: 0 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: isOnline ? 'success.main' : 'text.disabled', flexShrink: 0 }} />
+                <Typography variant="body2" color="text.secondary">
+                  {`${onlineCount}/${totalCount} Active`}
+                </Typography>
+              </Stack>
+            )}
+          </Stack>
+          <Stack direction="row" alignItems="center" gap={1} sx={{ flexShrink: 0 }}>
+            {currentEntryPoint && showSourceButton && (componentType !== 'MI' || viewMode === 'entryPoints') && (
+              <Button variant="text" size="small" startIcon={<Code size={14} />} onClick={() => onOpenDrawerForTab(currentEntryPoint.artifact, currentEntryPoint.type, env.id, 'Source')} sx={{ textTransform: 'none' }}>
+                View Source
+              </Button>
+            )}
+            {currentEntryPoint && (componentType !== 'MI' || viewMode === 'entryPoints') && (
+              <Button variant="text" size="small" startIcon={<Server size={14} />} onClick={() => onOpenDrawerForTab(currentEntryPoint.artifact, currentEntryPoint.type, env.id, 'Runtimes')} sx={{ textTransform: 'none' }}>
+                View Runtimes
+              </Button>
+            )}
             <IconButton size="small" onClick={handleRefresh} disabled={isRefreshing} aria-label="Refresh">
               <RefreshCw
                 size={16}
@@ -957,7 +1092,9 @@ export default function Environment({
             </Stack>
           </Stack>
         )}
-        {(componentType !== 'MI' || viewMode === 'entryPoints') && <EntryPointsList envId={env.id} componentId={componentId} projectId={projectId} componentType={componentType} isOnline={isOnline} onOpenDrawer={onOpenDrawerForTab} />}
+        {(componentType !== 'MI' || viewMode === 'entryPoints') && (
+          <EntryPointsList envId={env.id} componentId={componentId} projectId={projectId} componentType={componentType} isOnline={isOnline} onOpenDrawer={onOpenDrawerForTab} onSelectionChange={setCurrentEntryPoint} />
+        )}
         {componentType === 'MI' && viewMode === 'allArtifacts' && <ArtifactTypeSelector envId={env.id} componentId={componentId} onSelectArtifact={onSelectArtifact} />}
       </CardContent>
     </Card>

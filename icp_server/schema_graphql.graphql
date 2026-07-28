@@ -14,6 +14,7 @@ type Query {
   runtime(runtimeId: String!): Runtime
   services(runtimeId: String!, pagination: PaginationInput): ServicesPage!
   listeners(runtimeId: String!, pagination: PaginationInput): ListenersPage!
+  openApiDefinitionsByRuntime(runtimeId: String!): [OpenApiDefinition!]!
 
   # Org Secret Queries
   orgSecrets(environmentId: String, pagination: PaginationInput): OrgSecretsPage!
@@ -265,6 +266,14 @@ type Runtime {
   lastHeartbeat: String
   artifacts: Artifacts
   logLevels: [RuntimeLogLevel!]
+  openApiDefinitions: [OpenApiDefinition!]
+}
+
+# OpenAPI (Swagger) definition packed into a BI runtime's JAR by the swagger-pack compiler
+# plugin. `definition` is the raw OpenAPI document as a JSON string (parse client-side).
+type OpenApiDefinition {
+  fileName: String!
+  definition: String!
 }
 
 # ============================================
@@ -290,6 +299,7 @@ type Service {
   basePath: String!
   state: ArtifactState!
   resources: [Resource!]!
+  listeners: [Listener!]!
   runtimes: [ArtifactRuntimeInfo]
 }
 
@@ -300,6 +310,8 @@ type Listener {
   name: String!
   package: String!
   protocol: String!
+  host: String
+  port: Int
   state: ArtifactState!
   runtimes: [ArtifactRuntimeInfo]
 }
@@ -1327,6 +1339,11 @@ input ComponentInput {
   # Component Classification (optional - can have defaults)
   componentType: RuntimeType
   technology: String
+  # Integration type: displayType carries the type on its own (e.g.
+  # "ballerinaService", "scheduledTask"); componentSubType discriminates the
+  # types that share a generic service displayType. Defaults to "service".
+  displayType: String
+  componentSubType: String
 
   # Repository Integration (optional - for future use)
   repository: String

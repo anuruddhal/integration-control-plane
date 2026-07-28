@@ -317,8 +317,11 @@ public type Node record {
     int usedMemory?;
 };
 
-// Heartbeat that includes all runtime information for registration/updates
-public type Heartbeat record {|
+// Heartbeat that includes all runtime information for registration/updates.
+// Open record so parsing tolerates fields from a newer agent that this server
+// version doesn't yet know about (e.g. a future addition sent before a rolling
+// upgrade completes) instead of rejecting the entire heartbeat.
+public type Heartbeat record {
     string heartbeatVersion = "v1.0"; // Version of the heartbeat format
     string runtimeId; // Unique identifier for the runtime
     string workflowCallbackUrl?; // Base URL of the runtime's workflow management service (when it hosts workflows)
@@ -336,7 +339,8 @@ public type Heartbeat record {|
     string runtimeHash;
     time:Utc timestamp;
     map<log:Level> logLevels?; // BI log levels from heartbeat payload
-|};
+    map<json> openApiDefinitions?; // OpenAPI (Swagger) definitions packed into the runtime's JAR, keyed by file name
+};
 
 // Shape of a single entry in the runtime's GET /workflow/definitions response.
 // Open record with optional fields so parsing tolerates missing/extra fields.
@@ -346,13 +350,14 @@ public type WorkflowDefinition record {
     boolean isActive?;
     int workerCount?;
 };
-// Delta heartbeat with hash value
-public type DeltaHeartbeat record {|
+// Delta heartbeat with hash value.
+// Open record for the same reason as Heartbeat above (tolerate unknown fields from newer agents).
+public type DeltaHeartbeat record {
     string heartbeatVersion = "v1.0"; // Version of the heartbeat format
     string runtimeId; // Unique identifier for the runtime
     string runtimeHash;
     time:Utc timestamp;
-|};
+};
 
 // === ICP Control Types ===
 public enum ControlCommandStatus {
@@ -691,6 +696,7 @@ public type Runtime record {
     string lastHeartbeat?;
     Artifacts artifacts?;
     RuntimeLogLevelRecord[] logLevels?;
+    OpenApiDefinitionRecord[] openApiDefinitions?;
 };
 
 public type ServiceRecordInDB record {
@@ -808,6 +814,20 @@ public type RuntimeLogLevelRecord record {
         name: "log_level"
     }
     string logLevel;
+};
+
+// OpenAPI (Swagger) definition packed into a BI runtime's JAR by the swagger-pack compiler
+// plugin, as persisted in bi_service_openapi_definitions. `definition` is the raw JSON text -
+// GraphQL has no JSON scalar in this schema, so it travels as a string for the frontend to parse.
+public type OpenApiDefinitionRecord record {
+    @sql:Column {
+        name: "file_name"
+    }
+    string fileName;
+    @sql:Column {
+        name: "definition"
+    }
+    string definition;
 };
 
 public type ResourceRecord record {
@@ -1558,8 +1578,14 @@ public type ComponentInput record {
     string orgHandler?; // Organization handle
 
     // Component Classification (optional - can have defaults)
-    RuntimeType componentType?; // Runtime type: "BI" or "MI"
+    RuntimeType? componentType?; // Runtime type: "BI" or "MI"
     string technology?; // Technology: "WSO2MI", "Ballerina", etc.
+    // Integration type, encoded the same way as devant: `displayType` carries the
+    // type on its own (e.g. "ballerinaService", "scheduledTask"), and
+    // `componentSubType` discriminates the types that share a generic service
+    // displayType (e.g. AI Agent, MCP Server). Defaults to "service" when absent.
+    string displayType?;
+    string componentSubType?;
 
     // Repository Integration (optional - for future use)
     string repository?; // Git repository URL
@@ -1580,7 +1606,7 @@ public type ComponentUpdateInput record {
     string name?;
     string displayName?;
     string description?;
-    RuntimeType componentType?;
+    RuntimeType? componentType?;
     string version?;
     string labels?;
     string serviceAccessMode?;
@@ -1960,6 +1986,8 @@ public type ComponentInDB record {
     string component_display_name?;
     string component_description?;
     string component_type; // NOT NULL in DB, should always have a value
+    string component_display_type?; // NOT NULL in DB with DEFAULT 'service'
+    string component_sub_type?;
     string component_created_by?;
     string component_created_at?;
     string component_updated_at?;

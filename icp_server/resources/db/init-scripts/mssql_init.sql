@@ -157,6 +157,8 @@ CREATE TABLE components (
     component_type NVARCHAR (10) NOT NULL DEFAULT 'BI' CHECK (
         component_type IN ('MI', 'BI')
     ),
+    display_type NVARCHAR (50) NOT NULL DEFAULT 'service',
+    component_sub_type NVARCHAR (50) NULL,
     created_by CHAR(36) NULL,
     created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
     updated_by CHAR(36) NULL,
@@ -1082,13 +1084,62 @@ BEGIN
     UPDATE bi_service_resource_artifacts
     SET updated_at = GETDATE()
     FROM bi_service_resource_artifacts sr
-    INNER JOIN inserted i ON sr.runtime_id = i.runtime_id 
-        AND sr.service_name = i.service_name 
+    INNER JOIN inserted i ON sr.runtime_id = i.runtime_id
+        AND sr.service_name = i.service_name
         AND sr.resource_url = i.resource_url;
 END;
 GO
 
+-- OpenAPI (Swagger) definitions packed into a BI runtime's JAR by the swagger-pack compiler
+-- plugin, reported via the full heartbeat's optional openApiDefinitions field.
+CREATE TABLE bi_service_openapi_definitions (
+    runtime_id CHAR(36) NOT NULL,
+    file_name NVARCHAR (300) NOT NULL,
+    definition NVARCHAR (MAX) NOT NULL,
+    created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
+    updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
+    PRIMARY KEY (
+        runtime_id,
+        file_name
+    ),
+    CONSTRAINT fk_bi_service_openapi_definitions_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE,
+    INDEX idx_runtime_id (runtime_id)
+);
+GO
+
+CREATE TRIGGER trg_bi_service_openapi_definitions_updated_at
+ON bi_service_openapi_definitions
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE bi_service_openapi_definitions
+    SET updated_at = GETDATE()
+    FROM bi_service_openapi_definitions t
+    INNER JOIN inserted i ON t.runtime_id = i.runtime_id
+        AND t.file_name = i.file_name;
+END;
+GO
+
 -- Listeners bound to a runtime (e.g., HTTP/HTTPS)
+CREATE TABLE bi_service_listener_bindings (
+    runtime_id CHAR(36) NOT NULL,
+    service_name NVARCHAR (100) NOT NULL,
+    service_package NVARCHAR (200) NOT NULL,
+    listener_name NVARCHAR (100) NOT NULL,
+    created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
+    PRIMARY KEY (
+        runtime_id,
+        service_name,
+        service_package,
+        listener_name
+    ),
+    CONSTRAINT fk_bi_slb_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE,
+    INDEX idx_slb_service (runtime_id, service_name, service_package),
+    INDEX idx_slb_listener (runtime_id, listener_name)
+);
+GO
+
 CREATE TABLE bi_runtime_listener_artifacts (
     runtime_id CHAR(36) NOT NULL,
     listener_name NVARCHAR (100) NOT NULL,

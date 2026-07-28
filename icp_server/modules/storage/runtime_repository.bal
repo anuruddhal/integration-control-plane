@@ -917,6 +917,9 @@ public isolated function mapToRuntime(types:RuntimeDBRecord runtimeRecord) retur
     if runtimeRecord.runtime_type == types:BI {
         logLevels = check getLogLevelsForRuntime(runtimeRecord.runtime_id);
     }
+    // Packed OpenAPI definitions are resolved on demand via the dedicated
+    // openApiDefinitionsByRuntime GraphQL query, not loaded on every runtime mapping.
+    types:OpenApiDefinitionRecord[]? openApiDefinitions = ();
 
     return {
         runtimeId: runtimeRecord.runtime_id,
@@ -955,7 +958,8 @@ public isolated function mapToRuntime(types:RuntimeDBRecord runtimeRecord) retur
             connectors: connectorList,
             registryResources: resourceList
         },
-        logLevels: logLevels
+        logLevels: logLevels,
+        openApiDefinitions: openApiDefinitions
     };
 }
 
@@ -985,6 +989,23 @@ public isolated function mapToService(types:ServiceRecordInDB serviceRecord, str
             resourceList.push(resourceItem);
         };
 
+    // Fetch the listener(s) this service is attached to, enriched with full listener
+    // detail. Column list mirrors getListenersForRuntime so rows map into types:Listener.
+    types:Listener[] serviceListeners = [];
+    stream<types:Listener, sql:Error?> boundListenerStream = dbClient->query(`
+        SELECT l.listener_name, l.listener_package, l.protocol, l.state, l.listener_host, l.listener_port
+        FROM bi_service_listener_bindings b
+        JOIN bi_runtime_listener_artifacts l
+            ON l.runtime_id = b.runtime_id AND l.listener_name = b.listener_name
+        WHERE b.runtime_id = ${runtimeId}
+            AND b.service_name = ${serviceName}
+            AND b.service_package = ${serviceRecord.service_package}
+    `);
+    check from types:Listener boundListener in boundListenerStream
+        do {
+            serviceListeners.push(boundListener);
+        };
+
     return {
         name: serviceRecord.service_name,
         package: serviceRecord.service_package,
@@ -992,11 +1013,28 @@ public isolated function mapToService(types:ServiceRecordInDB serviceRecord, str
         state: "enabled", // Default state
         'type: "API", // Default type
         resources: resourceList,
-        listeners: [] // Empty listeners array
+        listeners: serviceListeners
     };
 }
 
 // Get log levels for a specific runtime
+public isolated function getOpenApiDefinitionsForRuntime(string runtimeId) returns types:OpenApiDefinitionRecord[]|error {
+    types:OpenApiDefinitionRecord[] definitionList = [];
+    stream<types:OpenApiDefinitionRecord, sql:Error?> definitionStream = dbClient->query(`
+        SELECT file_name, definition
+        FROM bi_service_openapi_definitions
+        WHERE runtime_id = ${runtimeId}
+        ORDER BY file_name
+    `);
+
+    check from types:OpenApiDefinitionRecord definitionRecord in definitionStream
+        do {
+            definitionList.push(definitionRecord);
+        };
+
+    return definitionList;
+}
+
 public isolated function getLogLevelsForRuntime(string runtimeId) returns types:RuntimeLogLevelRecord[]|error {
     types:RuntimeLogLevelRecord[] logLevelList = [];
     stream<types:RuntimeLogLevelRecord, sql:Error?> logLevelStream = dbClient->query(`

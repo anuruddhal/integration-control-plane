@@ -535,7 +535,7 @@ const ARTIFACT_QUERY_MAP: Record<string, { queryName: string; field: string; fie
     queryName: 'servicesByEnvironmentAndComponent',
     field: 'servicesByEnvironmentAndComponent',
     fields: 'name, package, basePath, type',
-    gqlFields: 'name, package, basePath, type, state, stateInSync, runtimes { runtimeId, runtimeName, status }, resources { path, method, url, methods }',
+    gqlFields: 'name, package, basePath, type, state, stateInSync, runtimes { runtimeId, runtimeName, status }, resources { path, method, url, methods }, listeners { name, package, protocol, host, port, state }',
   },
   Automation: {
     queryName: 'automationsByEnvironmentAndComponent',
@@ -946,6 +946,32 @@ export function useLogFileContent(runtimeId: string, fileName: string, enabled =
         fileName,
       }).then((d) => d.logFileContent),
     enabled: enabled && !!runtimeId && !!fileName,
+  });
+}
+
+// ── OpenAPI Definitions ──
+// Packed by the swagger-pack compiler plugin (icp-runtime-bridge) and reported via the full
+// heartbeat; only BI runtimes with remoteManagement=true and at least one HTTP service have any.
+
+export interface GqlOpenApiDefinition {
+  fileName: string;
+  /** Raw OpenAPI document as a JSON string (no JSON scalar in this schema) - parse client-side. */
+  definition: string;
+}
+
+const OPENAPI_DEFINITIONS_BY_RUNTIME_QUERY = `
+  query OpenApiDefinitionsByRuntime($runtimeId: String!) {
+    openApiDefinitionsByRuntime(runtimeId: $runtimeId) {
+      fileName
+      definition
+    }
+  }`;
+
+export function useOpenApiDefinitionsByRuntime(runtimeId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['openApiDefinitions', runtimeId],
+    queryFn: () => gql<{ openApiDefinitionsByRuntime: GqlOpenApiDefinition[] }>(OPENAPI_DEFINITIONS_BY_RUNTIME_QUERY, { runtimeId }).then((d) => d.openApiDefinitionsByRuntime),
+    enabled: enabled && !!runtimeId,
   });
 }
 

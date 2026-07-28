@@ -1,0 +1,12 @@
+ssoEnabled = true
+ssoIssuer = "{{THUNDERID_URL}}"
+ssoAuthorizationEndpoint = "{{THUNDERID_URL}}/oauth2/authorize"
+ssoTokenEndpoint = "{{THUNDERID_URL}}/oauth2/token"
+ssoLogoutEndpoint = "{{THUNDERID_URL}}/oauth2/logout"
+ssoJwksUrl = "{{THUNDERID_URL}}/oauth2/jwks"
+ssoClientId = "ICP_CONSOLE"
+ssoClientSecret = "icp-console-secret"
+ssoRedirectUri = "{{BASE_URL}}/sso/callback"
+ssoUsernameClaim = "email"
+ssoScopes = ["openid", "email", "profile"]
+ssoAllowInsecureTLS = true

@@ -202,6 +202,10 @@ export interface CreateComponentInput {
   orgHandler: string;
   projectId: string;
   componentType: 'MI' | 'BI';
+  /** Integration type encoded as devant does — see `resolveDisplayType`. */
+  displayType: string;
+  /** Set only for types sharing a generic service displayType — see `resolveComponentSubType`. */
+  componentSubType?: string;
 }
 
 const CREATE_COMPONENT = `
@@ -224,6 +228,8 @@ export function useCreateComponent() {
           orgHandler: input.orgHandler,
           projectId: input.projectId,
           componentType: input.componentType,
+          displayType: input.displayType,
+          ...(input.componentSubType && { componentSubType: input.componentSubType }),
           technology: 'WSO2MI',
           isPublicRepo: false,
         },
@@ -307,7 +313,13 @@ export function useUpdateListenerState() {
           port: input.port,
           action: input.action,
         },
-      }).then((d) => d.updateListenerState),
+      }).then((d) => {
+        // The backend signals failure via `success: false` on an otherwise-200 response
+        // (unlike a thrown GraphQL error), so that has to be checked explicitly here —
+        // otherwise a rejected action looks identical to a successful one to react-query.
+        if (!d.updateListenerState.success) throw new Error(d.updateListenerState.message || 'Failed to update listener state');
+        return d.updateListenerState;
+      }),
     onSuccess: () => {
       // Invalidate all listener queries to refetch the updated state
       qc.invalidateQueries({ queryKey: ['artifacts', 'Listener'] });

@@ -25,6 +25,12 @@ enableMetrics = true
 # =============================================================================
 authBackendUrl = "https://localhost:9447"
 
+# Local user store (credentials) DB — self-contained H2, see initTestH2 gradle task
+credentialsDbType = "h2"
+credentialsDbName = "credentials_test_db"
+credentialsDbUser = "icp_user"
+credentialsDbPassword = "icp_password"
+
 # JWT Configuration
 frontendJwtHMACSecret = "default-secret-key-at-least-32-characters-long-for-hs256"
 frontendJwtIssuer = "icp-frontend-jwt-issuer"
@@ -50,13 +56,13 @@ ssoScopes = ["openid", "email", "profile"]
 # =============================================================================
 # DATABASE CONFIGURATION
 # =============================================================================
+# Self-contained H2 — no external DB. The `initTestH2` gradle task recreates the
+# icp_test_db / credentials_test_db files (schema + seed data) before `bal test`.
 [icp_server.storage]
-dbHost = "mysql-db"
-dbPort = 3306
-dbName = "icp_database"
-dbUser = "root"
-dbPassword = "my-secret-pw"
-dbType = "mysql"
+dbType = "h2"
+dbName = "icp_test_db"
+dbUser = "icp_user"
+dbPassword = "icp_password"
 heartbeatTimeoutSeconds = 30
 
 [[ballerina.log.modules]]

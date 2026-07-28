@@ -149,6 +149,8 @@ CREATE TABLE components (
     display_name VARCHAR2(200 CHAR) NOT NULL,
     description CLOB NULL,
     component_type VARCHAR2(10 CHAR) DEFAULT 'BI' NOT NULL CHECK (component_type IN ('MI', 'BI')),
+    display_type VARCHAR2(50 CHAR) DEFAULT 'service' NOT NULL,
+    component_sub_type VARCHAR2(50 CHAR) NULL,
     created_by CHAR(36) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_by CHAR(36) NULL,
@@ -767,7 +769,41 @@ BEGIN
 END;
 /
 
+-- OpenAPI (Swagger) definitions packed into a BI runtime's JAR by the swagger-pack compiler
+-- plugin, reported via the full heartbeat's optional openApiDefinitions field.
+CREATE TABLE bi_service_openapi_definitions (
+  runtime_id  CHAR(36) NOT NULL,
+  file_name   VARCHAR2(300 CHAR) NOT NULL,
+  definition  CLOB NOT NULL,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  PRIMARY KEY (runtime_id, file_name),
+  CONSTRAINT fk_bi_service_openapi_definitions_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_bi_svc_openapi_def_runtime_id ON bi_service_openapi_definitions (runtime_id);
+
+CREATE OR REPLACE TRIGGER trg_bi_svc_openapi_def_updated
+BEFORE UPDATE ON bi_service_openapi_definitions
+FOR EACH ROW
+BEGIN
+    :NEW.updated_at := CURRENT_TIMESTAMP;
+END;
+/
+
 -- Listeners bound to a runtime (e.g., HTTP/HTTPS)
+CREATE TABLE bi_service_listener_bindings (
+  runtime_id       CHAR(36) NOT NULL,
+  service_name     VARCHAR2(100 CHAR) NOT NULL,
+  service_package  VARCHAR2(200 CHAR) NOT NULL,
+  listener_name    VARCHAR2(100 CHAR) NOT NULL,
+  created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  PRIMARY KEY (runtime_id, service_name, service_package, listener_name),
+  CONSTRAINT fk_bi_slb_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE
+);
+CREATE INDEX idx_slb_service ON bi_service_listener_bindings (runtime_id, service_name, service_package);
+CREATE INDEX idx_slb_listener ON bi_service_listener_bindings (runtime_id, listener_name);
+
 CREATE TABLE bi_runtime_listener_artifacts (
     runtime_id CHAR(36) NOT NULL,
     listener_name VARCHAR2(100 CHAR) NOT NULL,

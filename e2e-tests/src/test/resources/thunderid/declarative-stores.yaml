@@ -1,0 +1,41 @@
+declarative_resources:
+  enabled: true
+
+organization_unit:
+  store: composite
+
+identity_provider:
+  store: composite
+
+application:
+  store: composite
+
+agent:
+  store: composite
+
+user_type:
+  store: composite
+
+user:
+  store: composite
+
+group:
+  store: composite
+
+role:
+  store: composite
+
+theme:
+  store: composite
+
+layout:
+  store: composite
+
+translation:
+  store: composite
+
+resource:
+  store: composite
+
+openid4vci:
+  store: composite
