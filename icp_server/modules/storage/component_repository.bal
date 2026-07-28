@@ -21,47 +21,73 @@ import ballerina/sql;
 import ballerina/time;
 import ballerina/uuid;
 
-// Integration types ICP records, encoded as devant encodes them. `service` is the
-// legacy value written before integrations carried a type; the rest are produced
-// by the create form. Adding an integration type means adding its value here.
-final readonly & string[] SUPPORTED_DISPLAY_TYPES = [
-    "service",
-    "ballerinaService",
-    "miApiService",
-    "scheduledTask",
-    "miCronjob",
-    "ballerinaEventHandler",
-    "miEventHandler"
-];
+// Integration types ICP records, encoded as devant encodes them, keyed by the
+// runtime that produces them — an integration type is always expressed in terms of
+// one runtime, so a BI integration cannot carry an MI display_type. `service` is
+// the legacy value written before integrations carried a type and predates the
+// distinction, so it is accepted for either. Adding an integration type means
+// adding its value under both runtimes.
+final readonly & map<string[]> SUPPORTED_DISPLAY_TYPES_BY_RUNTIME = {
+    "BI": ["service", "ballerinaService", "scheduledTask", "ballerinaEventHandler"],
+    "MI": ["service", "miApiService", "miCronjob", "miEventHandler"]
+};
 
-// Subtypes for the integration types that share a generic service display_type
-// and cannot be told apart by it alone.
-final readonly & string[] SUPPORTED_COMPONENT_SUB_TYPES = [
-    "ballerinaFileIntegration",
-    "miFileIntegration",
-    "aiAgent",
-    "MCP"
-];
+// Subtypes for the integration types that share a generic service display_type and
+// cannot be told apart by it alone. File Integration is runtime-specific; AI Agent
+// and MCP Server are not.
+final readonly & map<string[]> SUPPORTED_SUB_TYPES_BY_RUNTIME = {
+    "BI": ["ballerinaFileIntegration", "aiAgent", "MCP"],
+    "MI": ["miFileIntegration", "aiAgent", "MCP"]
+};
 
 // display_types a subtype may accompany. A subtype exists only to disambiguate a
 // generic service, so pairing one with e.g. `scheduledTask` is contradictory.
-final readonly & string[] SUB_TYPED_DISPLAY_TYPES = ["service", "ballerinaService", "miApiService"];
+final readonly & map<string[]> SUB_TYPED_DISPLAY_TYPES_BY_RUNTIME = {
+    "BI": ["service", "ballerinaService"],
+    "MI": ["service", "miApiService"]
+};
 
-// The columns only constrain length, so reject unknown values before they are
-// persisted and later render as the wrong integration type.
-isolated function validateIntegrationMetadata(string displayType, string? componentSubType) returns error? {
-    if SUPPORTED_DISPLAY_TYPES.indexOf(displayType) is () {
-        return error(string `Unsupported integration type: ${displayType}`);
+// The columns only constrain length, so reject values that could not have come
+// from a real choice before they are persisted and later render as the wrong
+// integration type. Validating against the runtime also rules out mismatches the
+// length constraint cannot see, such as `miApiService` on a BI integration or
+// `miApiService` paired with `ballerinaFileIntegration`.
+isolated function validateIntegrationMetadata(string componentType, string displayType, string? componentSubType) returns error? {
+    string[]? allowedDisplayTypes = SUPPORTED_DISPLAY_TYPES_BY_RUNTIME[componentType];
+    if allowedDisplayTypes is () {
+        return error(string `Unsupported runtime: ${componentType}`);
+    }
+    if allowedDisplayTypes.indexOf(displayType) is () {
+        return error(string `Integration type ${displayType} is not valid for a ${componentType} integration`);
     }
     if componentSubType is string {
-        if SUPPORTED_COMPONENT_SUB_TYPES.indexOf(componentSubType) is () {
-            return error(string `Unsupported integration subtype: ${componentSubType}`);
+        string[] allowedSubTypes = SUPPORTED_SUB_TYPES_BY_RUNTIME[componentType] ?: [];
+        if allowedSubTypes.indexOf(componentSubType) is () {
+            return error(string `Integration subtype ${componentSubType} is not valid for a ${componentType} integration`);
         }
-        if SUB_TYPED_DISPLAY_TYPES.indexOf(displayType) is () {
+        string[] subTypedDisplayTypes = SUB_TYPED_DISPLAY_TYPES_BY_RUNTIME[componentType] ?: [];
+        if subTypedDisplayTypes.indexOf(displayType) is () {
             return error(string `Integration subtype ${componentSubType} is not valid for integration type ${displayType}`);
         }
     }
     return ();
+}
+
+// Runtime recorded for a component. Integration metadata is validated against the
+// persisted runtime on update, not against anything the caller supplies, since the
+// runtime of an existing integration is not editable.
+isolated function getComponentRuntimeType(string componentId) returns string|error {
+    stream<record {|string component_type;|}, sql:Error?> componentStream = dbClient->query(`
+        SELECT component_type FROM components WHERE component_id = ${componentId}
+    `);
+
+    record {|string component_type;|}[] componentRecords = check from record {|string component_type;|} component in componentStream
+        select component;
+
+    if componentRecords.length() == 0 {
+        return error(string `Component with ID ${componentId} not found`);
+    }
+    return componentRecords[0].component_type;
 }
 
 // Create a new component
@@ -77,7 +103,7 @@ public isolated function createComponent(types:ComponentInput component) returns
     string displayType = component?.displayType ?: "service";
     string? componentSubType = component?.componentSubType;
 
-    check validateIntegrationMetadata(displayType, componentSubType);
+    check validateIntegrationMetadata(componentTypeValue, displayType, componentSubType);
 
     sql:ParameterizedQuery insertQuery = `INSERT INTO components (component_id, project_id, name, display_name, description, component_type, display_type, component_sub_type, created_by)
                                           VALUES (${componentId}, ${component.projectId}, ${component.name}, ${displayName}, ${component.description}, ${componentTypeValue}, ${displayType}, ${componentSubType}, ${component.createdBy})`;
@@ -399,7 +425,9 @@ public isolated function updateComponent(string componentId, string? name, strin
         updateFields = sql:queryConcat(updateFields, `, description = ${description} `);
     }
     if displayType is string {
-        check validateIntegrationMetadata(displayType, componentSubType);
+        // The persisted runtime, not the caller's — technology is not editable.
+        string runtimeType = check getComponentRuntimeType(componentId);
+        check validateIntegrationMetadata(runtimeType, displayType, componentSubType);
         updateFields = sql:queryConcat(updateFields, `, display_type = ${displayType}, component_sub_type = ${componentSubType} `);
     }
 
