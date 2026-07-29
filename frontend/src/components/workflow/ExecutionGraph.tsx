@@ -197,6 +197,9 @@ function GraphNodeCard({ node, selected, durationMs, onSelect }: { node: Positio
           cursor: 'pointer',
           transition: 'box-shadow 0.15s, outline-color 0.15s',
           '&:hover': { boxShadow: 4 },
+          // Keyboard focus must stay visible even when the node isn't selected, since `outline` is
+          // otherwise 'none' for unselected nodes.
+          '&:focus-visible': { outline: `2px solid ${color}`, boxShadow: 6 },
         }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 1, flexShrink: 0, color, bgcolor: alpha(color, 0.12) }}>
           <Icon size={18} />
@@ -217,7 +220,7 @@ function GraphNodeCard({ node, selected, durationMs, onSelect }: { node: Positio
             )}
           </Stack>
         </Stack>
-        {node.status && <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: color }} aria-label={node.status} />}
+        {node.status && <Box role="img" sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: color }} aria-label={node.status} />}
       </Box>
     </Tooltip>
   );
@@ -301,13 +304,14 @@ export default function ExecutionGraph({ graph, events = [] }: { graph: Executio
 
   // Resolve each node's execution detail (input / result / status / duration) once from the history.
   const detailById = useMemo(() => new Map((graph.nodes ?? []).map((n) => [n.id, extractNodeExecutionDetail(n, events)])), [graph, events]);
+  // Laid out once per graph so selecting a node doesn't re-run the layering pass.
+  const layout = useMemo(() => layoutDag(graph), [graph]);
+  const nodeById = useMemo(() => new Map(layout.nodes.map((n) => [n.id, n])), [layout]);
 
   if (!graph.nodes || graph.nodes.length === 0) {
     return <Typography sx={{ py: 4, textAlign: 'center', color: 'text.secondary' }}>No execution graph available.</Typography>;
   }
 
-  const layout = layoutDag(graph);
-  const nodeById = new Map(layout.nodes.map((n) => [n.id, n]));
   const selectedNode = selectedId ? nodeById.get(selectedId) : undefined;
   const selectedDetail = selectedNode ? detailById.get(selectedNode.id) : undefined;
   const edgeColor = theme.palette.text.disabled;
