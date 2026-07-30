@@ -17,7 +17,7 @@
  */
 
 import { alpha, Box, IconButton, Stack, Tooltip, Typography, useTheme } from '@wso2/oxygen-ui';
-import { Clock, X } from '@wso2/oxygen-ui-icons-react';
+import { Clock, Play, X } from '@wso2/oxygen-ui-icons-react';
 import { useMemo, useState } from 'react';
 import type { ExecutionGraph, ExecutionGraphEdge, ExecutionGraphNode } from '../../api/workflows';
 import CodeViewer from '../CodeViewer';
@@ -32,6 +32,12 @@ const NODE_H = 66;
 const V_GAP = 54; // vertical space between layers
 const H_GAP = 32; // horizontal space between sibling nodes within a layer
 const PAD = 24; // canvas padding around the node block
+// Height of the start pill. It's laid out in a normal full-height slot but drawn at the bottom of it,
+// so the edge leaving it — drawn from the slot's bottom edge — meets the pill exactly.
+const START_H = 34;
+
+// Id of the synthetic start node. Namespaced so it can't collide with a runtime-reported node id.
+const START_NODE_ID = '__wf_start__';
 
 interface PositionedNode extends ExecutionGraphNode {
   x: number;
@@ -43,6 +49,27 @@ interface Layout {
   edges: ExecutionGraphEdge[];
   width: number;
   height: number;
+}
+
+/**
+ * Prepends a synthetic start node with an edge to every root (no incoming edge) node, so a run always
+ * reads as beginning from one point at the top of the graph. It then becomes the only node with no
+ * incoming edge, which is what puts it alone on the first row below — above the real first step(s).
+ * (A cyclic graph has no roots, so it gets no edges and simply shares row 0; a DAG shouldn't have any.)
+ * It's layout-only: it has no execution detail in the history and isn't selectable.
+ */
+function withStartNode(graph: ExecutionGraph): ExecutionGraph {
+  const nodes = graph.nodes ?? [];
+  if (nodes.some((n) => n.id === START_NODE_ID)) return graph;
+  const ids = new Set(nodes.map((n) => n.id));
+  // Mirror layoutDag's edge filtering, so an edge naming a missing node can't mask a real root.
+  const hasIncoming = new Set((graph.edges ?? []).filter((e) => ids.has(e.source) && ids.has(e.target)).map((e) => e.target));
+  const roots = nodes.filter((n) => !hasIncoming.has(n.id));
+
+  return {
+    nodes: [{ id: START_NODE_ID, label: 'Start', type: 'START' }, ...nodes],
+    edges: [...roots.map((n) => ({ source: START_NODE_ID, target: n.id })), ...(graph.edges ?? [])],
+  };
 }
 
 /**
@@ -226,6 +253,23 @@ function GraphNodeCard({ node, selected, durationMs, onSelect }: { node: Positio
   );
 }
 
+/**
+ * The graph's entry marker: a compact, non-interactive pill (it has no step to inspect). Aligned to
+ * the bottom of its layout slot so the arrow down to the first step starts at the pill's own edge.
+ */
+function StartNodeMarker({ node }: { node: PositionedNode }) {
+  return (
+    <Box sx={{ position: 'absolute', left: node.x, top: node.y, width: NODE_W, height: NODE_H, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <Stack direction="row" alignItems="center" gap={0.75} sx={{ height: START_H, px: 1.5, borderRadius: START_H / 2, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', color: 'text.secondary' }}>
+        <Play size={13} />
+        <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+          {node.label}
+        </Typography>
+      </Stack>
+    </Box>
+  );
+}
+
 /** Side panel showing a selected node's execution time, input and result, mapped from the history. */
 function NodeDetailPanel({ node, detail, hasHistory, onClose }: { node: ExecutionGraphNode; detail: NodeExecutionDetail; hasHistory: boolean; onClose: () => void }) {
   const { task } = splitQualifiedName(node.label);
@@ -305,7 +349,7 @@ export default function ExecutionGraph({ graph, events = [] }: { graph: Executio
   // Resolve each node's execution detail (input / result / status / duration) once from the history.
   const detailById = useMemo(() => new Map((graph.nodes ?? []).map((n) => [n.id, extractNodeExecutionDetail(n, events)])), [graph, events]);
   // Laid out once per graph so selecting a node doesn't re-run the layering pass.
-  const layout = useMemo(() => layoutDag(graph), [graph]);
+  const layout = useMemo(() => layoutDag(withStartNode(graph)), [graph]);
   const nodeById = useMemo(() => new Map(layout.nodes.map((n) => [n.id, n])), [layout]);
 
   if (!graph.nodes || graph.nodes.length === 0) {
@@ -334,9 +378,13 @@ export default function ExecutionGraph({ graph, events = [] }: { graph: Executio
               return <path key={i} d={edgePath(s, t)} fill="none" stroke={edgeColor} strokeWidth={1.5} markerEnd={`url(#${markerId})`} />;
             })}
           </svg>
-          {layout.nodes.map((n) => (
-            <GraphNodeCard key={n.id} node={n} selected={n.id === selectedId} durationMs={detailById.get(n.id)?.durationMs ?? null} onSelect={() => setSelectedId((cur) => (cur === n.id ? null : n.id))} />
-          ))}
+          {layout.nodes.map((n) =>
+            n.id === START_NODE_ID ? (
+              <StartNodeMarker key={n.id} node={n} />
+            ) : (
+              <GraphNodeCard key={n.id} node={n} selected={n.id === selectedId} durationMs={detailById.get(n.id)?.durationMs ?? null} onSelect={() => setSelectedId((cur) => (cur === n.id ? null : n.id))} />
+            ),
+          )}
         </Box>
       </Box>
       {selectedNode && selectedDetail && <NodeDetailPanel node={selectedNode} detail={selectedDetail} hasHistory={events.length > 0} onClose={() => setSelectedId(null)} />}
