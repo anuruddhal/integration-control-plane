@@ -22,9 +22,10 @@ import { useState } from 'react';
 import SchemaFormFields from './SchemaFormFields';
 import { buildFormResult, formatTime, humanizeKey, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, unescapeRoleName } from './helpers';
 import { DetailRow, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope } from './shared';
+import type { PortalScope } from './AdminPortal';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
-import { useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, usePendingTaskCount, type HumanTask } from '../../api/workflows';
+import { useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasksAcross, usePendingTaskCountAcross, type HumanTask, type Owned } from '../../api/workflows';
 
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const;
 
@@ -50,11 +51,24 @@ function taskDisplayName(t?: HumanTask): string {
 
 type Toast = { severity: 'success' | 'error'; message: string } | null;
 
-export default function UserPortal({ componentId, environmentId }: WorkflowScope) {
-  const scope: WorkflowScope = { componentId, environmentId };
+/**
+ * Warns when some integrations could not be reached, so a thinner inbox is never mistaken for
+ * "nothing to do". Integrations without a workflow runtime are not failures and never appear here.
+ */
+function PartialTasksNotice({ failed }: { failed: { componentName: string; message: string }[] }) {
+  if (failed.length === 0) return null;
+  return (
+    <Alert severity="warning" sx={{ mb: 2 }}>
+      {`Showing partial results — could not reach ${failed.map((f) => f.componentName).join(', ')}.`}
+    </Alert>
+  );
+}
+
+export default function UserPortal({ targets, environmentId }: PortalScope) {
+  const scope: PortalScope = { targets, environmentId };
   const [view, setView] = useState<'tasks' | 'history'>('tasks');
   const [toast, setToast] = useState<Toast>(null);
-  const { data: pendingCount } = usePendingTaskCount(scope);
+  const pendingCount = usePendingTaskCountAcross(targets, environmentId);
 
   return (
     <>
@@ -82,13 +96,14 @@ export default function UserPortal({ componentId, environmentId }: WorkflowScope
   );
 }
 
-function TaskTable({ tasks, onOpen, environmentId, showActionable }: { tasks: HumanTask[]; onOpen: (id: string) => void; environmentId: string; showActionable?: boolean }) {
+function TaskTable({ tasks, onOpen, environmentId, showActionable, showIntegration }: { tasks: Owned<HumanTask>[]; onOpen: (t: Owned<HumanTask>) => void; environmentId: string; showActionable?: boolean; showIntegration?: boolean }) {
   return (
     <ListingTable>
       <ListingTable.Head>
         <ListingTable.Row>
           <ListingTable.Cell>Task</ListingTable.Cell>
           <ListingTable.Cell>Workflow Name</ListingTable.Cell>
+          {showIntegration && <ListingTable.Cell>Integration</ListingTable.Cell>}
           <ListingTable.Cell>Workflow ID</ListingTable.Cell>
           <ListingTable.Cell>Status</ListingTable.Cell>
           <ListingTable.Cell>Started</ListingTable.Cell>
@@ -97,7 +112,7 @@ function TaskTable({ tasks, onOpen, environmentId, showActionable }: { tasks: Hu
       </ListingTable.Head>
       <ListingTable.Body>
         {tasks.map((t) => (
-          <ListingTable.Row key={t.taskId}>
+          <ListingTable.Row key={`${t.componentId}:${t.taskId}`}>
             <ListingTable.Cell>
               <Stack direction="row" alignItems="center" gap={1}>
                 <Typography variant="body2">{taskDisplayName(t)}</Typography>
@@ -111,6 +126,11 @@ function TaskTable({ tasks, onOpen, environmentId, showActionable }: { tasks: Hu
             <ListingTable.Cell>
               <Typography variant="body2">{t.parentWorkflowType ?? '—'}</Typography>
             </ListingTable.Cell>
+            {showIntegration && (
+              <ListingTable.Cell>
+                <Typography variant="body2">{t.componentName}</Typography>
+              </ListingTable.Cell>
+            )}
             <ListingTable.Cell>
               <WorkflowIdLink workflowId={t.parentWorkflowId} environmentId={environmentId} />
             </ListingTable.Cell>
@@ -120,7 +140,7 @@ function TaskTable({ tasks, onOpen, environmentId, showActionable }: { tasks: Hu
             <ListingTable.Cell>{formatTime(t.startTime)}</ListingTable.Cell>
             <ListingTable.Cell>
               <Tooltip title="Open task">
-                <IconButton size="small" onClick={() => onOpen(t.taskId)} aria-label="Open task">
+                <IconButton size="small" onClick={() => onOpen(t)} aria-label="Open task">
                   <Eye size={16} />
                 </IconButton>
               </Tooltip>
@@ -132,10 +152,12 @@ function TaskTable({ tasks, onOpen, environmentId, showActionable }: { tasks: Hu
   );
 }
 
-function MyTasks({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast) => void }) {
-  const [openId, setOpenId] = useState<string | null>(null);
-  const { data: page, isLoading, error, refetch, isFetching } = useHumanTasks(scope, { status: 'PENDING', limit: 50 });
-  const tasks = sortByStartTimeDesc(page?.items ?? []);
+function MyTasks({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) => void }) {
+  // Opened against the integration that owns the task — a task id is unique only within its runtime.
+  const [open, setOpen] = useState<Owned<HumanTask> | null>(null);
+  const { items, isLoading, error, failed, refetch, isFetching } = useHumanTasksAcross(scope.targets, scope.environmentId, { status: 'PENDING', limit: 50 });
+  const tasks = sortByStartTimeDesc(items);
+  const multi = scope.targets.length > 1;
 
   return (
     <>
@@ -148,6 +170,8 @@ function MyTasks({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast)
         </Tooltip>
       </Stack>
 
+      <PartialTasksNotice failed={failed} />
+
       {isLoading ? (
         <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
       ) : error ? (
@@ -155,28 +179,31 @@ function MyTasks({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast)
       ) : tasks.length === 0 ? (
         <Typography sx={emptySx}>No pending tasks.</Typography>
       ) : (
-        <TaskTable tasks={tasks} onOpen={setOpenId} environmentId={scope.environmentId} showActionable />
+        <TaskTable tasks={tasks} onOpen={setOpen} environmentId={scope.environmentId} showActionable showIntegration={multi} />
       )}
 
-      {openId && <TaskDetailDialog scope={scope} taskId={openId} actionable onClose={() => setOpenId(null)} onToast={onToast} />}
+      {open && <TaskDetailDialog scope={{ componentId: open.componentId, environmentId: scope.environmentId }} taskId={open.taskId} actionable onClose={() => setOpen(null)} onToast={onToast} />}
     </>
   );
 }
 
-function TaskHistory({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast) => void }) {
+function TaskHistory({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) => void }) {
   const [tab, setTab] = useState<'Completed' | 'Failed'>('Completed');
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [open, setOpen] = useState<Owned<HumanTask> | null>(null);
   // The list API reports a failed human task with status FAILED, so each tab maps directly
   // to a status query. Externally-terminated tasks (TERMINATED) are grouped under Failed too.
-  const completedQuery = useHumanTasks(scope, { status: 'COMPLETED', limit: 50 });
-  const failedQuery = useHumanTasks(scope, { status: 'FAILED', limit: 50 });
-  const terminatedQuery = useHumanTasks(scope, { status: 'TERMINATED', limit: 50 });
+  const completedQuery = useHumanTasksAcross(scope.targets, scope.environmentId, { status: 'COMPLETED', limit: 50 });
+  const failedQuery = useHumanTasksAcross(scope.targets, scope.environmentId, { status: 'FAILED', limit: 50 });
+  const terminatedQuery = useHumanTasksAcross(scope.targets, scope.environmentId, { status: 'TERMINATED', limit: 50 });
 
   const isLoading = completedQuery.isLoading || failedQuery.isLoading || terminatedQuery.isLoading;
   const error = completedQuery.error ?? failedQuery.error ?? terminatedQuery.error;
+  const shown = tab === 'Completed' ? [completedQuery] : [failedQuery, terminatedQuery];
+  const failed = shown.flatMap((q) => q.failed);
 
-  const items = tab === 'Completed' ? (completedQuery.data?.items ?? []) : [...(failedQuery.data?.items ?? []), ...(terminatedQuery.data?.items ?? [])];
+  const items = shown.flatMap((q) => q.items);
   const tasks = sortByStartTimeDesc(items);
+  const multi = scope.targets.length > 1;
 
   return (
     <>
@@ -186,6 +213,8 @@ function TaskHistory({ scope, onToast }: { scope: WorkflowScope; onToast: (t: To
         ))}
       </Stack>
 
+      <PartialTasksNotice failed={failed} />
+
       {isLoading ? (
         <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
       ) : error ? (
@@ -193,10 +222,10 @@ function TaskHistory({ scope, onToast }: { scope: WorkflowScope; onToast: (t: To
       ) : tasks.length === 0 ? (
         <Typography sx={emptySx}>No tasks in this category.</Typography>
       ) : (
-        <TaskTable tasks={tasks} onOpen={setOpenId} environmentId={scope.environmentId} />
+        <TaskTable tasks={tasks} onOpen={setOpen} environmentId={scope.environmentId} showIntegration={multi} />
       )}
 
-      {openId && <TaskDetailDialog scope={scope} taskId={openId} onClose={() => setOpenId(null)} onToast={onToast} />}
+      {open && <TaskDetailDialog scope={{ componentId: open.componentId, environmentId: scope.environmentId }} taskId={open.taskId} onClose={() => setOpen(null)} onToast={onToast} />}
     </>
   );
 }

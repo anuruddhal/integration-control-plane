@@ -19,25 +19,37 @@
 import { Autocomplete, Box, CircularProgress, PageContent, Stack, Tab, Tabs, TextField, Typography } from '@wso2/oxygen-ui';
 import { useState, type JSX } from 'react';
 import { useSearchParams } from 'react-router';
-import { useProjectByHandler, useComponentByHandler, useEnvironments } from '../api/queries';
+import { useProjectByHandler, useComponentByHandler, useComponents, useEnvironments } from '../api/queries';
 import NotFound from '../components/NotFound';
 import AdminPortal from '../components/workflow/AdminPortal';
 import UserPortal from '../components/workflow/UserPortal';
 import { useAccessControl } from '../contexts/AccessControlContext';
-import { useLoadComponentPermissions } from '../hooks/usePermissionLoader';
+import { useLoadComponentPermissions, useLoadProjectPermissions } from '../hooks/usePermissionLoader';
 import { Permissions } from '../constants/permissions';
-import { resourceUrl, broaden, type ComponentScope } from '../nav';
+import { resourceUrl, broaden, hasComponent, type ComponentScope, type ProjectScope } from '../nav';
+import type { WorkflowTarget } from '../api/workflows';
 
-export default function Workflows(scope: ComponentScope): JSX.Element {
+export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Element {
+  const componentLevel = hasComponent(scope);
   const { data: project, isLoading: loadingProject } = useProjectByHandler(scope.project);
   const projectId = project?.id ?? '';
-  const { data: component, isLoading: loadingComponent } = useComponentByHandler(projectId, scope.component);
+  const { data: component, isLoading: loadingComponent } = useComponentByHandler(projectId, componentLevel ? scope.component : undefined);
+  // At project scope the portals span every integration in the project; at component scope, just one.
+  const { data: allComponents = [], isLoading: loadingComponents } = useComponents(scope.org, projectId);
   const { data: environments = [], isLoading: loadingEnvs } = useEnvironments(projectId);
   const componentId = component?.id ?? '';
 
-  // Load this component's permissions so the User Actions tab can be gated.
-  useLoadComponentPermissions(scope.org, projectId, componentId);
+  // Gate on this component's permissions at component scope, the project's at project scope.
+  // Note the project-scope limit: the backend resolves project-scope permissions with
+  // `AND grm.integration_uuid IS NULL`, so a user holding workflow permission only on individual
+  // integrations does not pass this gate and must use the per-integration page. Integrations the
+  // caller cannot see are in any case dropped from the aggregate — the proxy 403s per component and
+  // the fan-out treats that as "nothing to contribute".
+  useLoadComponentPermissions(scope.org, projectId, componentLevel ? componentId : '');
+  useLoadProjectPermissions(scope.org, projectId);
   const { hasAnyPermission } = useAccessControl();
+
+  const targets: WorkflowTarget[] = componentLevel ? (component ? [{ componentId: component.id, componentName: component.displayName ?? component.name }] : []) : allComponents.map((c) => ({ componentId: c.id, componentName: c.displayName ?? c.name }));
 
   // Optional deep-link params (e.g. from the Overview page's "View Instances" action or the
   // start-workflow success dialog): ?tab=admin&type=<workflowType>&workflowId=<id>&env=<environmentId>
@@ -62,19 +74,20 @@ export default function Workflows(scope: ComponentScope): JSX.Element {
   // in-page navigation (e.g. "View Instance" from the start dialog) re-applies them.
   const deepLinkKey = `${initialWorkflowType ?? ''}:${initialWorkflowId ?? ''}`;
 
-  if (loadingProject || loadingComponent || loadingEnvs)
+  if (loadingProject || loadingComponent || loadingEnvs || loadingComponents)
     return (
       <PageContent sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
         <CircularProgress />
       </PageContent>
     );
-  if (!component) return <NotFound message="Component not found" backTo={resourceUrl(broaden(scope)!, 'overview')} backLabel="Back to Project" />;
+  if (componentLevel && !component) return <NotFound message="Component not found" backTo={resourceUrl(broaden(scope)!, 'overview')} backLabel="Back to Project" />;
 
   const activeEnvId = environments.some((e) => e.id === selectedEnvId) ? selectedEnvId : (environments[0]?.id ?? '');
   const selectedEnv = environments.find((e) => e.id === activeEnvId) ?? null;
   // Each tab is gated by its dedicated workflow permission.
-  const canViewHumanTasks = hasAnyPermission([Permissions.WORKFLOW_VIEW_HUMAN_TASKS, Permissions.WORKFLOW_MANAGE_HUMAN_TASKS], projectId, componentId);
-  const canViewWorkflows = hasAnyPermission([Permissions.WORKFLOW_VIEW_WORKFLOWS, Permissions.WORKFLOW_MANAGE_WORKFLOWS], projectId, componentId);
+  const permScope = componentLevel ? componentId : undefined;
+  const canViewHumanTasks = hasAnyPermission([Permissions.WORKFLOW_VIEW_HUMAN_TASKS, Permissions.WORKFLOW_MANAGE_HUMAN_TASKS], projectId, permScope);
+  const canViewWorkflows = hasAnyPermission([Permissions.WORKFLOW_VIEW_WORKFLOWS, Permissions.WORKFLOW_MANAGE_WORKFLOWS], projectId, permScope);
   // Resolve the requested tab to one the user is allowed to see (null = neither).
   const activeTab: 'user' | 'admin' | null = tabKey === 'admin' && canViewWorkflows ? 'admin' : tabKey === 'user' && canViewHumanTasks ? 'user' : canViewHumanTasks ? 'user' : canViewWorkflows ? 'admin' : null;
 
@@ -94,16 +107,24 @@ export default function Workflows(scope: ComponentScope): JSX.Element {
         />
       </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Manage workflow executions and human tasks for <strong>{component.displayName ?? scope.component}</strong>.
+        {componentLevel ? (
+          <>
+            Manage workflow executions and human tasks for <strong>{component?.displayName ?? scope.component}</strong>.
+          </>
+        ) : (
+          <>
+            Manage workflow executions and human tasks across all integrations in <strong>{project?.name ?? scope.project}</strong>.
+          </>
+        )}
       </Typography>
 
       {environments.length === 0 ? (
         <Typography color="text.secondary" sx={{ py: 6, textAlign: 'center' }}>
-          No environments found for this integration.
+          {componentLevel ? 'No environments found for this integration.' : 'No environments found for this project.'}
         </Typography>
       ) : activeTab === null ? (
         <Typography color="text.secondary" sx={{ py: 6, textAlign: 'center' }}>
-          You do not have permission to view workflows for this integration.
+          {componentLevel ? 'You do not have permission to view workflows for this integration.' : 'You do not have permission to view workflows for this project.'}
         </Typography>
       ) : (
         <>
@@ -118,9 +139,9 @@ export default function Workflows(scope: ComponentScope): JSX.Element {
               Select an environment to continue.
             </Typography>
           ) : activeTab === 'user' ? (
-            <UserPortal componentId={componentId} environmentId={activeEnvId} />
+            <UserPortal targets={targets} environmentId={activeEnvId} />
           ) : (
-            <AdminPortal key={deepLinkKey} componentId={componentId} environmentId={activeEnvId} initialWorkflowType={initialWorkflowType} initialWorkflowId={initialWorkflowId} />
+            <AdminPortal key={deepLinkKey} targets={targets} environmentId={activeEnvId} initialWorkflowType={initialWorkflowType} initialWorkflowId={initialWorkflowId} />
           )}
         </>
       )}

@@ -28,7 +28,18 @@ import { buildFormResult, formatTime, formValuesFromObject, parseFormSchema, sec
 import { DetailRow, SchemaDisclosure, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
-import { useReviewActivities, useReviewActivity, useReviewDecision, useStartWorkflow, useWorkflowDefinitions, useWorkflowInstances, type ReviewDecision, type WorkflowDefinition } from '../../api/workflows';
+import {
+  useReviewActivitiesAcross,
+  useReviewActivity,
+  useReviewDecision,
+  useStartWorkflow,
+  useWorkflowDefinitions,
+  useWorkflowDefinitionsAcross,
+  useWorkflowInstancesAcross,
+  type ReviewDecision,
+  type WorkflowDefinition,
+  type WorkflowTarget,
+} from '../../api/workflows';
 
 const WORKFLOW_STATUSES = ['All', 'RUNNING', 'COMPLETED', 'FAILED', 'TERMINATED', 'CANCELED', 'TIMED_OUT'];
 // Rejecting a review activity completes it (there is no REJECTED status).
@@ -61,6 +72,47 @@ const TIME_PRESETS: { label: string; ms: number }[] = [
 ];
 
 export type Toast = { severity: 'success' | 'error'; message: string } | null;
+
+/**
+ * The integrations this portal covers, plus the environment they are viewed in. One target at
+ * component scope, every workflow-capable integration in the project at project scope. Rows carry
+ * their owning integration, and each detail view or mutation is scoped back to it via `rowScope`.
+ */
+export interface PortalScope {
+  targets: WorkflowTarget[];
+  environmentId: string;
+}
+
+const rowScope = (environmentId: string, componentId: string): WorkflowScope => ({ componentId, environmentId });
+
+/** Integration filter, offered only when the portal spans more than one. */
+function IntegrationFilter({ targets, value, onChange }: { targets: WorkflowTarget[]; value: WorkflowTarget | null; onChange: (v: WorkflowTarget | null) => void }) {
+  return (
+    <Autocomplete
+      size="small"
+      sx={{ width: 240 }}
+      options={targets}
+      value={value}
+      getOptionLabel={(t) => t.componentName}
+      isOptionEqualToValue={(a, b) => a.componentId === b.componentId}
+      onChange={(_, v) => onChange(v)}
+      renderInput={(params) => <TextField {...params} label="Integration" placeholder="All integrations" />}
+    />
+  );
+}
+
+/**
+ * Warns that some integrations could not be reached, so a partial list is never mistaken for the
+ * whole picture. Integrations with no workflow runtime are not failures and never appear here.
+ */
+function PartialResultsNotice({ failed }: { failed: { componentName: string; message: string }[] }) {
+  if (failed.length === 0) return null;
+  return (
+    <Alert severity="warning" sx={{ mb: 2 }}>
+      {`Showing partial results — could not reach ${failed.map((f) => f.componentName).join(', ')}.`}
+    </Alert>
+  );
+}
 
 // ── Shared filter controls (used by the Workflows and Review Activities views) ─────
 
@@ -135,8 +187,8 @@ function useTimeRangeFilter() {
   return { bounds, controls, active: timeRange !== ANY_TIME, reset: () => setTimeRange(ANY_TIME) };
 }
 
-export default function AdminPortal({ componentId, environmentId, initialWorkflowType, initialWorkflowId }: WorkflowScope & { initialWorkflowType?: string; initialWorkflowId?: string }) {
-  const scope: WorkflowScope = { componentId, environmentId };
+export default function AdminPortal({ targets, environmentId, initialWorkflowType, initialWorkflowId }: PortalScope & { initialWorkflowType?: string; initialWorkflowId?: string }) {
+  const scope: PortalScope = { targets, environmentId };
   const [view, setView] = useState<'workflows' | 'retry'>('workflows');
   const [toast, setToast] = useState<Toast>(null);
   // WorkflowsAdmin's filters live here, not inside it, so switching to Review Activities and
@@ -193,7 +245,7 @@ function WorkflowsAdmin({
   setSearch,
   timeFilter,
 }: {
-  scope: WorkflowScope;
+  scope: PortalScope;
   onToast: (t: Toast) => void;
   status: string;
   setStatus: (v: string) => void;
@@ -204,9 +256,14 @@ function WorkflowsAdmin({
   timeFilter: TimeRangeFilter;
 }) {
   const [startOpen, setStartOpen] = useState(false);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  // A workflow id is only unique within its runtime, so the detail drawer is opened against the
+  // integration that produced the row, never the page scope.
+  const [detail, setDetail] = useState<{ workflowId: string; componentId: string } | null>(null);
+  const [integration, setIntegration] = useState<WorkflowTarget | null>(null);
 
-  const { data: definitions = [] } = useWorkflowDefinitions(scope);
+  const multi = scope.targets.length > 1;
+  const queried = integration ? [integration] : scope.targets;
+  const definitions = useWorkflowDefinitionsAcross(scope.targets, scope.environmentId);
 
   const filters = {
     status: status === 'All' ? undefined : status,
@@ -216,9 +273,9 @@ function WorkflowsAdmin({
     startTimeTo: timeFilter.bounds.startTimeTo,
     limit: 50,
   };
-  const { data: page, isLoading, error, refetch, isFetching } = useWorkflowInstances(scope, filters);
-  const items = sortByStartTimeDesc(page?.items ?? []);
-  const hasFilters = status !== 'All' || !!selectedType || !!search || timeFilter.active;
+  const { items: rows, isLoading, error, failed, hasMore, refetch, isFetching } = useWorkflowInstancesAcross(queried, scope.environmentId, filters);
+  const items = sortByStartTimeDesc(rows);
+  const hasFilters = status !== 'All' || !!selectedType || !!search || !!integration || timeFilter.active;
 
   return (
     <>
@@ -240,6 +297,7 @@ function WorkflowsAdmin({
       <Stack direction="row" gap={1.5} sx={{ mb: 2 }} flexWrap="wrap" alignItems="center">
         <StatusFilter options={WORKFLOW_STATUSES} value={status} onChange={setStatus} />
         <WorkflowNameFilter definitions={definitions} value={selectedType} onChange={setSelectedType} />
+        {multi && <IntegrationFilter targets={scope.targets} value={integration} onChange={setIntegration} />}
         {timeFilter.controls}
         {hasFilters && (
           <Button
@@ -248,12 +306,15 @@ function WorkflowsAdmin({
               setStatus('All');
               setSelectedType(null);
               setSearch('');
+              setIntegration(null);
               timeFilter.reset();
             }}>
             Clear
           </Button>
         )}
       </Stack>
+
+      <PartialResultsNotice failed={failed} />
 
       {isLoading ? (
         <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
@@ -268,6 +329,7 @@ function WorkflowsAdmin({
               <ListingTable.Row>
                 <ListingTable.Cell>Workflow ID</ListingTable.Cell>
                 <ListingTable.Cell>Name</ListingTable.Cell>
+                {multi && <ListingTable.Cell>Integration</ListingTable.Cell>}
                 <ListingTable.Cell>Status</ListingTable.Cell>
                 <ListingTable.Cell>Started</ListingTable.Cell>
                 <ListingTable.Cell>Actions</ListingTable.Cell>
@@ -275,18 +337,23 @@ function WorkflowsAdmin({
             </ListingTable.Head>
             <ListingTable.Body>
               {items.map((wf) => (
-                <ListingTable.Row key={`${wf.workflowId}:${wf.runId ?? ''}`}>
+                <ListingTable.Row key={`${wf.componentId}:${wf.workflowId}:${wf.runId ?? ''}`}>
                   <ListingTable.Cell>
                     <Typography sx={{ fontFamily: 'monospace', fontSize: 12 }}>{wf.workflowId}</Typography>
                   </ListingTable.Cell>
                   <ListingTable.Cell>{wf.workflowType ?? '—'}</ListingTable.Cell>
+                  {multi && (
+                    <ListingTable.Cell>
+                      <Typography variant="body2">{wf.componentName}</Typography>
+                    </ListingTable.Cell>
+                  )}
                   <ListingTable.Cell>
                     <StatusChip status={wf.status} />
                   </ListingTable.Cell>
                   <ListingTable.Cell>{formatTime(wf.startTime)}</ListingTable.Cell>
                   <ListingTable.Cell>
                     <Tooltip title="View details">
-                      <IconButton size="small" onClick={() => setDetailId(wf.workflowId)} aria-label="View details">
+                      <IconButton size="small" onClick={() => setDetail({ workflowId: wf.workflowId, componentId: wf.componentId })} aria-label="View details">
                         <Eye size={16} />
                       </IconButton>
                     </Tooltip>
@@ -295,7 +362,7 @@ function WorkflowsAdmin({
               ))}
             </ListingTable.Body>
           </ListingTable>
-          {page?.hasMore && (
+          {hasMore && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
               Showing the first {items.length}. Refine filters to narrow results.
             </Typography>
@@ -304,14 +371,18 @@ function WorkflowsAdmin({
       )}
 
       {startOpen && <StartWorkflowDialog scope={scope} onClose={() => setStartOpen(false)} onToast={onToast} />}
-      {detailId && <WorkflowDetailDrawer scope={scope} workflowId={detailId} onClose={() => setDetailId(null)} />}
+      {detail && <WorkflowDetailDrawer scope={rowScope(scope.environmentId, detail.componentId)} workflowId={detail.workflowId} onClose={() => setDetail(null)} />}
     </>
   );
 }
 
-export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToast }: { scope: WorkflowScope; initialWorkflowType?: string; onClose: () => void; onToast: (t: Toast) => void }) {
-  const { data: definitions = [] } = useWorkflowDefinitions(scope);
-  const start = useStartWorkflow(scope);
+export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToast }: { scope: PortalScope; initialWorkflowType?: string; onClose: () => void; onToast: (t: Toast) => void }) {
+  // A workflow runs on one runtime, so starting one always resolves to a single integration.
+  // With a single target that choice is implicit; across a project the user picks it.
+  const [target, setTarget] = useState<WorkflowTarget | null>(scope.targets[0] ?? null);
+  const targetScope: WorkflowScope = { componentId: target?.componentId ?? '', environmentId: scope.environmentId };
+  const { data: definitions = [] } = useWorkflowDefinitions(targetScope);
+  const start = useStartWorkflow(targetScope);
   // Seeded from a deep link (e.g. Overview → "Start Workflow") with a minimal {workflowType}
   // object; the full definition (with inputSchema) is resolved once definitions load.
   const [selected, setSelected] = useState<WorkflowDefinition | null>(initialWorkflowType ? { workflowType: initialWorkflowType } : null);
@@ -340,7 +411,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
   };
 
   const submit = () => {
-    if (!type) return;
+    if (!type || !target) return;
     setStartError(null);
     let parsedInput: unknown;
     if (formFields) {
@@ -431,6 +502,24 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
             }}
             renderInput={(params) => <TextField {...params} label="Workflow name" required placeholder="Select a workflow" />}
           />
+          {scope.targets.length > 1 && (
+            <Autocomplete
+              options={scope.targets}
+              getOptionLabel={(t) => t.componentName}
+              value={target}
+              isOptionEqualToValue={(a, b) => a.componentId === b.componentId}
+              onChange={(_, v) => {
+                setTarget(v);
+                // Definitions and the input schema are per integration, so a target change invalidates
+                // the selected workflow and anything typed into its form.
+                setSelected(null);
+                setFormValues({});
+                setFieldErrors({});
+                setStartError(null);
+              }}
+              renderInput={(params) => <TextField {...params} label="Integration" required placeholder="Select the integration to run on" />}
+            />
+          )}
           <SubmitError message={startError} onClear={() => setStartError(null)} />
           {formFields ? (
             <SchemaFormFields fields={formFields} values={formValues} errors={fieldErrors} onChange={setFormValue} />
@@ -452,7 +541,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={!type || start.isPending} onClick={submit}>
+        <Button variant="contained" disabled={!type || !target || start.isPending} onClick={submit}>
           {start.isPending ? 'Starting…' : 'Start'}
         </Button>
       </DialogActions>
@@ -462,20 +551,26 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
 
 // ── Review activities ───────────────────────────────────────────────────────────
 
-function ReviewActivitiesAdmin({ scope, onToast }: { scope: WorkflowScope; onToast: (t: Toast) => void }) {
+function ReviewActivitiesAdmin({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) => void }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All');
   const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
+  // Like the workflow list, the detail dialog is opened against the row's own integration.
+  const [open, setOpen] = useState<{ taskId: string; componentId: string } | null>(null);
+  const [integration, setIntegration] = useState<WorkflowTarget | null>(null);
   const timeFilter = useTimeRangeFilter();
-  const { data: definitions = [] } = useWorkflowDefinitions(scope);
+
+  const multi = scope.targets.length > 1;
+  const queried = integration ? [integration] : scope.targets;
+  const definitions = useWorkflowDefinitionsAcross(scope.targets, scope.environmentId);
   const {
-    data: page,
+    items: rows,
     isLoading,
     error,
+    failed,
     refetch,
     isFetching,
-  } = useReviewActivities(scope, {
+  } = useReviewActivitiesAcross(queried, scope.environmentId, {
     status: status === 'All' ? undefined : status,
     parentWorkflowId: search || undefined,
     startTimeFrom: timeFilter.bounds.startTimeFrom,
@@ -484,8 +579,8 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: WorkflowScope; onToa
   });
 
   // The review-activity API has no workflow-name filter; the qualified task name carries it, so filter client-side.
-  const items = sortByStartTimeDesc((page?.items ?? []).filter((t) => !selectedType || splitQualifiedName(t.taskName ?? t.activityName).workflow === selectedType.workflowType));
-  const hasFilters = status !== 'All' || !!selectedType || !!search || timeFilter.active;
+  const items = sortByStartTimeDesc(rows.filter((t) => !selectedType || splitQualifiedName(t.taskName ?? t.activityName).workflow === selectedType.workflowType));
+  const hasFilters = status !== 'All' || !!selectedType || !!search || !!integration || timeFilter.active;
 
   return (
     <>
@@ -502,6 +597,7 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: WorkflowScope; onToa
       <Stack direction="row" gap={1.5} sx={{ mb: 2 }} flexWrap="wrap" alignItems="center">
         <StatusFilter options={REVIEW_ACTIVITY_STATUSES} value={status} onChange={setStatus} />
         <WorkflowNameFilter definitions={definitions} value={selectedType} onChange={setSelectedType} />
+        {multi && <IntegrationFilter targets={scope.targets} value={integration} onChange={setIntegration} />}
         {timeFilter.controls}
         {hasFilters && (
           <Button
@@ -510,12 +606,15 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: WorkflowScope; onToa
               setStatus('All');
               setSelectedType(null);
               setSearch('');
+              setIntegration(null);
               timeFilter.reset();
             }}>
             Clear
           </Button>
         )}
       </Stack>
+
+      <PartialResultsNotice failed={failed} />
 
       {isLoading ? (
         <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
@@ -529,6 +628,7 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: WorkflowScope; onToa
             <ListingTable.Row>
               <ListingTable.Cell>Activity Name</ListingTable.Cell>
               <ListingTable.Cell>Workflow Name</ListingTable.Cell>
+              {multi && <ListingTable.Cell>Integration</ListingTable.Cell>}
               <ListingTable.Cell>Workflow ID</ListingTable.Cell>
               <ListingTable.Cell>Status</ListingTable.Cell>
               <ListingTable.Cell>Started</ListingTable.Cell>
@@ -539,13 +639,18 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: WorkflowScope; onToa
             {items.map((t) => {
               const qualified = splitQualifiedName(t.taskName ?? t.activityName);
               return (
-                <ListingTable.Row key={t.taskId}>
+                <ListingTable.Row key={`${t.componentId}:${t.taskId}`}>
                   <ListingTable.Cell>
                     <Typography variant="body2">{qualified.task ?? t.taskId}</Typography>
                   </ListingTable.Cell>
                   <ListingTable.Cell>
                     <Typography variant="body2">{qualified.workflow ?? '—'}</Typography>
                   </ListingTable.Cell>
+                  {multi && (
+                    <ListingTable.Cell>
+                      <Typography variant="body2">{t.componentName}</Typography>
+                    </ListingTable.Cell>
+                  )}
                   <ListingTable.Cell>
                     <WorkflowIdLink workflowId={t.parentWorkflowId} environmentId={scope.environmentId} />
                   </ListingTable.Cell>
@@ -555,7 +660,7 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: WorkflowScope; onToa
                   <ListingTable.Cell>{formatTime(t.startTime)}</ListingTable.Cell>
                   <ListingTable.Cell>
                     <Tooltip title="Open activity">
-                      <IconButton size="small" onClick={() => setOpenId(t.taskId)} aria-label="Open activity">
+                      <IconButton size="small" onClick={() => setOpen({ taskId: t.taskId, componentId: t.componentId })} aria-label="Open activity">
                         <Eye size={16} />
                       </IconButton>
                     </Tooltip>
@@ -567,7 +672,7 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: WorkflowScope; onToa
         </ListingTable>
       )}
 
-      {openId && <ReviewActivityDetailDialog scope={scope} taskId={openId} onClose={() => setOpenId(null)} onToast={onToast} />}
+      {open && <ReviewActivityDetailDialog scope={rowScope(scope.environmentId, open.componentId)} taskId={open.taskId} onClose={() => setOpen(null)} onToast={onToast} />}
     </>
   );
 }

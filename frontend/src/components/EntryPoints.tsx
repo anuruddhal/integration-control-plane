@@ -552,7 +552,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
           {listenerToggleError}
         </Alert>
       </Snackbar>
-      {startWorkflowOpen && <StartWorkflowDialog scope={{ componentId, environmentId: envId }} initialWorkflowType={artifactName} onClose={() => setStartWorkflowOpen(false)} onToast={setWorkflowToast} />}
+      {startWorkflowOpen && <StartWorkflowDialog scope={{ targets: [{ componentId, componentName: '' }], environmentId: envId }} initialWorkflowType={artifactName} onClose={() => setStartWorkflowOpen(false)} onToast={setWorkflowToast} />}
       {viewingApiDocs && apiDocsRuntimeId && (
         <Suspense fallback={null}>
           <OpenApiDefinitionsDrawer runtimeId={apiDocsRuntimeId} onClose={() => setViewingApiDocs(false)} serviceBasePath={artifact.basePath?.toString()} />

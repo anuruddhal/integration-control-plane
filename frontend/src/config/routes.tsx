@@ -47,7 +47,7 @@ export interface AppRoute extends Omit<RouteProps, 'children'> {
 
 const MATRIX: Matrix = {
   overview: { segment: '', pages: { organizations: Projects, projects: Project, components: Component } },
-  workflows: { segment: 'workflows', pages: { components: Workflows } },
+  workflows: { segment: 'workflows', pages: { projects: Workflows, components: Workflows } },
   logs: { segment: 'logs', pages: { projects: RuntimeLogs, components: RuntimeLogs } },
   loggers: { segment: loggersSegment, pages: { components: ManageLoggers } },
   metrics: { segment: 'metrics', pages: { projects: Metrics, components: Metrics } },
