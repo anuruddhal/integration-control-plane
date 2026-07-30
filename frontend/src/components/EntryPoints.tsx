@@ -457,11 +457,7 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
             {showApiDocsButton && apiDocsRuntimeId && (
               <Stack direction="row" gap={1} sx={{ ml: 'auto' }}>
                 <Authorized permissions={[Permissions.INTEGRATION_EDIT, Permissions.INTEGRATION_MANAGE]}>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={<FlaskConical size={14} />}
-                    onClick={() => navigate(`${resourceUrl(scope, 'test')}?service=${encodeURIComponent(artifactName)}&env=${encodeURIComponent(envId)}`)}>
+                  <Button variant="outlined" size="small" startIcon={<FlaskConical size={14} />} onClick={() => navigate(`${resourceUrl(scope, 'test')}?service=${encodeURIComponent(artifactName)}&env=${encodeURIComponent(envId)}`)}>
                     Test
                   </Button>
                 </Authorized>
