@@ -380,7 +380,7 @@ public isolated function getLiveTryItBaseUrls() returns string[]|error {
         SELECT DISTINCT r.try_it_host AS host, l.listener_port AS port, l.protocol AS protocol
         FROM runtimes r
         JOIN bi_runtime_listener_artifacts l ON l.runtime_id = r.runtime_id
-        WHERE r.status = 'RUNNING'`, usableTryItHostPredicate());
+        WHERE r.status = 'RUNNING' AND l.listener_port IS NOT NULL`, usableTryItHostPredicate());
     stream<record {|string host; int port; string protocol;|}, sql:Error?> rs = dbClient->query(query);
     record {|string host; int port; string protocol;|}[] rows = check from var r in rs
         select r;

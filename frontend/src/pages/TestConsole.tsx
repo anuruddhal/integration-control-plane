@@ -111,11 +111,11 @@ export default function TestConsole(scope: ComponentScope): JSX.Element {
   useEffect(() => {
     setSelectedRuntimeId(pickRuntimeId(selectedService));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedService?.name]);
+  }, [selectedService?.name, selectedEnvId]);
   const runtimeOptions = runningRuntimes(selectedService);
   const selectedRuntime = runtimeOptions.find((r) => r.runtimeId === selectedRuntimeId) ?? null;
 
-  const invokeUrl = useMemo(() => computeInvokeUrl(componentId, selectedEnvId, selectedRuntimeId, selectedService), [componentId, selectedEnvId, selectedRuntimeId, selectedService]);
+  const invokeUrl = useMemo(() => computeInvokeUrl(componentId, selectedEnvId, selectedRuntime?.runtimeId ?? '', selectedService), [componentId, selectedEnvId, selectedRuntime, selectedService]);
 
   const [headerName, setHeaderName] = useState('Authorization');
   const [headerValue, setHeaderValue] = useState('');
