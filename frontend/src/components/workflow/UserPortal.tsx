@@ -21,7 +21,7 @@ import { Eye, RefreshCw } from '@wso2/oxygen-ui-icons-react';
 import { useState } from 'react';
 import SchemaFormFields from './SchemaFormFields';
 import { buildFormResult, formatTime, humanizeKey, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, unescapeRoleName } from './helpers';
-import { DetailRow, StatusChip, WorkflowIdLink, type WorkflowScope } from './shared';
+import { DetailRow, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
 import { useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, usePendingTaskCount, type HumanTask } from '../../api/workflows';
@@ -219,6 +219,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
   const [err, setErr] = useState('');
   const [formValues, setFormValues] = useState<Record<string, string | boolean>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const busy = complete.isPending || fail.isPending;
   const canComplete = task?.canComplete !== false;
@@ -237,6 +238,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
   };
 
   const mutateComplete = (result: unknown) => {
+    setSubmitError(null);
     complete.mutate(
       { taskId, result },
       {
@@ -244,7 +246,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
           onToast({ severity: 'success', message: 'Task completed.' });
           onClose();
         },
-        onError: (e) => onToast({ severity: 'error', message: e instanceof Error ? e.message : 'Failed to complete task.' }),
+        onError: (e) => setSubmitError(e instanceof Error && e.message ? e.message : 'Failed to complete task.'),
       },
     );
   };
@@ -276,6 +278,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
       setErr('Reason is required.');
       return;
     }
+    setSubmitError(null);
     fail.mutate(
       { taskId, reason: reason.trim() },
       {
@@ -283,7 +286,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
           onToast({ severity: 'success', message: 'Task marked as failed.' });
           onClose();
         },
-        onError: (e) => onToast({ severity: 'error', message: e instanceof Error ? e.message : 'Failed to fail the task.' }),
+        onError: (e) => setSubmitError(e instanceof Error && e.message ? e.message : 'Failed to fail the task.'),
       },
     );
   };
@@ -293,6 +296,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
     setMode('view');
     setErr('');
     setFieldErrors({});
+    setSubmitError(null);
   };
 
   return (
@@ -310,6 +314,7 @@ function TaskDetailDialog({ scope, taskId, actionable, onClose, onToast }: { sco
           <Typography sx={emptySx}>{taskError instanceof Error ? taskError.message : 'Failed to load task details.'}</Typography>
         ) : (
           <Stack gap={2} sx={{ mt: 1 }}>
+            <SubmitError message={submitError} onClear={() => setSubmitError(null)} />
             {task?.description && (
               <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
                 <Typography variant="subtitle2" sx={{ px: 2, py: 1.5, ...sectionTitleSx }}>

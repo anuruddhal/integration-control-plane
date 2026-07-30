@@ -181,11 +181,25 @@ function coerceLeaf(f: FormField, path: string, values: Record<string, string | 
   }
 }
 
+/** True when any leaf under `fields` has a value entered (a boolean choice, or non-blank text). */
+function hasAnyValue(fields: FormField[], values: Record<string, string | boolean>, prefix: string): boolean {
+  return fields.some((f) => {
+    const path = fieldPath(prefix, f.name);
+    if (f.fields) return hasAnyValue(f.fields, values, path);
+    const v = values[path];
+    return typeof v === 'boolean' || (typeof v === 'string' && v.trim() !== '');
+  });
+}
+
 function buildLevel(fields: FormField[], values: Record<string, string | boolean>, prefix: string, errors: Record<string, string>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const f of fields) {
     const path = fieldPath(prefix, f.name);
     if (f.fields) {
+      // A nested object's own `required` list only applies when that object is present. So an optional
+      // group left entirely blank is omitted rather than walked — otherwise its children each report
+      // "is required", which reads as a validation failure for input the schema never asked for.
+      if (!f.required && !hasAnyValue(f.fields, values, path)) continue;
       result[f.name] = buildLevel(f.fields, values, path, errors);
     } else {
       coerceLeaf(f, path, values, result, errors);

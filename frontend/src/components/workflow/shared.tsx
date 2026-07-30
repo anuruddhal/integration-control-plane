@@ -16,7 +16,7 @@
  * under the License.
  */
 
-import { Box, Chip, Collapse, Link, Stack, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, Chip, Collapse, Link, Stack, Typography } from '@wso2/oxygen-ui';
 import { ChevronRight } from '@wso2/oxygen-ui-icons-react';
 import { useState, type JSX, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
@@ -82,6 +82,21 @@ export function DetailRow({ label, children }: { label: string; children: ReactN
         children
       )}
     </Stack>
+  );
+}
+
+/**
+ * Dialog-level banner for a submission the runtime rejected. Generated forms only pre-check required
+ * fields and type coercion, so schema constraints (pattern / minimum / format / nested shape) are
+ * caught server-side — and that message has to be shown inline, because a toast pops behind the open
+ * dialog it belongs to. Renders nothing when there is no error.
+ */
+export function SubmitError({ message, onClear }: { message: string | null; onClear: () => void }): JSX.Element | null {
+  if (!message) return null;
+  return (
+    <Alert severity="error" onClose={onClear} sx={{ '& .MuiAlert-message': { whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }}>
+      {message}
+    </Alert>
   );
 }
 

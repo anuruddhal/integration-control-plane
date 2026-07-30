@@ -74,6 +74,7 @@ function LeafField({
     );
   }
   const isJson = f.type === 'object' || f.type === 'array';
+  const isNumeric = f.type === 'number' || f.type === 'integer';
   return (
     <TextField
       label={f.label}
@@ -83,13 +84,19 @@ function LeafField({
       select={!!f.enumValues}
       multiline={isJson}
       minRows={isJson ? 3 : undefined}
-      type={f.type === 'number' || f.type === 'integer' ? 'number' : 'text'}
+      // Numeric fields are deliberately text inputs: <input type="number"> replaces content it can't
+      // parse with '', which reaches validation looking untouched and reports "is required" instead of
+      // the accurate "must be a number" / "must be an integer". Keeping the raw text lets that through.
+      type="text"
       value={typeof values[path] === 'string' ? values[path] : ''}
       onChange={(e) => onChange(path, e.target.value)}
       error={!!errors[path]}
       helperText={errors[path] || f.description || (isJson ? 'Enter as JSON.' : undefined)}
       sx={requiredAsteriskSx}
-      slotProps={isJson ? { input: { sx: { fontFamily: 'monospace', fontSize: 13 } } } : undefined}>
+      slotProps={{
+        ...(isJson ? { input: { sx: { fontFamily: 'monospace', fontSize: 13 } } } : {}),
+        ...(isNumeric ? { htmlInput: { inputMode: 'decimal' } } : {}),
+      }}>
       {f.enumValues?.map((v) => (
         <MenuItem key={v} value={v}>
           {v}

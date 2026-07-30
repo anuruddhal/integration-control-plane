@@ -25,7 +25,7 @@ import SearchField from '../SearchField';
 import SchemaFormFields from './SchemaFormFields';
 import WorkflowDetailDrawer from './WorkflowDetailDrawer';
 import { buildFormResult, formatTime, formValuesFromObject, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, splitQualifiedName } from './helpers';
-import { DetailRow, SchemaDisclosure, StatusChip, WorkflowIdLink, type WorkflowScope } from './shared';
+import { DetailRow, SchemaDisclosure, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
 import { useReviewActivities, useReviewActivity, useReviewDecision, useStartWorkflow, useWorkflowDefinitions, useWorkflowInstances, type ReviewDecision, type WorkflowDefinition } from '../../api/workflows';
@@ -319,6 +319,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
   const [timeout, setTimeoutVal] = useState('');
   const [formValues, setFormValues] = useState<Record<string, string | boolean>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [startError, setStartError] = useState<string | null>(null);
   const [started, setStarted] = useState<{ workflowType: string; workflowId: string } | null>(null);
   const navigate = useNavigate();
   const navScope = useScope();
@@ -340,6 +341,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
 
   const submit = () => {
     if (!type) return;
+    setStartError(null);
     let parsedInput: unknown;
     if (formFields) {
       const { result, errors } = buildFormResult(formFields, formValues);
@@ -365,7 +367,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
             onClose();
           }
         },
-        onError: (e) => onToast({ severity: 'error', message: e instanceof Error ? e.message : 'Failed to start workflow.' }),
+        onError: (e) => setStartError(e instanceof Error && e.message ? e.message : 'Failed to start workflow.'),
       },
     );
   };
@@ -425,9 +427,11 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
               setSelected(v);
               setFormValues({});
               setFieldErrors({});
+              setStartError(null);
             }}
             renderInput={(params) => <TextField {...params} label="Workflow name" required placeholder="Select a workflow" />}
           />
+          <SubmitError message={startError} onClear={() => setStartError(null)} />
           {formFields ? (
             <SchemaFormFields fields={formFields} values={formValues} errors={fieldErrors} onChange={setFormValue} />
           ) : (
@@ -584,6 +588,8 @@ function ReviewActivityDetailDialog({ scope, taskId, onClose, onToast }: { scope
   const [formValues, setFormValues] = useState<Record<string, string | boolean>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState('');
+  // Message from a rejected decision — shown inline; see SubmitError.
+  const [decideError, setDecideError] = useState<string | null>(null);
 
   const formFields = parseFormSchema(activity?.formSchema);
   // Only a PENDING activity can be acted on; COMPLETED/CANCELED/TERMINATED are view-only.
@@ -609,6 +615,7 @@ function ReviewActivityDetailDialog({ scope, taskId, onClose, onToast }: { scope
   };
 
   const runDecision = (decision: ReviewDecision, input?: unknown, feedbackText?: string) => {
+    setDecideError(null);
     decide.mutate(
       { taskId, decision, input, feedback: feedbackText },
       {
@@ -616,7 +623,7 @@ function ReviewActivityDetailDialog({ scope, taskId, onClose, onToast }: { scope
           onToast({ severity: 'success', message: decision === 'reject' ? 'Activity rejected.' : 'Activity proceeded.' });
           onClose();
         },
-        onError: (e) => onToast({ severity: 'error', message: e instanceof Error ? e.message : 'Action failed.' }),
+        onError: (e) => setDecideError(e instanceof Error && e.message ? e.message : 'Action failed.'),
       },
     );
   };
@@ -653,6 +660,7 @@ function ReviewActivityDetailDialog({ scope, taskId, onClose, onToast }: { scope
           <Typography sx={emptySx}>{loadError instanceof Error ? loadError.message : 'Failed to load activity details.'}</Typography>
         ) : (
           <Stack gap={2} sx={{ mt: 1 }}>
+            <SubmitError message={decideError} onClear={() => setDecideError(null)} />
             {activity.description && (
               <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
                 <Typography variant="subtitle2" sx={{ px: 2, py: 1.5, ...sectionTitleSx }}>
@@ -703,7 +711,13 @@ function ReviewActivityDetailDialog({ scope, taskId, onClose, onToast }: { scope
         <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
           {canDecide && mode === 'view' && (
             <>
-              <Button color="error" disabled={busy} onClick={() => setMode('reject')}>
+              <Button
+                color="error"
+                disabled={busy}
+                onClick={() => {
+                  setMode('reject');
+                  setDecideError(null);
+                }}>
                 Reject
               </Button>
               <Button variant="contained" disabled={busy} onClick={submitProceed}>
@@ -713,7 +727,12 @@ function ReviewActivityDetailDialog({ scope, taskId, onClose, onToast }: { scope
           )}
           {canDecide && mode === 'reject' && (
             <>
-              <Button disabled={busy} onClick={() => setMode('view')}>
+              <Button
+                disabled={busy}
+                onClick={() => {
+                  setMode('view');
+                  setDecideError(null);
+                }}>
                 Back
               </Button>
               <Button variant="contained" color="error" disabled={busy} onClick={() => runDecision('reject', undefined, feedback.trim() || undefined)}>
