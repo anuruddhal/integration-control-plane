@@ -59,7 +59,7 @@ import { Permissions } from '../constants/permissions';
 import { technologyLabel } from '../constants/technologies';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import type { OrgScope } from '../nav';
-import { workflowManagementToml } from '../utils/runtimeToml';
+import { runtimeImports, workflowManagementToml } from '../utils/runtimeToml';
 
 const drawerSx = {
   '& .MuiDrawer-paper': { width: '45%', maxWidth: 560, minWidth: 360, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' },
@@ -171,7 +171,7 @@ secret = "${secret}"
   if (!workflowMgt) return base;
   return `${base}
 
-${workflowManagementToml(secret)}`;
+${workflowManagementToml('<project name>', secret)}`;
 }
 
 function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () => void }) {
@@ -240,9 +240,17 @@ function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () =>
                 </DialogContentText>
                 <CodeBoxWithCopy code={`[build-options]\nremoteManagement = true`} />
                 <DialogContentText sx={{ mb: 1 }}>
-                  Import wso2/icp.runtime.bridge to your runtime's <strong>main.bal</strong> file:
+                  {workflowMgt ? (
+                    <>
+                      Add the following imports to your runtime's <strong>main.bal</strong> file:
+                    </>
+                  ) : (
+                    <>
+                      Import wso2/icp.runtime.bridge to your runtime's <strong>main.bal</strong> file:
+                    </>
+                  )}
                 </DialogContentText>
-                <CodeBoxWithCopy code={`import wso2/icp.runtime.bridge as _;`} />
+                <CodeBoxWithCopy code={runtimeImports(workflowMgt)} />
                 <Alert severity="info" sx={{ mt: 2 }}>
                   The above configuration is for runtimes using the <strong>Default</strong> integration. If you're using the <strong>MI</strong> integration, switch to the MI tab to see the correct configuration.
                 </Alert>

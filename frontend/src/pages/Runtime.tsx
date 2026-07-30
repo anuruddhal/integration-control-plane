@@ -54,7 +54,7 @@ import { useProjectByHandler, useEnvironments, useComponentByHandler, useCompone
 import { useCreateOrgSecret, useDeleteRuntime, useRevokeOrgSecret } from '../api/mutations';
 import { hasComponent, type ProjectScope, type ComponentScope } from '../nav';
 import { formatDistanceToNow } from '../utils/time';
-import { workflowManagementToml } from '../utils/runtimeToml';
+import { runtimeImports, workflowManagementToml } from '../utils/runtimeToml';
 import Authorized from '../components/Authorized';
 import { Permissions } from '../constants/permissions';
 import { technologyLabel } from '../constants/technologies';
@@ -98,7 +98,7 @@ enableWorkflowManagement = true
   if (!workflowMgt) return base;
   return `${base}
 
-${workflowManagementToml(secret)}`;
+${workflowManagementToml(projectHandle, secret)}`;
 }
 
 function AddRuntimeModal({
@@ -186,9 +186,17 @@ function AddRuntimeModal({
                 </DialogContentText>
                 <CodeBoxWithCopy code={`[build-options]\nremoteManagement = true`} />
                 <DialogContentText sx={{ mb: 1 }}>
-                  Import wso2/icp.runtime.bridge to your runtime's <strong>main.bal</strong> file:
+                  {workflowMgt ? (
+                    <>
+                      Add the following imports to your runtime's <strong>main.bal</strong> file:
+                    </>
+                  ) : (
+                    <>
+                      Import wso2/icp.runtime.bridge to your runtime's <strong>main.bal</strong> file:
+                    </>
+                  )}
                 </DialogContentText>
-                <CodeBoxWithCopy code={`import wso2/icp.runtime.bridge as _;`} />
+                <CodeBoxWithCopy code={runtimeImports(workflowMgt)} />
               </>
             )}
           </>

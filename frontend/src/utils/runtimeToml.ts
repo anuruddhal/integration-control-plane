@@ -17,11 +17,29 @@
  */
 
 /**
- * TOML fragment enabling the workflow management API on a BI runtime, keyed by the
- * org secret. Shared by the Add Runtime dialogs (org runtimes and component runtime pages).
+ * The `main.bal` imports a BI runtime needs. The ICP bridge is always required; workflow management
+ * additionally needs its own module imported, because the `[ballerina.workflow.management]`
+ * configuration only takes effect when the module is part of the build. Ordered the way `bal format`
+ * sorts imports (by org, then module). Shared by the Add Runtime dialogs.
  */
-export function workflowManagementToml(secret: string): string {
-  return `[ballerina.workflow.management]
+export function runtimeImports(workflowMgt: boolean): string {
+  const bridge = 'import wso2/icp.runtime.bridge as _;';
+  return workflowMgt ? `import ballerina/workflow.management as _;\n\n${bridge}` : bridge;
+}
+
+/**
+ * TOML the "Enable Workflow Management" toggle adds to a BI runtime: the workflow engine block,
+ * then the management API block keyed by the org secret. `project` becomes the workflow namespace
+ * and should be whatever the `project` key of the bridge config above it holds, so the two agree —
+ * the real project handle on the component runtime page, the fill-in placeholder on the org page.
+ * Shared by the Add Runtime dialogs (org runtimes and component runtime pages).
+ */
+export function workflowManagementToml(project: string, secret: string): string {
+  return `[ballerina.workflow]
+# mode = "LOCAL"
+namespace = "${project}"
+
+[ballerina.workflow.management]
 enableManagementApi = true
 enableApiKey = true
 apiKeyValue = "${secret}"
