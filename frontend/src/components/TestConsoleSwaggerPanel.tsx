@@ -33,17 +33,23 @@ const HideTopPlugin = () => ({
     Servers: () => null,
     ServersContainer: () => null,
     SchemesContainer: () => null,
+    // Per-operation server/scheme picker shown inside each expanded operation block — same
+    // reasoning as SchemesContainer above, just the per-operation copy of it.
+    OperationServers: () => null,
     AuthorizeBtn: () => null,
     AuthorizeBtnContainer: () => null,
   },
 });
 
 const panelSx = {
-  flex: 1,
-  overflow: 'auto',
   bgcolor: 'background.paper',
-  '& .swagger-ui .wrapper': { padding: '0 16px', maxWidth: 'none' },
+  '& .swagger-ui .wrapper': { padding: 0, maxWidth: 'none' },
   '& .swagger-ui .topbar': { display: 'none' },
+  // Belt-and-suspenders for the global and per-operation scheme pickers: the HideTopPlugin
+  // component overrides above null out their content, but swagger-ui's own hardcoded
+  // `.scheme-container { background: #fff }` wrapper div can still render around them (and
+  // shows as a stray white box in dark mode) — hide the wrapper itself too.
+  '& .swagger-ui .scheme-container, & .swagger-ui .opblock-schemes': { display: 'none' },
   ...swaggerMethodColorSx,
 };
 

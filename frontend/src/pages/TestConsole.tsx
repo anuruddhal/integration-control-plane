@@ -143,7 +143,7 @@ export default function TestConsole(scope: ComponentScope): JSX.Element {
   if (!component) return <NotFound message="Component not found" backTo={resourceUrl(broaden(scope)!, 'overview')} backLabel="Back to Project" />;
 
   return (
-    <PageContent sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <PageContent>
       <Typography variant="h1" sx={{ mb: 0.5 }}>
         Test Console
       </Typography>
@@ -302,16 +302,14 @@ export default function TestConsole(scope: ComponentScope): JSX.Element {
             No OpenAPI definition packed for this service yet.
           </Typography>
         ) : (
-          <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
-            <Suspense
-              fallback={
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4, width: '100%' }}>
-                  <CircularProgress />
-                </Box>
-              }>
-              <TestConsoleSwaggerPanel spec={parsedSpec.spec} invokeUrl={invokeUrl} headerName={headerName} headerValue={headerValue} />
-            </Suspense>
-          </Box>
+          <Suspense
+            fallback={
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress />
+              </Box>
+            }>
+            <TestConsoleSwaggerPanel spec={parsedSpec.spec} invokeUrl={invokeUrl} headerName={headerName} headerValue={headerValue} />
+          </Suspense>
         )}
       </Authorized>
     </PageContent>
