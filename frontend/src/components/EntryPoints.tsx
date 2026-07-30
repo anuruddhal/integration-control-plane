@@ -47,8 +47,8 @@ import {
   Tooltip,
   Typography,
 } from '@wso2/oxygen-ui';
-import { RefreshCw, ListFilter, LayoutGrid, Server, Settings, Play, Square, Plus, X, Trash2, UserPlus, Code, Sliders, Link as LinkIcon, FileText, BookOpen, Package, Tag, Check, Copy, Layers } from '@wso2/oxygen-ui-icons-react';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RefreshCw, ListFilter, LayoutGrid, Server, Settings, Play, Square, Plus, X, Trash2, UserPlus, Code, Sliders, Link as LinkIcon, FileText, BookOpen, Package, Tag, FlaskConical, Layers } from '@wso2/oxygen-ui-icons-react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useArtifacts, useRefreshEnvironmentArtifacts, useComponentRuntimes, type GqlArtifact, type GqlEnvironment } from '../api/queries';
@@ -64,6 +64,7 @@ import { Permissions } from '../constants/permissions';
 import { resourceUrl, useScope } from '../nav';
 import { ENTRY_POINT_CONFIG, ENTRY_POINT_DETAIL_TABS, type SelectedArtifact, type TabProps } from './artifact-config';
 import SyncSwitch from './SyncSwitch';
+import CopyButton from './CopyButton';
 
 // Stable reference for useArtifacts' `data` fallback — a fresh `[]` literal on every render (the
 // default in `const { data: x = [] } = ...`) changes identity even when the query is disabled and
@@ -82,30 +83,6 @@ function toEnabled(value: unknown) {
 function EntryTypeChip({ cfg }: { cfg?: { label: string; color: string; bgColor: string } }) {
   if (!cfg) return null;
   return <Chip label={cfg.label} size="small" sx={{ bgcolor: cfg.bgColor, color: cfg.color, fontWeight: 700, fontSize: 11, minWidth: 60, justifyContent: 'center' }} />;
-}
-
-// Mirrors devant's EndpointUrlsPanel CopyButton — same 2s "Copied!" revert and icon sizing.
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(resetTimer.current), []);
-  const handleCopy = useCallback(() => {
-    void navigator.clipboard
-      ?.writeText(value)
-      .then(() => {
-        setCopied(true);
-        clearTimeout(resetTimer.current);
-        resetTimer.current = setTimeout(() => setCopied(false), 2000);
-      })
-      .catch(() => setCopied(false));
-  }, [value]);
-  return (
-    <Tooltip title={copied ? 'Copied!' : `Copy ${label}`}>
-      <IconButton size="small" onClick={handleCopy} sx={{ p: 0.25, flexShrink: 0 }}>
-        {copied ? <Check size={13} /> : <Copy size={13} />}
-      </IconButton>
-    </Tooltip>
-  );
 }
 
 // swagger-ui-react is ~1.3MB gzipped - code-split it out of the main bundle since it's only
@@ -478,9 +455,20 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
               </Authorized>
             )}
             {showApiDocsButton && apiDocsRuntimeId && (
-              <Button variant="contained" size="small" startIcon={<BookOpen size={14} />} onClick={() => setViewingApiDocs(true)} sx={{ ml: 'auto' }}>
-                View API Docs
-              </Button>
+              <Stack direction="row" gap={1} sx={{ ml: 'auto' }}>
+                <Authorized permissions={[Permissions.INTEGRATION_EDIT, Permissions.INTEGRATION_MANAGE]}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<FlaskConical size={14} />}
+                    onClick={() => navigate(`${resourceUrl(scope, 'test')}?service=${encodeURIComponent(artifactName)}&env=${encodeURIComponent(envId)}`)}>
+                    Test
+                  </Button>
+                </Authorized>
+                <Button variant="contained" size="small" startIcon={<BookOpen size={14} />} onClick={() => setViewingApiDocs(true)}>
+                  View API Docs
+                </Button>
+              </Stack>
             )}
           </Stack>
         )}

@@ -536,6 +536,8 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns string?|error
     string runtimePort = heartbeat.runtimePort ?: "";
     // Workflow management service base URL reported by the runtime bridge (optional; NULL when absent)
     string? callbackUrl = heartbeat?.workflowCallbackUrl;
+    // Bare, reachable host/IP for this runtime process (optional; NULL when absent) - used by the Try-It proxy
+    string? tryItHost = heartbeat?.tryItHost;
 
     // Check if a stale OFFLINE runtime with the same component/env/name but different ID exists.
     // Restricting to OFFLINE prevents live sibling replicas in multi-replica deployments from
@@ -580,7 +582,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns string?|error
         _ = check dbClient->execute(`
             INSERT INTO runtimes (
                 runtime_id, name, runtime_type, status, version,
-                runtime_hostname, runtime_port, callback_url,
+                runtime_hostname, runtime_port, callback_url, try_it_host,
                 environment_id, project_id, component_id,
                 platform_name, platform_version, platform_home,
                 os_name, os_version,
@@ -589,7 +591,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns string?|error
                 os_arch, server_name, last_heartbeat
             ) VALUES (
                 ${runtimeId}, ${runtimeName}, ${heartbeat.runtimeType}, ${heartbeat.status}, ${heartbeat.version},
-                ${runtimeHostname}, ${runtimePort}, ${callbackUrl},
+                ${runtimeHostname}, ${runtimePort}, ${callbackUrl}, ${tryItHost},
                 ${heartbeat.environment}, ${heartbeat.project}, ${heartbeat.component},
                 ${heartbeat.nodeInfo.platformName}, ${heartbeat.nodeInfo.platformVersion}, ${heartbeat.nodeInfo.platformHome},
                 ${heartbeat.nodeInfo.osName}, ${heartbeat.nodeInfo.osVersion},
@@ -605,6 +607,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns string?|error
                 runtime_hostname = EXCLUDED.runtime_hostname,
                 runtime_port = EXCLUDED.runtime_port,
                 callback_url = EXCLUDED.callback_url,
+                try_it_host = EXCLUDED.try_it_host,
                 environment_id = EXCLUDED.environment_id,
                 project_id = EXCLUDED.project_id,
                 component_id = EXCLUDED.component_id,
@@ -628,7 +631,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns string?|error
         _ = check dbClient->execute(`
             INSERT INTO runtimes (
                 runtime_id, name, runtime_type, status, version,
-                runtime_hostname, runtime_port, callback_url,
+                runtime_hostname, runtime_port, callback_url, try_it_host,
                 environment_id, project_id, component_id,
                 platform_name, platform_version, platform_home,
                 os_name, os_version,
@@ -637,7 +640,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns string?|error
                 os_arch, server_name, last_heartbeat
             ) VALUES (
                 ${runtimeId}, ${runtimeName}, ${heartbeat.runtimeType}, ${heartbeat.status}, ${heartbeat.version},
-                ${runtimeHostname}, ${runtimePort}, ${callbackUrl},
+                ${runtimeHostname}, ${runtimePort}, ${callbackUrl}, ${tryItHost},
                 ${heartbeat.environment}, ${heartbeat.project}, ${heartbeat.component},
                 ${heartbeat.nodeInfo.platformName}, ${heartbeat.nodeInfo.platformVersion}, ${heartbeat.nodeInfo.platformHome},
                 ${heartbeat.nodeInfo.osName}, ${heartbeat.nodeInfo.osVersion},
@@ -656,6 +659,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns string?|error
                 runtime_hostname = ${runtimeHostname},
                 runtime_port = ${runtimePort},
                 callback_url = ${callbackUrl},
+                try_it_host = ${tryItHost},
                 environment_id = ${heartbeat.environment},
                 project_id = ${heartbeat.project},
                 component_id = ${heartbeat.component},
