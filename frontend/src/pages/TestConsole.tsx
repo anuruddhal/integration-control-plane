@@ -228,25 +228,6 @@ export default function TestConsole(scope: ComponentScope): JSX.Element {
             </Stack>
           )}
 
-          {invokeUrl && (
-            <Stack direction="row" alignItems="center" gap={2}>
-              <Typography variant="body2" sx={{ minWidth: 120, fontWeight: 500, color: 'text.secondary' }}>
-                Invoke URL
-              </Typography>
-              <OutlinedInput
-                size="small"
-                value={invokeUrl}
-                readOnly
-                sx={{ flex: 1, fontFamily: 'monospace', fontSize: '0.8rem' }}
-                endAdornment={
-                  <InputAdornment position="end">
-                    <CopyButton value={invokeUrl} label="invoke URL" />
-                  </InputAdornment>
-                }
-              />
-            </Stack>
-          )}
-
           <Stack direction="row" alignItems="flex-start" gap={2}>
             <Typography variant="body2" sx={{ minWidth: 120, fontWeight: 500, color: 'text.secondary', pt: 1 }}>
               Auth Header
