@@ -402,6 +402,22 @@ function collectDurationGroups(parsed: ParsedEvent[], openType: string, closeSta
   return groups;
 }
 
+/**
+ * Display label for a review activity's span. A review runs as a child workflow whose type is the
+ * gated activity's qualified name prefixed `reviewactivity-`, e.g.
+ * `reviewactivity-workflow-placeOrder.validatePayment`. Views render only the task part of a qualified
+ * name, so the marker has to go on the task itself — `placeOrder.review-validatePayment` — which keeps
+ * the workflow qualifier available for tooltips while the row reads `review-validatePayment`,
+ * distinguishing the review gate from the activity's own span.
+ * Takes the name with the `reviewactivity-` prefix already removed; falls back to a bare `Review`
+ * rather than an empty row if that leaves nothing to qualify.
+ */
+function reviewSpanLabel(bareName: string): string {
+  const { workflow, task } = splitQualifiedName(bareName);
+  if (!task) return bareName || 'Review';
+  return workflow ? `${workflow}.review-${task}` : `review-${task}`;
+}
+
 /** Reconstructs a set of duration spans (a Gantt timeline) from a workflow's history events. */
 export function buildTimeline(events: ReadonlyArray<Record<string, unknown>>): Timeline {
   const parsed: ParsedEvent[] = events.map((e, i) => ({
@@ -466,8 +482,8 @@ export function buildTimeline(events: ReadonlyArray<Record<string, unknown>>): T
       const wfName = asStr(asRecord(p.attrs['workflowType'])['name']) ?? '';
       const wfId = asStr(p.attrs['workflowId']) ?? '';
       const isReview = /^reviewactivity-/i.test(wfId) || /^reviewactivity-/i.test(wfName);
-      const label = (wfName || wfId || 'Child Workflow').replace(/^reviewactivity-/i, '');
-      return { label, category: isReview ? 'HUMAN_TASK' : 'CHILD_WORKFLOW', start: time };
+      const bare = (wfName || wfId || 'Child Workflow').replace(/^reviewactivity-/i, '');
+      return { label: isReview ? reviewSpanLabel(bare) : bare, category: isReview ? 'HUMAN_TASK' : 'CHILD_WORKFLOW', start: time };
     },
   );
   children.forEach((g, id) => pushGroup(`child-${id}`, g));
