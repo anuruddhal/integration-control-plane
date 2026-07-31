@@ -16,7 +16,7 @@
  * under the License.
  */
 
-import { Bot, Clock, Folder, GitBranch, Globe, HardDrive, Layers, Radio, Repeat, Server, Sparkles, Workflow, Wrench, Zap } from '@wso2/oxygen-ui-icons-react';
+import { Bot, Clock, Folder, Globe, HardDrive, Layers, Radio, Repeat, Server, Sparkles, SquareCheck, UserCheck, Workflow, Wrench, Zap } from '@wso2/oxygen-ui-icons-react';
 import type { ReactNode } from 'react';
 import type { Technology } from './technologies';
 
@@ -55,6 +55,21 @@ export const INTEGRATION_TYPES: IntegrationTypeOption[] = [
     ],
   },
   {
+    id: 'workflow',
+    title: 'Workflow',
+    description: 'Orchestrate long-running processes with durable state and human tasks',
+    // Icons match how the execution graph and timeline draw these node kinds (iconByType in
+    // components/workflow/graphVisuals.ts), so a workflow reads the same here as it does once running.
+    icons: [
+      { icon: <Workflow size={16} />, label: 'Durable' },
+      { icon: <SquareCheck size={16} />, label: 'Activities' },
+      { icon: <UserCheck size={16} />, label: 'Human tasks' },
+    ],
+    // The workflow engine and its management API are Ballerina-only (see [ballerina.workflow] in the
+    // runtime config), so this type is not offered for MI.
+    technologies: ['BI'],
+  },
+  {
     id: 'file-integration',
     title: 'File Integration',
     description: 'Process files from storage systems like FTP or AWS S3 when they arrive',
@@ -80,18 +95,6 @@ export const INTEGRATION_TYPES: IntegrationTypeOption[] = [
       { icon: <Bot size={16} />, label: 'Agent' },
       { icon: <Sparkles size={16} />, label: 'AI' },
     ],
-  },
-  {
-    id: 'workflow',
-    title: 'Workflow',
-    description: 'Orchestrate long-running processes with durable state and human approvals',
-    icons: [
-      { icon: <Workflow size={16} />, label: 'Durable' },
-      { icon: <GitBranch size={16} />, label: 'Human tasks' },
-    ],
-    // The workflow engine and its management API are Ballerina-only (see [ballerina.workflow] in the
-    // runtime config), so this type is not offered for MI.
-    technologies: ['BI'],
   },
   {
     id: 'mcp-server',
