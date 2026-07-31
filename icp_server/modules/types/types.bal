@@ -407,7 +407,7 @@ public type HeartbeatResponse record {
     boolean fullHeartbeatRequired?;
     ControlCommand[] commands?;
     string[] errors?;
-    string[] supportedHeartbeatFields = SUPPORTED_HEARTBEAT_FIELDS;
+    string[] & readonly supportedHeartbeatFields = SUPPORTED_HEARTBEAT_FIELDS;
 };
 
 public enum MIControlAction {
