@@ -28,6 +28,7 @@ import { useLoadComponentPermissions, useLoadProjectPermissions } from '../hooks
 import { Permissions } from '../constants/permissions';
 import { resourceUrl, broaden, hasComponent, type ComponentScope, type ProjectScope } from '../nav';
 import type { WorkflowTarget } from '../api/workflows';
+import { isWorkflowIntegration } from '../constants/integrationTypes';
 
 export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Element {
   const componentLevel = hasComponent(scope);
@@ -55,7 +56,15 @@ export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Ele
     ? component
       ? [{ componentId: component.id, componentName: component.displayName ?? component.name, handler: component.handler }]
       : []
-    : allComponents.map((c) => ({ componentId: c.id, componentName: c.displayName ?? c.name, handler: c.handler }));
+    : // Every project-scope read goes through targets[0], so integrations typed as Workflow are put
+      // first — otherwise whichever integration happened to sort first becomes the gateway, and a
+      // runtime with no workflow engine cannot answer for the project. The others are kept rather
+      // than filtered out: workflow management is enabled per runtime (the Add Runtime toggle is
+      // gated on technology, not on integration type), so a differently-typed integration may still
+      // host workflows and must stay in the definitions fan-out and the task-queue lookup. Copied
+      // before sorting so the cached component list is not mutated; sort is stable, so integrations
+      // keep their relative order within each group.
+      [...allComponents].sort((a, b) => Number(isWorkflowIntegration(b.displayType)) - Number(isWorkflowIntegration(a.displayType))).map((c) => ({ componentId: c.id, componentName: c.displayName ?? c.name, handler: c.handler }));
   // The project shares one Temporal namespace, so a listing is narrowed by task queue rather than by
   // which runtime is called: this integration's queue at component scope, the whole namespace at
   // project scope.
