@@ -42,14 +42,24 @@ export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Ele
   // Gate on this component's permissions at component scope, the project's at project scope.
   // Note the project-scope limit: the backend resolves project-scope permissions with
   // `AND grm.integration_uuid IS NULL`, so a user holding workflow permission only on individual
-  // integrations does not pass this gate and must use the per-integration page. Integrations the
-  // caller cannot see are in any case dropped from the aggregate — the proxy 403s per component and
-  // the fan-out treats that as "nothing to contribute".
+  // integrations does not pass this gate and must use the per-integration page. Note that a project's
+  // workflow data is namespace-wide, so this gate is what bounds what a project-scope viewer sees;
+  // it is not narrowed further per integration.
   useLoadComponentPermissions(scope.org, projectId, componentLevel ? componentId : '');
   useLoadProjectPermissions(scope.org, projectId);
   const { hasAnyPermission } = useAccessControl();
 
-  const targets: WorkflowTarget[] = componentLevel ? (component ? [{ componentId: component.id, componentName: component.displayName ?? component.name }] : []) : allComponents.map((c) => ({ componentId: c.id, componentName: c.displayName ?? c.name }));
+  // `handler` is what a runtime is configured with as its Temporal task queue, so it is how a
+  // record's own taskQueue maps back to the integration that owns it.
+  const targets: WorkflowTarget[] = componentLevel
+    ? component
+      ? [{ componentId: component.id, componentName: component.displayName ?? component.name, handler: component.handler }]
+      : []
+    : allComponents.map((c) => ({ componentId: c.id, componentName: c.displayName ?? c.name, handler: c.handler }));
+  // The project shares one Temporal namespace, so a listing is narrowed by task queue rather than by
+  // which runtime is called: this integration's queue at component scope, the whole namespace at
+  // project scope.
+  const taskQueue = componentLevel ? component?.handler : undefined;
 
   // Optional deep-link params (e.g. from the Overview page's "View Instances" action or the
   // start-workflow success dialog): ?tab=admin&type=<workflowType>&workflowId=<id>&env=<environmentId>
@@ -139,9 +149,9 @@ export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Ele
               Select an environment to continue.
             </Typography>
           ) : activeTab === 'user' ? (
-            <UserPortal targets={targets} environmentId={activeEnvId} />
+            <UserPortal targets={targets} environmentId={activeEnvId} taskQueue={taskQueue} />
           ) : (
-            <AdminPortal key={deepLinkKey} targets={targets} environmentId={activeEnvId} initialWorkflowType={initialWorkflowType} initialWorkflowId={initialWorkflowId} />
+            <AdminPortal key={deepLinkKey} targets={targets} environmentId={activeEnvId} taskQueue={taskQueue} initialWorkflowType={initialWorkflowType} initialWorkflowId={initialWorkflowId} />
           )}
         </>
       )}

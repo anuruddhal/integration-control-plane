@@ -29,13 +29,15 @@ import { DetailRow, SchemaDisclosure, StatusChip, SubmitError, WorkflowIdLink, t
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
 import {
-  useReviewActivitiesAcross,
+  distinctWorkflowTypes,
+  targetForTaskQueue,
+  useReviewActivities,
   useReviewActivity,
   useReviewDecision,
   useStartWorkflow,
-  useWorkflowDefinitions,
   useWorkflowDefinitionsAcross,
-  useWorkflowInstancesAcross,
+  useWorkflowInstances,
+  type Owned,
   type ReviewDecision,
   type WorkflowDefinition,
   type WorkflowTarget,
@@ -74,16 +76,34 @@ const TIME_PRESETS: { label: string; ms: number }[] = [
 export type Toast = { severity: 'success' | 'error'; message: string } | null;
 
 /**
- * The integrations this portal covers, plus the environment they are viewed in. One target at
- * component scope, every workflow-capable integration in the project at project scope. Rows carry
- * their owning integration, and each detail view or mutation is scoped back to it via `rowScope`.
+ * The integrations this portal covers, plus the environment they are viewed in: one target at
+ * integration scope, all of the project's at project scope.
+ *
+ * Reads do not fan out. A project shares one Temporal engine, so the first target's runtime answers
+ * for the whole project; `taskQueue` is what narrows a listing to a single integration. Each row
+ * reports the task queue that owns it, which is how a detail view or mutation is routed back.
  */
 export interface PortalScope {
   targets: WorkflowTarget[];
   environmentId: string;
+  /** Integration scope: that integration's task queue. Project scope: undefined (whole namespace). */
+  taskQueue?: string;
 }
 
-const rowScope = (environmentId: string, componentId: string): WorkflowScope => ({ componentId, environmentId });
+/** The runtime every read goes through — any runtime in the project serves the whole namespace. */
+const gatewayScope = (scope: PortalScope): WorkflowScope => ({ componentId: scope.targets[0]?.componentId ?? '', environmentId: scope.environmentId });
+
+/**
+ * Scope for acting on one row: the integration whose task queue owns it, falling back to the
+ * gateway when the task queue is absent or is not one of this project's integrations.
+ */
+function ownerScope(scope: PortalScope, taskQueue?: string): WorkflowScope {
+  const owner = targetForTaskQueue(scope.targets, taskQueue);
+  return owner ? { componentId: owner.componentId, environmentId: scope.environmentId } : gatewayScope(scope);
+}
+
+/** How a row's owning integration is labelled: its display name when known, else the raw task queue. */
+const ownerLabel = (scope: PortalScope, taskQueue?: string): string => targetForTaskQueue(scope.targets, taskQueue)?.componentName ?? taskQueue ?? '—';
 
 /** Integration filter, offered only when the portal spans more than one. */
 function IntegrationFilter({ targets, value, onChange }: { targets: WorkflowTarget[]; value: WorkflowTarget | null; onChange: (v: WorkflowTarget | null) => void }) {
@@ -187,8 +207,8 @@ function useTimeRangeFilter() {
   return { bounds, controls, active: timeRange !== ANY_TIME, reset: () => setTimeRange(ANY_TIME) };
 }
 
-export default function AdminPortal({ targets, environmentId, initialWorkflowType, initialWorkflowId }: PortalScope & { initialWorkflowType?: string; initialWorkflowId?: string }) {
-  const scope: PortalScope = { targets, environmentId };
+export default function AdminPortal({ targets, environmentId, taskQueue, initialWorkflowType, initialWorkflowId }: PortalScope & { initialWorkflowType?: string; initialWorkflowId?: string }) {
+  const scope: PortalScope = { targets, environmentId, taskQueue };
   const [view, setView] = useState<'workflows' | 'retry'>('workflows');
   const [toast, setToast] = useState<Toast>(null);
   // WorkflowsAdmin's filters live here, not inside it, so switching to Review Activities and
@@ -256,25 +276,26 @@ function WorkflowsAdmin({
   timeFilter: TimeRangeFilter;
 }) {
   const [startOpen, setStartOpen] = useState(false);
-  // A workflow id is only unique within its runtime, so the detail drawer is opened against the
-  // integration that produced the row, never the page scope.
-  const [detail, setDetail] = useState<{ workflowId: string; componentId: string } | null>(null);
+  // The drawer opens against the integration that owns the run, per the row's own task queue.
+  const [detail, setDetail] = useState<{ workflowId: string; taskQueue?: string } | null>(null);
   const [integration, setIntegration] = useState<WorkflowTarget | null>(null);
 
   const multi = scope.targets.length > 1;
-  const queried = integration ? [integration] : scope.targets;
+  // Narrowing by integration is just a task-queue filter on the same gateway request.
+  const taskQueue = integration?.handler ?? scope.taskQueue;
   const definitions = useWorkflowDefinitionsAcross(scope.targets, scope.environmentId);
 
   const filters = {
     status: status === 'All' ? undefined : status,
     workflowType: selectedType?.workflowType || undefined,
     workflowId: search || undefined,
+    taskQueue,
     startTimeFrom: timeFilter.bounds.startTimeFrom,
     startTimeTo: timeFilter.bounds.startTimeTo,
     limit: 50,
   };
-  const { items: rows, isLoading, error, failed, hasMore, refetch, isFetching } = useWorkflowInstancesAcross(queried, scope.environmentId, filters);
-  const items = sortByStartTimeDesc(rows);
+  const { data: page, isLoading, error, refetch, isFetching } = useWorkflowInstances(gatewayScope(scope), filters);
+  const items = sortByStartTimeDesc(page?.items ?? []);
   const hasFilters = status !== 'All' || !!selectedType || !!search || !!integration || timeFilter.active;
 
   return (
@@ -296,7 +317,7 @@ function WorkflowsAdmin({
 
       <Stack direction="row" gap={1.5} sx={{ mb: 2 }} flexWrap="wrap" alignItems="center">
         <StatusFilter options={WORKFLOW_STATUSES} value={status} onChange={setStatus} />
-        <WorkflowNameFilter definitions={definitions} value={selectedType} onChange={setSelectedType} />
+        <WorkflowNameFilter definitions={distinctWorkflowTypes(definitions.items)} value={selectedType} onChange={setSelectedType} />
         {multi && <IntegrationFilter targets={scope.targets} value={integration} onChange={setIntegration} />}
         {timeFilter.controls}
         {hasFilters && (
@@ -314,7 +335,7 @@ function WorkflowsAdmin({
         )}
       </Stack>
 
-      <PartialResultsNotice failed={failed} />
+      <PartialResultsNotice failed={definitions.failed} />
 
       {isLoading ? (
         <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
@@ -337,14 +358,14 @@ function WorkflowsAdmin({
             </ListingTable.Head>
             <ListingTable.Body>
               {items.map((wf) => (
-                <ListingTable.Row key={`${wf.componentId}:${wf.workflowId}:${wf.runId ?? ''}`}>
+                <ListingTable.Row key={`${wf.workflowId}:${wf.runId ?? ''}`}>
                   <ListingTable.Cell>
                     <Typography sx={{ fontFamily: 'monospace', fontSize: 12 }}>{wf.workflowId}</Typography>
                   </ListingTable.Cell>
                   <ListingTable.Cell>{wf.workflowType ?? '—'}</ListingTable.Cell>
                   {multi && (
                     <ListingTable.Cell>
-                      <Typography variant="body2">{wf.componentName}</Typography>
+                      <Typography variant="body2">{ownerLabel(scope, wf.taskQueue)}</Typography>
                     </ListingTable.Cell>
                   )}
                   <ListingTable.Cell>
@@ -353,7 +374,7 @@ function WorkflowsAdmin({
                   <ListingTable.Cell>{formatTime(wf.startTime)}</ListingTable.Cell>
                   <ListingTable.Cell>
                     <Tooltip title="View details">
-                      <IconButton size="small" onClick={() => setDetail({ workflowId: wf.workflowId, componentId: wf.componentId })} aria-label="View details">
+                      <IconButton size="small" onClick={() => setDetail({ workflowId: wf.workflowId, taskQueue: wf.taskQueue })} aria-label="View details">
                         <Eye size={16} />
                       </IconButton>
                     </Tooltip>
@@ -362,7 +383,7 @@ function WorkflowsAdmin({
               ))}
             </ListingTable.Body>
           </ListingTable>
-          {hasMore && (
+          {page?.hasMore && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
               Showing the first {items.length}. Refine filters to narrow results.
             </Typography>
@@ -371,21 +392,20 @@ function WorkflowsAdmin({
       )}
 
       {startOpen && <StartWorkflowDialog scope={scope} onClose={() => setStartOpen(false)} onToast={onToast} />}
-      {detail && <WorkflowDetailDrawer scope={rowScope(scope.environmentId, detail.componentId)} workflowId={detail.workflowId} onClose={() => setDetail(null)} />}
+      {detail && <WorkflowDetailDrawer scope={ownerScope(scope, detail.taskQueue)} workflowId={detail.workflowId} onClose={() => setDetail(null)} />}
     </>
   );
 }
 
 export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToast }: { scope: PortalScope; initialWorkflowType?: string; onClose: () => void; onToast: (t: Toast) => void }) {
-  // A workflow runs on one runtime, so starting one always resolves to a single integration.
-  // With a single target that choice is implicit; across a project the user picks it.
-  const [target, setTarget] = useState<WorkflowTarget | null>(scope.targets[0] ?? null);
-  const targetScope: WorkflowScope = { componentId: target?.componentId ?? '', environmentId: scope.environmentId };
-  const { data: definitions = [] } = useWorkflowDefinitions(targetScope);
+  // `/definitions` is runtime-local, so each definition already names the runtime hosting it. That
+  // makes the chosen workflow the choice of integration too — no separate target picker needed, and
+  // at project scope the dropdown is the union over every integration.
+  const definitions = useWorkflowDefinitionsAcross(scope.targets, scope.environmentId);
+  const multi = scope.targets.length > 1;
+  const [selected, setSelected] = useState<Owned<WorkflowDefinition> | null>(null);
+  const targetScope: WorkflowScope = { componentId: selected?.componentId ?? '', environmentId: scope.environmentId };
   const start = useStartWorkflow(targetScope);
-  // Seeded from a deep link (e.g. Overview → "Start Workflow") with a minimal {workflowType}
-  // object; the full definition (with inputSchema) is resolved once definitions load.
-  const [selected, setSelected] = useState<WorkflowDefinition | null>(initialWorkflowType ? { workflowType: initialWorkflowType } : null);
   const [workflowId, setWorkflowId] = useState('');
   const [timeout, setTimeoutVal] = useState('');
   const [formValues, setFormValues] = useState<Record<string, string | boolean>>({});
@@ -395,7 +415,15 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
   const navigate = useNavigate();
   const navScope = useScope();
 
-  const type = selected ? (definitions.find((d) => d.workflowType === selected.workflowType) ?? selected) : null;
+  const type = selected;
+
+  // A deep link (e.g. Overview → "Start Workflow") names a workflow type only; bind it to a concrete
+  // definition — and thereby to its runtime — once the definitions have loaded.
+  useEffect(() => {
+    if (!initialWorkflowType || selected) return;
+    const match = definitions.items.find((d) => d.workflowType === initialWorkflowType);
+    if (match) setSelected(match);
+  }, [initialWorkflowType, selected, definitions.items]);
 
   // When the input schema parses into fields, a generated form replaces the raw JSON input.
   const formFields = type ? parseFormSchema(type.inputSchema) : null;
@@ -411,7 +439,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
   };
 
   const submit = () => {
-    if (!type || !target) return;
+    if (!type) return;
     setStartError(null);
     let parsedInput: unknown;
     if (formFields) {
@@ -490,36 +518,21 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
       <DialogContent>
         <Stack gap={2} sx={{ mt: 1 }}>
           <Autocomplete
-            options={definitions}
-            getOptionLabel={(d) => d.workflowType}
+            options={definitions.items}
+            loading={definitions.isLoading}
+            getOptionLabel={(d) => (multi ? `${d.workflowType} — ${d.componentName}` : d.workflowType)}
             value={type}
-            isOptionEqualToValue={(a, b) => a.workflowType === b.workflowType}
+            isOptionEqualToValue={(a, b) => a.workflowType === b.workflowType && a.componentId === b.componentId}
             onChange={(_, v) => {
               setSelected(v);
+              // The input schema is per definition, so switching invalidates anything already typed.
               setFormValues({});
               setFieldErrors({});
               setStartError(null);
             }}
             renderInput={(params) => <TextField {...params} label="Workflow name" required placeholder="Select a workflow" />}
           />
-          {scope.targets.length > 1 && (
-            <Autocomplete
-              options={scope.targets}
-              getOptionLabel={(t) => t.componentName}
-              value={target}
-              isOptionEqualToValue={(a, b) => a.componentId === b.componentId}
-              onChange={(_, v) => {
-                setTarget(v);
-                // Definitions and the input schema are per integration, so a target change invalidates
-                // the selected workflow and anything typed into its form.
-                setSelected(null);
-                setFormValues({});
-                setFieldErrors({});
-                setStartError(null);
-              }}
-              renderInput={(params) => <TextField {...params} label="Integration" required placeholder="Select the integration to run on" />}
-            />
-          )}
+          <PartialResultsNotice failed={definitions.failed} />
           <SubmitError message={startError} onClear={() => setStartError(null)} />
           {formFields ? (
             <SchemaFormFields fields={formFields} values={formValues} errors={fieldErrors} onChange={setFormValue} />
@@ -541,7 +554,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={!type || !target || start.isPending} onClick={submit}>
+        <Button variant="contained" disabled={!type || start.isPending} onClick={submit}>
           {start.isPending ? 'Starting…' : 'Start'}
         </Button>
       </DialogActions>
@@ -555,31 +568,31 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: PortalScope; onToast
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All');
   const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(null);
-  // Like the workflow list, the detail dialog is opened against the row's own integration.
-  const [open, setOpen] = useState<{ taskId: string; componentId: string } | null>(null);
+  // Like the workflow list, the dialog opens against the integration that owns the row.
+  const [open, setOpen] = useState<{ taskId: string; taskQueue?: string } | null>(null);
   const [integration, setIntegration] = useState<WorkflowTarget | null>(null);
   const timeFilter = useTimeRangeFilter();
 
   const multi = scope.targets.length > 1;
-  const queried = integration ? [integration] : scope.targets;
+  const taskQueue = integration?.handler ?? scope.taskQueue;
   const definitions = useWorkflowDefinitionsAcross(scope.targets, scope.environmentId);
   const {
-    items: rows,
+    data: page,
     isLoading,
     error,
-    failed,
     refetch,
     isFetching,
-  } = useReviewActivitiesAcross(queried, scope.environmentId, {
+  } = useReviewActivities(gatewayScope(scope), {
     status: status === 'All' ? undefined : status,
     parentWorkflowId: search || undefined,
+    taskQueue,
     startTimeFrom: timeFilter.bounds.startTimeFrom,
     startTimeTo: timeFilter.bounds.startTimeTo,
     limit: 50,
   });
 
   // The review-activity API has no workflow-name filter; the qualified task name carries it, so filter client-side.
-  const items = sortByStartTimeDesc(rows.filter((t) => !selectedType || splitQualifiedName(t.taskName ?? t.activityName).workflow === selectedType.workflowType));
+  const items = sortByStartTimeDesc((page?.items ?? []).filter((t) => !selectedType || splitQualifiedName(t.taskName ?? t.activityName).workflow === selectedType.workflowType));
   const hasFilters = status !== 'All' || !!selectedType || !!search || !!integration || timeFilter.active;
 
   return (
@@ -596,7 +609,7 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: PortalScope; onToast
 
       <Stack direction="row" gap={1.5} sx={{ mb: 2 }} flexWrap="wrap" alignItems="center">
         <StatusFilter options={REVIEW_ACTIVITY_STATUSES} value={status} onChange={setStatus} />
-        <WorkflowNameFilter definitions={definitions} value={selectedType} onChange={setSelectedType} />
+        <WorkflowNameFilter definitions={distinctWorkflowTypes(definitions.items)} value={selectedType} onChange={setSelectedType} />
         {multi && <IntegrationFilter targets={scope.targets} value={integration} onChange={setIntegration} />}
         {timeFilter.controls}
         {hasFilters && (
@@ -614,7 +627,7 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: PortalScope; onToast
         )}
       </Stack>
 
-      <PartialResultsNotice failed={failed} />
+      <PartialResultsNotice failed={definitions.failed} />
 
       {isLoading ? (
         <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
@@ -639,7 +652,7 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: PortalScope; onToast
             {items.map((t) => {
               const qualified = splitQualifiedName(t.taskName ?? t.activityName);
               return (
-                <ListingTable.Row key={`${t.componentId}:${t.taskId}`}>
+                <ListingTable.Row key={t.taskId}>
                   <ListingTable.Cell>
                     <Typography variant="body2">{qualified.task ?? t.taskId}</Typography>
                   </ListingTable.Cell>
@@ -648,7 +661,7 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: PortalScope; onToast
                   </ListingTable.Cell>
                   {multi && (
                     <ListingTable.Cell>
-                      <Typography variant="body2">{t.componentName}</Typography>
+                      <Typography variant="body2">{ownerLabel(scope, t.taskQueue)}</Typography>
                     </ListingTable.Cell>
                   )}
                   <ListingTable.Cell>
@@ -660,7 +673,7 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: PortalScope; onToast
                   <ListingTable.Cell>{formatTime(t.startTime)}</ListingTable.Cell>
                   <ListingTable.Cell>
                     <Tooltip title="Open activity">
-                      <IconButton size="small" onClick={() => setOpen({ taskId: t.taskId, componentId: t.componentId })} aria-label="Open activity">
+                      <IconButton size="small" onClick={() => setOpen({ taskId: t.taskId, taskQueue: t.taskQueue })} aria-label="Open activity">
                         <Eye size={16} />
                       </IconButton>
                     </Tooltip>
@@ -672,7 +685,7 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: PortalScope; onToast
         </ListingTable>
       )}
 
-      {open && <ReviewActivityDetailDialog scope={rowScope(scope.environmentId, open.componentId)} taskId={open.taskId} onClose={() => setOpen(null)} onToast={onToast} />}
+      {open && <ReviewActivityDetailDialog scope={ownerScope(scope, open.taskQueue)} taskId={open.taskId} onClose={() => setOpen(null)} onToast={onToast} />}
     </>
   );
 }

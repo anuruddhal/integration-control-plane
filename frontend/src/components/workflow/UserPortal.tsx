@@ -25,7 +25,7 @@ import { DetailRow, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope 
 import type { PortalScope } from './AdminPortal';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
-import { useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasksAcross, usePendingTaskCountAcross, type HumanTask, type Owned } from '../../api/workflows';
+import { targetForTaskQueue, useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, usePendingTaskCount, type HumanTask } from '../../api/workflows';
 
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const;
 
@@ -52,23 +52,25 @@ function taskDisplayName(t?: HumanTask): string {
 type Toast = { severity: 'success' | 'error'; message: string } | null;
 
 /**
- * Warns when some integrations could not be reached, so a thinner inbox is never mistaken for
- * "nothing to do". Integrations without a workflow runtime are not failures and never appear here.
+ * Every runtime in a project shares one Temporal namespace, so one runtime answers for the whole
+ * project; `taskQueue` narrows a listing to a single integration. See PortalScope.
  */
-function PartialTasksNotice({ failed }: { failed: { componentName: string; message: string }[] }) {
-  if (failed.length === 0) return null;
-  return (
-    <Alert severity="warning" sx={{ mb: 2 }}>
-      {`Showing partial results — could not reach ${failed.map((f) => f.componentName).join(', ')}.`}
-    </Alert>
-  );
+const gateway = (scope: PortalScope): WorkflowScope => ({ componentId: scope.targets[0]?.componentId ?? '', environmentId: scope.environmentId });
+
+/** Label for the integration that owns a task, resolved from the task's own task queue. */
+const ownerLabel = (scope: PortalScope, taskQueue?: string): string => targetForTaskQueue(scope.targets, taskQueue)?.componentName ?? taskQueue ?? '—';
+
+/** Scope for acting on a task: the integration that owns it, else the gateway runtime. */
+function ownerScope(scope: PortalScope, taskQueue?: string): WorkflowScope {
+  const owner = targetForTaskQueue(scope.targets, taskQueue);
+  return owner ? { componentId: owner.componentId, environmentId: scope.environmentId } : gateway(scope);
 }
 
-export default function UserPortal({ targets, environmentId }: PortalScope) {
-  const scope: PortalScope = { targets, environmentId };
+export default function UserPortal({ targets, environmentId, taskQueue }: PortalScope) {
+  const scope: PortalScope = { targets, environmentId, taskQueue };
   const [view, setView] = useState<'tasks' | 'history'>('tasks');
   const [toast, setToast] = useState<Toast>(null);
-  const pendingCount = usePendingTaskCountAcross(targets, environmentId);
+  const { data: pendingCount } = usePendingTaskCount(gateway(scope), taskQueue);
 
   return (
     <>
@@ -96,14 +98,14 @@ export default function UserPortal({ targets, environmentId }: PortalScope) {
   );
 }
 
-function TaskTable({ tasks, onOpen, environmentId, showActionable, showIntegration }: { tasks: Owned<HumanTask>[]; onOpen: (t: Owned<HumanTask>) => void; environmentId: string; showActionable?: boolean; showIntegration?: boolean }) {
+function TaskTable({ tasks, onOpen, environmentId, showActionable, integrationLabel }: { tasks: HumanTask[]; onOpen: (t: HumanTask) => void; environmentId: string; showActionable?: boolean; integrationLabel?: (taskQueue?: string) => string }) {
   return (
     <ListingTable>
       <ListingTable.Head>
         <ListingTable.Row>
           <ListingTable.Cell>Task</ListingTable.Cell>
           <ListingTable.Cell>Workflow Name</ListingTable.Cell>
-          {showIntegration && <ListingTable.Cell>Integration</ListingTable.Cell>}
+          {integrationLabel && <ListingTable.Cell>Integration</ListingTable.Cell>}
           <ListingTable.Cell>Workflow ID</ListingTable.Cell>
           <ListingTable.Cell>Status</ListingTable.Cell>
           <ListingTable.Cell>Started</ListingTable.Cell>
@@ -112,7 +114,7 @@ function TaskTable({ tasks, onOpen, environmentId, showActionable, showIntegrati
       </ListingTable.Head>
       <ListingTable.Body>
         {tasks.map((t) => (
-          <ListingTable.Row key={`${t.componentId}:${t.taskId}`}>
+          <ListingTable.Row key={t.taskId}>
             <ListingTable.Cell>
               <Stack direction="row" alignItems="center" gap={1}>
                 <Typography variant="body2">{taskDisplayName(t)}</Typography>
@@ -126,9 +128,9 @@ function TaskTable({ tasks, onOpen, environmentId, showActionable, showIntegrati
             <ListingTable.Cell>
               <Typography variant="body2">{t.parentWorkflowType ?? '—'}</Typography>
             </ListingTable.Cell>
-            {showIntegration && (
+            {integrationLabel && (
               <ListingTable.Cell>
-                <Typography variant="body2">{t.componentName}</Typography>
+                <Typography variant="body2">{integrationLabel(t.taskQueue)}</Typography>
               </ListingTable.Cell>
             )}
             <ListingTable.Cell>
@@ -153,10 +155,10 @@ function TaskTable({ tasks, onOpen, environmentId, showActionable, showIntegrati
 }
 
 function MyTasks({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) => void }) {
-  // Opened against the integration that owns the task — a task id is unique only within its runtime.
-  const [open, setOpen] = useState<Owned<HumanTask> | null>(null);
-  const { items, isLoading, error, failed, refetch, isFetching } = useHumanTasksAcross(scope.targets, scope.environmentId, { status: 'PENDING', limit: 50 });
-  const tasks = sortByStartTimeDesc(items);
+  // Opened against the integration that owns the task, per the task's own task queue.
+  const [open, setOpen] = useState<HumanTask | null>(null);
+  const { data: page, isLoading, error, refetch, isFetching } = useHumanTasks(gateway(scope), { status: 'PENDING', taskQueue: scope.taskQueue, limit: 50 });
+  const tasks = sortByStartTimeDesc(page?.items ?? []);
   const multi = scope.targets.length > 1;
 
   return (
@@ -170,8 +172,6 @@ function MyTasks({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) =
         </Tooltip>
       </Stack>
 
-      <PartialTasksNotice failed={failed} />
-
       {isLoading ? (
         <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
       ) : error ? (
@@ -179,29 +179,29 @@ function MyTasks({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) =
       ) : tasks.length === 0 ? (
         <Typography sx={emptySx}>No pending tasks.</Typography>
       ) : (
-        <TaskTable tasks={tasks} onOpen={setOpen} environmentId={scope.environmentId} showActionable showIntegration={multi} />
+        <TaskTable tasks={tasks} onOpen={setOpen} environmentId={scope.environmentId} showActionable integrationLabel={multi ? (q) => ownerLabel(scope, q) : undefined} />
       )}
 
-      {open && <TaskDetailDialog scope={{ componentId: open.componentId, environmentId: scope.environmentId }} taskId={open.taskId} actionable onClose={() => setOpen(null)} onToast={onToast} />}
+      {open && <TaskDetailDialog scope={ownerScope(scope, open.taskQueue)} taskId={open.taskId} actionable onClose={() => setOpen(null)} onToast={onToast} />}
     </>
   );
 }
 
 function TaskHistory({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) => void }) {
   const [tab, setTab] = useState<'Completed' | 'Failed'>('Completed');
-  const [open, setOpen] = useState<Owned<HumanTask> | null>(null);
+  const [open, setOpen] = useState<HumanTask | null>(null);
   // The list API reports a failed human task with status FAILED, so each tab maps directly
   // to a status query. Externally-terminated tasks (TERMINATED) are grouped under Failed too.
-  const completedQuery = useHumanTasksAcross(scope.targets, scope.environmentId, { status: 'COMPLETED', limit: 50 });
-  const failedQuery = useHumanTasksAcross(scope.targets, scope.environmentId, { status: 'FAILED', limit: 50 });
-  const terminatedQuery = useHumanTasksAcross(scope.targets, scope.environmentId, { status: 'TERMINATED', limit: 50 });
+  const q = { taskQueue: scope.taskQueue, limit: 50 };
+  const completedQuery = useHumanTasks(gateway(scope), { status: 'COMPLETED', ...q });
+  const failedQuery = useHumanTasks(gateway(scope), { status: 'FAILED', ...q });
+  const terminatedQuery = useHumanTasks(gateway(scope), { status: 'TERMINATED', ...q });
 
   const isLoading = completedQuery.isLoading || failedQuery.isLoading || terminatedQuery.isLoading;
   const error = completedQuery.error ?? failedQuery.error ?? terminatedQuery.error;
   const shown = tab === 'Completed' ? [completedQuery] : [failedQuery, terminatedQuery];
-  const failed = shown.flatMap((q) => q.failed);
 
-  const items = shown.flatMap((q) => q.items);
+  const items = shown.flatMap((r) => r.data?.items ?? []);
   const tasks = sortByStartTimeDesc(items);
   const multi = scope.targets.length > 1;
 
@@ -213,8 +213,6 @@ function TaskHistory({ scope, onToast }: { scope: PortalScope; onToast: (t: Toas
         ))}
       </Stack>
 
-      <PartialTasksNotice failed={failed} />
-
       {isLoading ? (
         <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
       ) : error ? (
@@ -222,10 +220,10 @@ function TaskHistory({ scope, onToast }: { scope: PortalScope; onToast: (t: Toas
       ) : tasks.length === 0 ? (
         <Typography sx={emptySx}>No tasks in this category.</Typography>
       ) : (
-        <TaskTable tasks={tasks} onOpen={setOpen} environmentId={scope.environmentId} showIntegration={multi} />
+        <TaskTable tasks={tasks} onOpen={setOpen} environmentId={scope.environmentId} integrationLabel={multi ? (qq) => ownerLabel(scope, qq) : undefined} />
       )}
 
-      {open && <TaskDetailDialog scope={{ componentId: open.componentId, environmentId: scope.environmentId }} taskId={open.taskId} onClose={() => setOpen(null)} onToast={onToast} />}
+      {open && <TaskDetailDialog scope={ownerScope(scope, open.taskQueue)} taskId={open.taskId} onClose={() => setOpen(null)} onToast={onToast} />}
     </>
   );
 }

@@ -36,6 +36,9 @@ export interface WorkflowInstance {
   status?: string;
   startTime?: string;
   closeTime?: string;
+  /** The project's Temporal namespace, and the task queue of the integration that owns this run. */
+  namespace?: string;
+  taskQueue?: string;
   [key: string]: unknown;
 }
 
@@ -61,6 +64,8 @@ export interface HumanTask {
   eligibleRoles?: string[];
   canComplete?: boolean;
   result?: unknown;
+  namespace?: string;
+  taskQueue?: string;
   [key: string]: unknown;
 }
 
@@ -73,6 +78,8 @@ export interface ReviewActivity {
   status?: string;
   trigger?: string;
   startTime?: string;
+  namespace?: string;
+  taskQueue?: string;
   [key: string]: unknown;
 }
 
@@ -187,6 +194,8 @@ export function useWorkflowDefinitions(s: Scope) {
 
 export interface WorkflowFilters {
   status?: string;
+  /** Restricts results to one integration's task queue; omitted covers the whole namespace. */
+  taskQueue?: string;
   workflowType?: string;
   workflowId?: string;
   startTimeFrom?: string;
@@ -262,6 +271,7 @@ export interface HumanTaskFilters {
   parentWorkflowId?: string;
   parentWorkflowType?: string;
   taskName?: string;
+  taskQueue?: string;
   limit?: number;
   pageToken?: string;
 }
@@ -278,14 +288,14 @@ export function useHumanTasks(s: Scope, filters: HumanTaskFilters) {
   });
 }
 
-function fetchPendingTaskCount(componentId: string, environmentId: string): Promise<number> {
-  return wfRequest<{ count: number }>(componentId, environmentId, 'human-tasks/pending-count').then((d) => d.count ?? 0);
+function fetchPendingTaskCount(componentId: string, environmentId: string, taskQueue?: string): Promise<number> {
+  return wfRequest<{ count: number }>(componentId, environmentId, `human-tasks/pending-count${buildQuery({ taskQueue })}`).then((d) => d.count ?? 0);
 }
 
-export function usePendingTaskCount(s: Scope) {
+export function usePendingTaskCount(s: Scope, taskQueue?: string) {
   return useQuery({
-    queryKey: ['wf', 'pending-count', s.componentId, s.environmentId],
-    queryFn: () => fetchPendingTaskCount(s.componentId, s.environmentId),
+    queryKey: ['wf', 'pending-count', s.componentId, s.environmentId, taskQueue],
+    queryFn: () => fetchPendingTaskCount(s.componentId, s.environmentId, taskQueue),
     enabled: enabledFor(s),
     refetchInterval: 30000,
   });
@@ -335,6 +345,7 @@ export interface ReviewActivityFilters {
   status?: string;
   parentWorkflowId?: string;
   taskName?: string;
+  taskQueue?: string;
   startTimeFrom?: string;
   startTimeTo?: string;
   limit?: number;
@@ -396,142 +407,93 @@ export function useReviewDecision(s: Scope) {
   });
 }
 
-// ── Project-scope aggregation ────────────────────────────────────────────────
+// ── Project-scope workflow management ────────────────────────────────────────
 //
-// A workflow instance or task id is only unique inside the runtime that owns it, so every row an
-// aggregated list yields carries the integration it came from; detail views and mutations then
-// target that integration's runtime rather than a page-level scope.
+// A project shares one Temporal engine. Every runtime in it is bound to the same namespace
+// (`namespace = <project>` in the runtime config) and differs only by task queue
+// (`taskQueue = <integration>`). The management API relays to that engine, so any one runtime
+// answers for the whole project: calling every integration's callback URL is unnecessary and would
+// return the same namespace-wide rows once per runtime.
 //
-// The fan-out is deliberately client-side. /icp/workflow authorizes per component, so a caller
-// holding integration-scoped permission sees exactly the integrations it may see. A single
-// project-scope check could not do that: getUserEffectivePermissions appends
-// `AND grm.integration_uuid IS NULL` when no integration is supplied, which drops
-// integration-specific role mappings. Per-component requests also mean one dead or workflow-less
-// runtime degrades its own row rather than failing the page.
+// Reads therefore go through a single gateway runtime, and scope is expressed with the `taskQueue`
+// query parameter that the listings and pending-count accept:
+//   - integration scope - taskQueue is that integration, so only its rows come back;
+//   - project scope - taskQueue omitted, covering every task queue in the namespace, and never
+//     another namespace, since the client is namespace-bound.
+// Each record carries its own namespace/taskQueue, and that is what routes a follow-up operation
+// back to the integration that owns it.
+//
+// `/definitions` is the exception: it takes no taskQueue and reports only what its own runtime
+// hosts, so a project-wide list of startable workflows does have to ask every integration.
 
 export interface WorkflowTarget {
   componentId: string;
   componentName: string;
+  /** The component handler — what the runtime is configured with as its `taskQueue`. */
+  handler: string;
 }
 
-/** A row tagged with the integration whose runtime produced it. */
+/** A value tagged with the integration it came from. */
 export type Owned<T> = T & { componentId: string; componentName: string };
 
-export interface Aggregated<T> {
-  items: Owned<T>[];
-  isLoading: boolean;
-  isFetching: boolean;
-  /** Set only when no target returned data and at least one failed for a real reason. */
-  error: Error | null;
-  /** Targets that failed while others succeeded, so a partial list can say so. */
-  failed: { componentName: string; message: string }[];
-  /** True when any target had more rows than were fetched. */
-  hasMore: boolean;
-  refetch: () => void;
+/** Resolves a record's `taskQueue` back to the integration that owns it, when it is one we know. */
+export function targetForTaskQueue(targets: WorkflowTarget[], taskQueue?: string): WorkflowTarget | undefined {
+  return taskQueue ? targets.find((t) => t.handler === taskQueue) : undefined;
 }
 
 /**
- * Statuses that mean "this integration has nothing to contribute" rather than "something broke":
- * 503 (no running workflow runtime in this environment), 403 (caller may not see this
- * integration's workflows) and 404 (component or runtime gone). They are dropped silently, so a
- * project mixing workflow and non-workflow integrations reads cleanly.
+ * 403/404/503 mean "this integration has nothing to contribute" — no running workflow runtime, or
+ * not visible to the caller — rather than a failure worth reporting.
  */
 function isAbsent(e: unknown): boolean {
   const status = (e as { status?: number } | null | undefined)?.status;
   return status === 403 || status === 404 || status === 503;
 }
 
-/** Runs one page request per target and merges the results, tagging each row with its owner. */
-function useAcrossTargets<T>(targets: WorkflowTarget[], environmentId: string, makeKey: (componentId: string) => readonly unknown[], fetchOne: (componentId: string) => Promise<Page<T>>): Aggregated<T> {
+export interface DefinitionsAcross {
+  /** Every startable workflow, tagged with the integration whose runtime hosts it. */
+  items: Owned<WorkflowDefinition>[];
+  isLoading: boolean;
+  failed: { componentName: string; message: string }[];
+}
+
+/**
+ * Workflow definitions from every target. This is the one listing that must fan out, because
+ * `/definitions` is runtime-local: it backs the project-wide "start a workflow" choice, where the
+ * chosen definition also determines which runtime to start it on.
+ */
+export function useWorkflowDefinitionsAcross(targets: WorkflowTarget[], environmentId: string): DefinitionsAcross {
   const results = useQueries({
     queries: targets.map((t) => ({
-      queryKey: makeKey(t.componentId),
-      queryFn: () => fetchOne(t.componentId),
+      queryKey: ['wf', 'definitions', t.componentId, environmentId],
+      queryFn: () => fetchDefinitions(t.componentId, environmentId),
       enabled: !!environmentId && !!t.componentId,
     })),
   });
 
-  const items: Owned<T>[] = [];
+  const items: Owned<WorkflowDefinition>[] = [];
   const failed: { componentName: string; message: string }[] = [];
   results.forEach((r, i) => {
     const target = targets[i];
     if (!target) return;
-    for (const item of r.data?.items ?? []) {
-      items.push({ ...item, componentId: target.componentId, componentName: target.componentName });
+    for (const d of r.data ?? []) {
+      items.push({ ...d, componentId: target.componentId, componentName: target.componentName });
     }
     if (r.error && !isAbsent(r.error)) {
       failed.push({ componentName: target.componentName, message: r.error instanceof Error ? r.error.message : 'Request failed' });
     }
   });
-
-  const anySucceeded = results.some((r) => r.data !== undefined);
-  return {
-    items,
-    isLoading: results.some((r) => r.isLoading),
-    isFetching: results.some((r) => r.isFetching),
-    error: !anySucceeded && failed.length > 0 ? new Error(failed[0].message) : null,
-    failed,
-    hasMore: results.some((r) => r.data?.hasMore === true),
-    refetch: () => results.forEach((r) => void r.refetch()),
-  };
-}
-
-export function useWorkflowInstancesAcross(targets: WorkflowTarget[], environmentId: string, filters: WorkflowFilters): Aggregated<WorkflowInstance> {
-  return useAcrossTargets<WorkflowInstance>(
-    targets,
-    environmentId,
-    (cid) => ['wf', 'instances', cid, environmentId, filters],
-    (cid) => fetchWorkflowInstances(cid, environmentId, filters),
-  );
-}
-
-export function useHumanTasksAcross(targets: WorkflowTarget[], environmentId: string, filters: HumanTaskFilters): Aggregated<HumanTask> {
-  return useAcrossTargets<HumanTask>(
-    targets,
-    environmentId,
-    (cid) => ['wf', 'human-tasks', cid, environmentId, filters],
-    (cid) => fetchHumanTasks(cid, environmentId, filters),
-  );
-}
-
-export function useReviewActivitiesAcross(targets: WorkflowTarget[], environmentId: string, filters: ReviewActivityFilters): Aggregated<ReviewActivity> {
-  return useAcrossTargets<ReviewActivity>(
-    targets,
-    environmentId,
-    (cid) => ['wf', 'review-activities', cid, environmentId, filters],
-    (cid) => fetchReviewActivities(cid, environmentId, filters),
-  );
+  return { items, isLoading: results.some((r) => r.isLoading), failed };
 }
 
 /**
- * Workflow definitions across the targets, de-duplicated by workflow type — the name filter offers
- * one entry per type even when several integrations expose the same workflow.
+ * Distinct workflow types, for the workflow-name filter — several integrations in a project may
+ * host the same type and the filter only needs one entry per name.
  */
-export function useWorkflowDefinitionsAcross(targets: WorkflowTarget[], environmentId: string): WorkflowDefinition[] {
-  const { items } = useAcrossTargets<WorkflowDefinition>(
-    targets,
-    environmentId,
-    (cid) => ['wf', 'definitions', cid, environmentId],
-    (cid) => fetchDefinitions(cid, environmentId).then((definitions) => ({ items: definitions })),
-  );
+export function distinctWorkflowTypes(definitions: WorkflowDefinition[]): WorkflowDefinition[] {
   const byType = new Map<string, WorkflowDefinition>();
-  for (const d of items) {
+  for (const d of definitions) {
     if (!byType.has(d.workflowType)) byType.set(d.workflowType, d);
   }
   return [...byType.values()];
-}
-
-/** Summed pending-task count across the targets; undefined until at least one target has answered. */
-export function usePendingTaskCountAcross(targets: WorkflowTarget[], environmentId: string): number | undefined {
-  const results = useQueries({
-    queries: targets.map((t) => ({
-      queryKey: ['wf', 'pending-count', t.componentId, environmentId],
-      queryFn: () => fetchPendingTaskCount(t.componentId, environmentId),
-      enabled: !!environmentId && !!t.componentId,
-      refetchInterval: 30000,
-    })),
-  });
-  // Left undefined until something has answered so the chip doesn't flash "0 pending" on load.
-  if (!results.some((r) => r.data !== undefined)) return undefined;
-  return results.reduce((sum, r) => sum + (r.data ?? 0), 0);
 }

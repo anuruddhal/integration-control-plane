@@ -61,7 +61,7 @@ import { StartWorkflowDialog, type Toast as WorkflowToast } from './workflow/Adm
 import { ArtifactTypeSelector } from './ArtifactDetail';
 import Authorized from './Authorized';
 import { Permissions } from '../constants/permissions';
-import { resourceUrl, useScope } from '../nav';
+import { hasComponent, resourceUrl, useScope } from '../nav';
 import { ENTRY_POINT_CONFIG, ENTRY_POINT_DETAIL_TABS, type SelectedArtifact, type TabProps } from './artifact-config';
 import SyncSwitch from './SyncSwitch';
 
@@ -552,7 +552,14 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
           {listenerToggleError}
         </Alert>
       </Snackbar>
-      {startWorkflowOpen && <StartWorkflowDialog scope={{ targets: [{ componentId, componentName: '' }], environmentId: envId }} initialWorkflowType={artifactName} onClose={() => setStartWorkflowOpen(false)} onToast={setWorkflowToast} />}
+      {startWorkflowOpen && (
+        <StartWorkflowDialog
+          scope={{ targets: [{ componentId, componentName: '', handler: hasComponent(scope) ? scope.component : '' }], environmentId: envId }}
+          initialWorkflowType={artifactName}
+          onClose={() => setStartWorkflowOpen(false)}
+          onToast={setWorkflowToast}
+        />
+      )}
       {viewingApiDocs && apiDocsRuntimeId && (
         <Suspense fallback={null}>
           <OpenApiDefinitionsDrawer runtimeId={apiDocsRuntimeId} onClose={() => setViewingApiDocs(false)} serviceBasePath={artifact.basePath?.toString()} />
