@@ -567,6 +567,7 @@ CREATE TABLE runtimes (
     runtime_hostname VARCHAR(255) NULL,
     runtime_port VARCHAR(10) NULL,
     callback_url VARCHAR(500) NULL,
+    try_it_host VARCHAR(255) NULL,
     platform_name VARCHAR(50) NOT NULL DEFAULT 'ballerina',
     platform_version VARCHAR(50) NULL,
     platform_home VARCHAR(255) NULL,

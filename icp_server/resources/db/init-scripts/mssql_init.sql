@@ -920,6 +920,7 @@ CREATE TABLE runtimes (
     runtime_hostname NVARCHAR (255) NULL,
     runtime_port NVARCHAR (10) NULL,
     callback_url NVARCHAR (500) NULL,
+    try_it_host NVARCHAR (255) NULL,
     platform_name NVARCHAR (50) NOT NULL DEFAULT 'ballerina',
     platform_version NVARCHAR (50) NULL,
     platform_home NVARCHAR (255) NULL,
