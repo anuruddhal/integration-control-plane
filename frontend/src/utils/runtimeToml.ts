@@ -64,5 +64,6 @@ enableManagementApi = true
 enableApiKey = true
 apiKeyValue = "${tomlString(secret)}"
 apiKeyHeader = "X-API-Key"
-enableBasicAuth = false`;
+enableBasicAuth = false
+# port = 8234`;
 }
