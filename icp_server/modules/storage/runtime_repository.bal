@@ -337,6 +337,58 @@ public isolated function getRunningWorkflowCallbackUrls() returns string[]|error
         select r.callback_url;
 }
 
+// Predicate matching a usable (non-null, non-empty) try_it_host — same Oracle caveat as
+// usableCallbackUrlPredicate above.
+isolated function usableTryItHostPredicate() returns sql:ParameterizedQuery =>
+    isOracle() ? ` AND r.try_it_host IS NOT NULL` : ` AND r.try_it_host IS NOT NULL AND r.try_it_host <> ''`;
+
+// A wrapper listener's own protocol column can be its package name (e.g. "graphql" for
+// graphql:Listener, which composes an http:Listener privately) rather than "HTTP"/"HTTPS" — only
+// ever treat it as https when it case-insensitively says so; everything else is plain http.
+public isolated function tryitScheme(string protocol) returns string =>
+    protocol.toLowerAscii() == "https" ? "https" : "http";
+
+// Resolves the Try-It proxy target for one explicit runtime+port: the runtime's self-reported
+// reachable host and the requested listener's protocol. This single query does double duty as
+// both the runtime-ownership check (the row only exists if runtimeId truly belongs to
+// componentId+environmentId) and the port-ownership check (the row only exists if `port`
+// matches a real registered listener_port for that runtime) — a forged runtimeId or an
+// unregistered port both collapse to the same `()` result, which the proxy surfaces as 404.
+public isolated function getTryItTarget(string componentId, string environmentId, string runtimeId, int port)
+        returns types:TryItTarget?|error {
+    sql:ParameterizedQuery query = sql:queryConcat(`
+        SELECT r.try_it_host AS host, l.protocol AS protocol
+        FROM runtimes r
+        JOIN bi_runtime_listener_artifacts l ON l.runtime_id = r.runtime_id
+        WHERE r.runtime_id = ${runtimeId} AND r.component_id = ${componentId}
+            AND r.environment_id = ${environmentId} AND r.status = 'RUNNING'
+            AND l.listener_port = ${port}`, usableTryItHostPredicate());
+    stream<record {|string host; string protocol;|}, sql:Error?> rs = dbClient->query(query);
+    record {|string host; string protocol;|}[] rows = check from var r in rs
+        limit 1
+        select r;
+    if rows.length() == 0 {
+        return ();
+    }
+    return {host: rows[0].host, protocol: rows[0].protocol};
+}
+
+// Base URLs (scheme://host:port) of RUNNING runtimes' registered listeners with a usable
+// try_it_host — used by the offline-runtime scheduler to prune the Try-It proxy's http:Client
+// cache, mirroring getRunningWorkflowCallbackUrls. Built in Ballerina rather than SQL since
+// string concatenation syntax differs across engines (||/CONCAT/+).
+public isolated function getLiveTryItBaseUrls() returns string[]|error {
+    sql:ParameterizedQuery query = sql:queryConcat(`
+        SELECT DISTINCT r.try_it_host AS host, l.listener_port AS port, l.protocol AS protocol
+        FROM runtimes r
+        JOIN bi_runtime_listener_artifacts l ON l.runtime_id = r.runtime_id
+        WHERE r.status = 'RUNNING' AND l.listener_port IS NOT NULL`, usableTryItHostPredicate());
+    stream<record {|string host; int port; string protocol;|}, sql:Error?> rs = dbClient->query(query);
+    record {|string host; int port; string protocol;|}[] rows = check from var r in rs
+        select r;
+    return rows.map(r => tryitScheme(r.protocol) + "://" + r.host + ":" + r.port.toString());
+}
+
 type ApiRecordInDB record {|
     string api_name;
     string url;

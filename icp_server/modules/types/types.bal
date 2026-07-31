@@ -334,6 +334,7 @@ public type Heartbeat record {
     string version?;
     string runtimeHostname?; // MI management API hostname
     string runtimePort?; // MI management API port
+    string tryItHost?; // Bare, reachable host/IP for this runtime process (BI), used by the Try-It proxy
     Node nodeInfo;
     Artifacts artifacts;
     string runtimeHash;
@@ -583,6 +584,7 @@ public type RuntimeDBRecord record {
     string runtime_hostname?;
     string runtime_port?;
     string callback_url?;
+    string try_it_host?;
     string platform_name?;
     string platform_version?;
     string platform_home?;
@@ -932,6 +934,14 @@ public type Workflow record {
 public type WorkflowTarget record {|
     string callbackUrl;
     string? keyId;
+|};
+
+// Resolved target for a Try-It proxy request: the runtime's self-reported reachable host
+// (try_it_host from the heartbeat) plus the requested listener's protocol, used together to
+// pick http vs https when building the outbound base URL (see tryitScheme in tryit_proxy_service.bal).
+public type TryItTarget record {|
+    string host;
+    string protocol;
 |};
 
 public type Automation record {
