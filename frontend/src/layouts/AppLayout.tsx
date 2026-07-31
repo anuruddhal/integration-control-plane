@@ -61,6 +61,7 @@ import { cookiePolicyUrl, loginUrl, orgUrl, privacyPolicyUrl, profileUrl } from 
 import { useAuth } from '../auth/AuthContext';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import { ALL_USER_MGT_PERMISSIONS, Permissions } from '../constants/permissions';
+import { isWorkflowIntegration } from '../constants/integrationTypes';
 import { getIcpVersion } from '../config/api';
 
 const SIDEBAR_ICONS: Record<Resource, JSX.Element> = {
@@ -134,7 +135,8 @@ export default function AppLayout(): JSX.Element {
       case 'overview':
         return 'overview';
       case 'workflows':
-        return 'workflows';
+        // Only workflow integrations have this view; at project level it always applies.
+        return !hasComponent(targetScope) || isWorkflowIntegration(components.find((c) => c.id === targetComponentId)?.displayType) ? 'workflows' : 'overview';
       case 'test':
         return 'test';
       case 'access-control': {
@@ -164,7 +166,14 @@ export default function AppLayout(): JSX.Element {
     accessControlPerms.push(Permissions.INTEGRATION_EDIT, Permissions.INTEGRATION_MANAGE);
   }
   const canSeeAccessControl = hasAnyPermission(accessControlPerms, projectId || undefined, componentId);
-  const items = sidebarItems(scope, resource).filter((item) => item.resource !== 'access-control' || canSeeAccessControl);
+  // Workflows is an integration-level view only for workflow integrations. Project level is
+  // unaffected: a project's workflow data is namespace-wide, not tied to one integration. While the
+  // component list is still loading `currentComponent` is undefined, so the item stays hidden until
+  // its type is known rather than appearing and then disappearing.
+  const showWorkflows = !hasComponent(scope) || isWorkflowIntegration(currentComponent?.displayType);
+  const items = sidebarItems(scope, resource)
+    .filter((item) => item.resource !== 'access-control' || canSeeAccessControl)
+    .filter((item) => item.resource !== 'workflows' || showWorkflows);
 
   return (
     <AppShell>
