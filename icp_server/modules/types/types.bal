@@ -317,6 +317,14 @@ public type Node record {
     int usedMemory?;
 };
 
+// Optional Heartbeat fields this server release understands. Advertised in every
+// HeartbeatResponse as `supportedHeartbeatFields` so a bridge can self-limit to what the
+// connected server actually supports instead of relying on a shared version number —
+// older bridges/servers that predate this negotiation simply never see the field and stay
+// on the baseline heartbeat shape. Update this list whenever an optional field is added to
+// Heartbeat below.
+final string[] & readonly SUPPORTED_HEARTBEAT_FIELDS = ["workflowCallbackUrl", "tryItHost", "openApiDefinitions"];
+
 // Heartbeat that includes all runtime information for registration/updates.
 // Open record so parsing tolerates fields from a newer agent that this server
 // version doesn't yet know about (e.g. a future addition sent before a rolling
@@ -399,6 +407,7 @@ public type HeartbeatResponse record {
     boolean fullHeartbeatRequired?;
     ControlCommand[] commands?;
     string[] errors?;
+    string[] supportedHeartbeatFields = SUPPORTED_HEARTBEAT_FIELDS;
 };
 
 public enum MIControlAction {
