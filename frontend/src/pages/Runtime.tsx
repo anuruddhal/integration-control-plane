@@ -98,7 +98,7 @@ enableWorkflowManagement = true
   if (!workflowMgt) return base;
   return `${base}
 
-${workflowManagementToml(projectHandle, integrationHandle, secret)}`;
+${workflowManagementToml(integrationHandle, secret)}`;
 }
 
 function AddRuntimeModal({

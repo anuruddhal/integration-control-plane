@@ -42,16 +42,16 @@ export function runtimeImports(workflowMgt: boolean): string {
 
 /**
  * TOML the "Enable Workflow Management" toggle adds to a BI runtime: the workflow engine block,
- * then the management API block keyed by the org secret. `project` and `integration` become the
- * workflow namespace and task queue, and should each be whatever the matching key of the bridge
- * config above holds, so the values always agree — the real handles on the component runtime page,
- * the same fill-in placeholders on the org page, which has no project or integration to resolve.
+ * then the management API block keyed by the org secret. `integration` becomes the workflow task
+ * queue and should be whatever the `integration` key of the bridge config above holds, so the two
+ * always agree — the real handle on the component runtime page, the same fill-in placeholder on the
+ * org page, which is org-scoped and has no integration to resolve. The namespace is not written
+ * here; the runtime derives it from the bridge configuration.
  * Shared by the Add Runtime dialogs (org runtimes and component runtime pages).
  */
-export function workflowManagementToml(project: string, integration: string, secret: string): string {
+export function workflowManagementToml(integration: string, secret: string): string {
   return `[ballerina.workflow]
 # mode = "LOCAL"
-namespace = "${tomlString(project)}"
 taskQueue = "${tomlString(integration)}"
 
 [ballerina.workflow.management]
