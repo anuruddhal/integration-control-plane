@@ -16,17 +16,22 @@
  * under the License.
  */
 
-// The escapes TOML defines for a basic (double-quoted) string.
+// The characters TOML gives a short escape to in a basic (double-quoted) string. Every other
+// control character has to be written as \uXXXX — see tomlString.
 const TOML_ESCAPES: Record<string, string> = { '\\': '\\\\', '"': '\\"', '\n': '\\n', '\r': '\\r', '\t': '\\t', '\b': '\\b', '\f': '\\f' };
 
 /**
  * Escapes a value for interpolation into a double-quoted TOML string. Handlers are free text — the
  * create forms only require "at least one letter or number" — so a name containing a quote would
- * otherwise close the string early and yield a config that fails to parse once pasted. Done in one
- * pass so an escaped backslash is not re-escaped.
+ * otherwise close the string early and yield a config that fails to parse once pasted. TOML also
+ * forbids raw control characters (U+0000–U+001F and U+007F) in a basic string, so any without a
+ * short escape are emitted as \uXXXX. Done in one pass so an escaped backslash is not re-escaped.
  */
 function tomlString(value: string): string {
-  return value.replace(/[\\"\n\r\t\b\f]/g, (c) => TOML_ESCAPES[c]);
+  // Matching control characters is the point here: TOML rejects them raw, so they have to be
+  // found in order to be escaped.
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\\"\u0000-\u001f\u007f]/g, (c) => TOML_ESCAPES[c] ?? `\\u${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`);
 }
 
 /**
