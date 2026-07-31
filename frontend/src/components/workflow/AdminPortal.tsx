@@ -24,13 +24,12 @@ import { resourceUrl, useScope } from '../../nav';
 import SearchField from '../SearchField';
 import SchemaFormFields from './SchemaFormFields';
 import WorkflowDetailDrawer from './WorkflowDetailDrawer';
-import { buildFormResult, formatTime, formValuesFromObject, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, splitQualifiedName } from './helpers';
+import { buildFormResult, formatTime, formValuesFromObject, gatewayScope, ownerLabel, ownerScope, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, splitQualifiedName, type PortalScope } from './helpers';
 import { DetailRow, SchemaDisclosure, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope } from './shared';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
 import {
   distinctWorkflowTypes,
-  targetForTaskQueue,
   useReviewActivities,
   useReviewActivity,
   useReviewDecision,
@@ -75,35 +74,7 @@ const TIME_PRESETS: { label: string; ms: number }[] = [
 
 export type Toast = { severity: 'success' | 'error'; message: string } | null;
 
-/**
- * The integrations this portal covers, plus the environment they are viewed in: one target at
- * integration scope, all of the project's at project scope.
- *
- * Reads do not fan out. A project shares one Temporal engine, so the first target's runtime answers
- * for the whole project; `taskQueue` is what narrows a listing to a single integration. Each row
- * reports the task queue that owns it, which is how a detail view or mutation is routed back.
- */
-export interface PortalScope {
-  targets: WorkflowTarget[];
-  environmentId: string;
-  /** Integration scope: that integration's task queue. Project scope: undefined (whole namespace). */
-  taskQueue?: string;
-}
-
-/** The runtime every read goes through — any runtime in the project serves the whole namespace. */
-const gatewayScope = (scope: PortalScope): WorkflowScope => ({ componentId: scope.targets[0]?.componentId ?? '', environmentId: scope.environmentId });
-
-/**
- * Scope for acting on one row: the integration whose task queue owns it, falling back to the
- * gateway when the task queue is absent or is not one of this project's integrations.
- */
-function ownerScope(scope: PortalScope, taskQueue?: string): WorkflowScope {
-  const owner = targetForTaskQueue(scope.targets, taskQueue);
-  return owner ? { componentId: owner.componentId, environmentId: scope.environmentId } : gatewayScope(scope);
-}
-
-/** How a row's owning integration is labelled: its display name when known, else the raw task queue. */
-const ownerLabel = (scope: PortalScope, taskQueue?: string): string => targetForTaskQueue(scope.targets, taskQueue)?.componentName ?? taskQueue ?? '—';
+export type { PortalScope };
 
 /** Integration filter, offered only when the portal spans more than one. */
 function IntegrationFilter({ targets, value, onChange }: { targets: WorkflowTarget[]; value: WorkflowTarget | null; onChange: (v: WorkflowTarget | null) => void }) {
@@ -122,14 +93,16 @@ function IntegrationFilter({ targets, value, onChange }: { targets: WorkflowTarg
 }
 
 /**
- * Warns that some integrations could not be reached, so a partial list is never mistaken for the
- * whole picture. Integrations with no workflow runtime are not failures and never appear here.
+ * Warns that some integrations did not return their workflow definitions, so the workflow names on
+ * offer — for filtering and for starting — may be short a few. Listing rows are unaffected: they
+ * come from one runtime that answers for the whole project. Integrations with no workflow runtime
+ * are not failures and never appear here.
  */
-function PartialResultsNotice({ failed }: { failed: { componentName: string; message: string }[] }) {
+function DefinitionsUnavailableNotice({ failed }: { failed: { componentName: string; message: string }[] }) {
   if (failed.length === 0) return null;
   return (
     <Alert severity="warning" sx={{ mb: 2 }}>
-      {`Showing partial results — could not reach ${failed.map((f) => f.componentName).join(', ')}.`}
+      {`Could not load workflow definitions from ${failed.map((f) => f.componentName).join(', ')}; some workflow names may be missing.`}
     </Alert>
   );
 }
@@ -335,7 +308,7 @@ function WorkflowsAdmin({
         )}
       </Stack>
 
-      <PartialResultsNotice failed={definitions.failed} />
+      <DefinitionsUnavailableNotice failed={definitions.failed} />
 
       {isLoading ? (
         <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
@@ -415,8 +388,6 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
   const navigate = useNavigate();
   const navScope = useScope();
 
-  const type = selected;
-
   // A deep link (e.g. Overview → "Start Workflow") names a workflow type only; bind it to a concrete
   // definition — and thereby to its runtime — once the definitions have loaded.
   useEffect(() => {
@@ -426,7 +397,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
   }, [initialWorkflowType, selected, definitions.items]);
 
   // When the input schema parses into fields, a generated form replaces the raw JSON input.
-  const formFields = type ? parseFormSchema(type.inputSchema) : null;
+  const formFields = selected ? parseFormSchema(selected.inputSchema) : null;
 
   const setFormValue = (name: string, value: string | boolean) => {
     setFormValues((prev) => ({ ...prev, [name]: value }));
@@ -439,7 +410,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
   };
 
   const submit = () => {
-    if (!type) return;
+    if (!selected) return;
     setStartError(null);
     let parsedInput: unknown;
     if (formFields) {
@@ -452,7 +423,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
     }
     start.mutate(
       {
-        workflowType: type.workflowType,
+        workflowType: selected.workflowType,
         input: parsedInput,
         workflowId: workflowId.trim() || undefined,
         timeoutSeconds: timeout.trim() ? Number(timeout) : undefined,
@@ -460,9 +431,9 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
       {
         onSuccess: (wf) => {
           if (wf?.workflowId) {
-            setStarted({ workflowType: type.workflowType, workflowId: wf.workflowId });
+            setStarted({ workflowType: selected.workflowType, workflowId: wf.workflowId });
           } else {
-            onToast({ severity: 'success', message: `Started ${type.workflowType}.` });
+            onToast({ severity: 'success', message: `Started ${selected.workflowType}.` });
             onClose();
           }
         },
@@ -521,7 +492,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
             options={definitions.items}
             loading={definitions.isLoading}
             getOptionLabel={(d) => (multi ? `${d.workflowType} — ${d.componentName}` : d.workflowType)}
-            value={type}
+            value={selected}
             isOptionEqualToValue={(a, b) => a.workflowType === b.workflowType && a.componentId === b.componentId}
             onChange={(_, v) => {
               setSelected(v);
@@ -532,14 +503,14 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
             }}
             renderInput={(params) => <TextField {...params} label="Workflow name" required placeholder="Select a workflow" />}
           />
-          <PartialResultsNotice failed={definitions.failed} />
+          <DefinitionsUnavailableNotice failed={definitions.failed} />
           <SubmitError message={startError} onClear={() => setStartError(null)} />
           {formFields ? (
             <SchemaFormFields fields={formFields} values={formValues} errors={fieldErrors} onChange={setFormValue} />
           ) : (
-            type &&
-            (type.inputSchema ? (
-              <SchemaDisclosure schema={type.inputSchema} />
+            selected &&
+            (selected.inputSchema ? (
+              <SchemaDisclosure schema={selected.inputSchema} />
             ) : (
               <Typography variant="caption" color="text.secondary">
                 No input schema defined for this workflow.
@@ -554,7 +525,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={!type || start.isPending} onClick={submit}>
+        <Button variant="contained" disabled={!selected || start.isPending} onClick={submit}>
           {start.isPending ? 'Starting…' : 'Start'}
         </Button>
       </DialogActions>
@@ -627,7 +598,7 @@ function ReviewActivitiesAdmin({ scope, onToast }: { scope: PortalScope; onToast
         )}
       </Stack>
 
-      <PartialResultsNotice failed={definitions.failed} />
+      <DefinitionsUnavailableNotice failed={definitions.failed} />
 
       {isLoading ? (
         <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />

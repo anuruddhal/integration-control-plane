@@ -182,14 +182,6 @@ function fetchDefinitions(componentId: string, environmentId: string): Promise<W
   return wfRequest<{ definitions: WorkflowDefinition[] }>(componentId, environmentId, 'definitions').then((d) => d.definitions ?? []);
 }
 
-export function useWorkflowDefinitions(s: Scope) {
-  return useQuery({
-    queryKey: ['wf', 'definitions', s.componentId, s.environmentId],
-    queryFn: () => fetchDefinitions(s.componentId, s.environmentId),
-    enabled: enabledFor(s),
-  });
-}
-
 // ── Workflow instances ──
 
 export interface WorkflowFilters {
@@ -240,11 +232,22 @@ export function useWorkflowExecutionGraph(s: Scope, workflowId: string | null) {
   });
 }
 
+/**
+ * Invalidates a workflow resource for an environment whichever component key it was cached under.
+ * A project shares one Temporal namespace, so a listing is cached under the runtime that served the
+ * read — the gateway — while a mutation is sent to the runtime that owns the row. Keying the
+ * invalidation on the component would therefore miss the very list the user is looking at.
+ */
+function invalidateForEnvironment(qc: ReturnType<typeof useQueryClient>, environmentId: string, ...kinds: string[]): void {
+  const wanted = new Set<unknown>(kinds);
+  qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'wf' && wanted.has(q.queryKey[1]) && q.queryKey[3] === environmentId });
+}
+
 export function useStartWorkflow(s: Scope) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { workflowType: string; input?: unknown; workflowId?: string; timeoutSeconds?: number }) => wfRequest<WorkflowInstance>(s.componentId, s.environmentId, 'workflows', jsonBody({ method: 'POST' }, body)),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['wf', 'instances', s.componentId, s.environmentId] }),
+    onSuccess: () => invalidateForEnvironment(qc, s.environmentId, 'instances'),
   });
 }
 
@@ -257,10 +260,7 @@ export function useWorkflowLifecycle(s: Scope) {
       const init = action === 'terminate' ? jsonBody({ method: 'POST' }, { reason: reason ?? '' }) : { method: 'POST' };
       return wfRequest<unknown>(s.componentId, s.environmentId, `workflows/${encodeURIComponent(workflowId)}/${action}`, init);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['wf', 'instances', s.componentId, s.environmentId] });
-      qc.invalidateQueries({ queryKey: ['wf', 'info', s.componentId, s.environmentId] });
-    },
+    onSuccess: () => invalidateForEnvironment(qc, s.environmentId, 'instances', 'info'),
   });
 }
 
@@ -317,8 +317,7 @@ export function useHumanTask(s: Scope, taskId: string | null) {
 }
 
 function invalidateHumanTasks(qc: ReturnType<typeof useQueryClient>, s: Scope) {
-  qc.invalidateQueries({ queryKey: ['wf', 'human-tasks', s.componentId, s.environmentId] });
-  qc.invalidateQueries({ queryKey: ['wf', 'pending-count', s.componentId, s.environmentId] });
+  invalidateForEnvironment(qc, s.environmentId, 'human-tasks', 'pending-count');
 }
 
 export function useCompleteHumanTask(s: Scope) {
@@ -403,7 +402,7 @@ export function useReviewDecision(s: Scope) {
       else init = { method: 'POST' };
       return wfRequest<unknown>(s.componentId, s.environmentId, `review-activities/${encodeURIComponent(taskId)}/${decision}`, init);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['wf', 'review-activities', s.componentId, s.environmentId] }),
+    onSuccess: () => invalidateForEnvironment(qc, s.environmentId, 'review-activities'),
   });
 }
 

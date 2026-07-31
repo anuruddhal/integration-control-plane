@@ -19,6 +19,40 @@
 // Pure helpers for the workflow feature. Kept separate from the component module
 // (shared.tsx) so React Fast Refresh works and concerns stay separated.
 
+import { targetForTaskQueue, type WorkflowTarget } from '../../api/workflows';
+
+// ── Portal scope ──
+//
+// A project shares one Temporal engine: every runtime in it is bound to the same namespace and
+// differs only by task queue. So one runtime answers for the whole project, and a listing is
+// narrowed by `taskQueue` rather than by which runtime is called. Shared by both portals.
+
+export interface PortalScope {
+  /** Every integration in view: the read gateway is the first, and rows route back by task queue. */
+  targets: WorkflowTarget[];
+  environmentId: string;
+  /** Integration scope: that integration's task queue. Project scope: undefined (whole namespace). */
+  taskQueue?: string;
+}
+
+/** Structurally a `WorkflowScope`; spelled out here to keep this module free of component imports. */
+type TargetScope = { componentId: string; environmentId: string };
+
+/** The runtime every read goes through — any runtime in the project serves the whole namespace. */
+export const gatewayScope = (scope: PortalScope): TargetScope => ({ componentId: scope.targets[0]?.componentId ?? '', environmentId: scope.environmentId });
+
+/**
+ * Scope for acting on one row: the integration whose task queue owns it, falling back to the
+ * gateway when the task queue is absent or is not one of this project's integrations.
+ */
+export function ownerScope(scope: PortalScope, taskQueue?: string): TargetScope {
+  const owner = targetForTaskQueue(scope.targets, taskQueue);
+  return owner ? { componentId: owner.componentId, environmentId: scope.environmentId } : gatewayScope(scope);
+}
+
+/** How a row's owning integration is labelled: its display name when known, else the raw task queue. */
+export const ownerLabel = (scope: PortalScope, taskQueue?: string): string => targetForTaskQueue(scope.targets, taskQueue)?.componentName ?? taskQueue ?? '—';
+
 /** Pretty-prints any value as JSON for display; returns '' for nullish. */
 export function jsonPretty(value: unknown): string {
   if (value === undefined || value === null) return '';

@@ -20,12 +20,11 @@ import { Alert, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions
 import { Eye, RefreshCw } from '@wso2/oxygen-ui-icons-react';
 import { useState } from 'react';
 import SchemaFormFields from './SchemaFormFields';
-import { buildFormResult, formatTime, humanizeKey, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, unescapeRoleName } from './helpers';
+import { buildFormResult, formatTime, gatewayScope, humanizeKey, ownerLabel, ownerScope, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, unescapeRoleName, type PortalScope } from './helpers';
 import { DetailRow, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope } from './shared';
-import type { PortalScope } from './AdminPortal';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
-import { targetForTaskQueue, useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, usePendingTaskCount, type HumanTask } from '../../api/workflows';
+import { useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, usePendingTaskCount, type HumanTask } from '../../api/workflows';
 
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const;
 
@@ -51,26 +50,11 @@ function taskDisplayName(t?: HumanTask): string {
 
 type Toast = { severity: 'success' | 'error'; message: string } | null;
 
-/**
- * Every runtime in a project shares one Temporal namespace, so one runtime answers for the whole
- * project; `taskQueue` narrows a listing to a single integration. See PortalScope.
- */
-const gateway = (scope: PortalScope): WorkflowScope => ({ componentId: scope.targets[0]?.componentId ?? '', environmentId: scope.environmentId });
-
-/** Label for the integration that owns a task, resolved from the task's own task queue. */
-const ownerLabel = (scope: PortalScope, taskQueue?: string): string => targetForTaskQueue(scope.targets, taskQueue)?.componentName ?? taskQueue ?? '—';
-
-/** Scope for acting on a task: the integration that owns it, else the gateway runtime. */
-function ownerScope(scope: PortalScope, taskQueue?: string): WorkflowScope {
-  const owner = targetForTaskQueue(scope.targets, taskQueue);
-  return owner ? { componentId: owner.componentId, environmentId: scope.environmentId } : gateway(scope);
-}
-
 export default function UserPortal({ targets, environmentId, taskQueue }: PortalScope) {
   const scope: PortalScope = { targets, environmentId, taskQueue };
   const [view, setView] = useState<'tasks' | 'history'>('tasks');
   const [toast, setToast] = useState<Toast>(null);
-  const { data: pendingCount } = usePendingTaskCount(gateway(scope), taskQueue);
+  const { data: pendingCount } = usePendingTaskCount(gatewayScope(scope), taskQueue);
 
   return (
     <>
@@ -157,7 +141,7 @@ function TaskTable({ tasks, onOpen, environmentId, showActionable, integrationLa
 function MyTasks({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) => void }) {
   // Opened against the integration that owns the task, per the task's own task queue.
   const [open, setOpen] = useState<HumanTask | null>(null);
-  const { data: page, isLoading, error, refetch, isFetching } = useHumanTasks(gateway(scope), { status: 'PENDING', taskQueue: scope.taskQueue, limit: 50 });
+  const { data: page, isLoading, error, refetch, isFetching } = useHumanTasks(gatewayScope(scope), { status: 'PENDING', taskQueue: scope.taskQueue, limit: 50 });
   const tasks = sortByStartTimeDesc(page?.items ?? []);
   const multi = scope.targets.length > 1;
 
@@ -179,7 +163,7 @@ function MyTasks({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) =
       ) : tasks.length === 0 ? (
         <Typography sx={emptySx}>No pending tasks.</Typography>
       ) : (
-        <TaskTable tasks={tasks} onOpen={setOpen} environmentId={scope.environmentId} showActionable integrationLabel={multi ? (q) => ownerLabel(scope, q) : undefined} />
+        <TaskTable tasks={tasks} onOpen={setOpen} environmentId={scope.environmentId} showActionable integrationLabel={multi ? (taskQueue) => ownerLabel(scope, taskQueue) : undefined} />
       )}
 
       {open && <TaskDetailDialog scope={ownerScope(scope, open.taskQueue)} taskId={open.taskId} actionable onClose={() => setOpen(null)} onToast={onToast} />}
@@ -192,17 +176,18 @@ function TaskHistory({ scope, onToast }: { scope: PortalScope; onToast: (t: Toas
   const [open, setOpen] = useState<HumanTask | null>(null);
   // The list API reports a failed human task with status FAILED, so each tab maps directly
   // to a status query. Externally-terminated tasks (TERMINATED) are grouped under Failed too.
-  const q = { taskQueue: scope.taskQueue, limit: 50 };
-  const completedQuery = useHumanTasks(gateway(scope), { status: 'COMPLETED', ...q });
-  const failedQuery = useHumanTasks(gateway(scope), { status: 'FAILED', ...q });
-  const terminatedQuery = useHumanTasks(gateway(scope), { status: 'TERMINATED', ...q });
+  const common = { taskQueue: scope.taskQueue, limit: 50 };
+  const completedQuery = useHumanTasks(gatewayScope(scope), { status: 'COMPLETED', ...common });
+  const failedQuery = useHumanTasks(gatewayScope(scope), { status: 'FAILED', ...common });
+  const terminatedQuery = useHumanTasks(gatewayScope(scope), { status: 'TERMINATED', ...common });
 
-  const isLoading = completedQuery.isLoading || failedQuery.isLoading || terminatedQuery.isLoading;
-  const error = completedQuery.error ?? failedQuery.error ?? terminatedQuery.error;
+  // Only the queries backing the visible tab decide its loading and error state — a failure in the
+  // tab you are not looking at must not blank out the one you are.
   const shown = tab === 'Completed' ? [completedQuery] : [failedQuery, terminatedQuery];
+  const isLoading = shown.some((r) => r.isLoading);
+  const error = shown.map((r) => r.error).find(Boolean) ?? null;
 
-  const items = shown.flatMap((r) => r.data?.items ?? []);
-  const tasks = sortByStartTimeDesc(items);
+  const tasks = sortByStartTimeDesc(shown.flatMap((r) => r.data?.items ?? []));
   const multi = scope.targets.length > 1;
 
   return (
@@ -220,7 +205,7 @@ function TaskHistory({ scope, onToast }: { scope: PortalScope; onToast: (t: Toas
       ) : tasks.length === 0 ? (
         <Typography sx={emptySx}>No tasks in this category.</Typography>
       ) : (
-        <TaskTable tasks={tasks} onOpen={setOpen} environmentId={scope.environmentId} integrationLabel={multi ? (qq) => ownerLabel(scope, qq) : undefined} />
+        <TaskTable tasks={tasks} onOpen={setOpen} environmentId={scope.environmentId} integrationLabel={multi ? (taskQueue) => ownerLabel(scope, taskQueue) : undefined} />
       )}
 
       {open && <TaskDetailDialog scope={ownerScope(scope, open.taskQueue)} taskId={open.taskId} onClose={() => setOpen(null)} onToast={onToast} />}
