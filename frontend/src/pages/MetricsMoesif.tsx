@@ -471,7 +471,7 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
       {!isComponent && biComponents.length > 0 && (
         <Stack direction="row" gap={2} sx={{ mb: 3 }} flexWrap="wrap" alignItems="center">
           <Select value={integrationFilter} onChange={(e) => setIntegrationFilter(e.target.value as string)} size="small" sx={{ minWidth: 160 }} inputProps={{ 'aria-label': 'Integration' }}>
-            <MenuItem value="all">All Integrations</MenuItem>
+            <MenuItem value="all">Select an integration…</MenuItem>
             {biComponents.map((c) => (
               <MenuItem key={c.id} value={c.id}>
                 {c.displayName}
@@ -515,7 +515,18 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
           </Alert>
         </Stack>
       ) : embed ? (
-        <iframe key={embed.accessToken} title="Moesif metrics dashboard" src={embed.embedUrl} style={{ width: '100%', height: 'calc(100vh - 220px)', minHeight: 600, border: 'none' }} />
+        <iframe
+          key={embed.accessToken}
+          title="Moesif metrics dashboard"
+          src={embed.embedUrl}
+          // The embed URL points at the third-party Moesif dashboard and carries
+          // a short-lived token, so constrain what the framed content can do:
+          // deny top-level navigation and don't leak the tokenized URL via the
+          // Referer header.
+          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+          referrerPolicy="no-referrer"
+          style={{ width: '100%', height: 'calc(100vh - 220px)', minHeight: 600, border: 'none' }}
+        />
       ) : (
         <CircularProgress size={28} sx={{ display: 'block', mx: 'auto', my: 6 }} />
       )}

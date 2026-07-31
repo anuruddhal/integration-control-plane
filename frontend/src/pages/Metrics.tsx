@@ -16,7 +16,7 @@
  * under the License.
  */
 import { ToggleButton, ToggleButtonGroup } from '@wso2/oxygen-ui';
-import { useEffect, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { hasComponent, type ProjectScope, type ComponentScope } from '../nav';
 import { useProjectByHandler, useComponentByHandler } from '../api/queries';
 import MetricsOpenSearch from './MetricsOpenSearch';
@@ -42,18 +42,25 @@ export default function Metrics(scope: ProjectScope | ComponentScope): JSX.Eleme
 
   const isComponent = hasComponent(scope);
   const { data: project } = useProjectByHandler(scope.project);
-  const { data: component } = useComponentByHandler(project?.id ?? '', isComponent ? scope.component : undefined);
+  const { data: component, isLoading: componentLoading } = useComponentByHandler(
+    project?.id ?? '',
+    isComponent ? scope.component : undefined,
+  );
+
+  // While the component query is still resolving we don't yet know its
+  // technology, so keep the backend selector mounted to avoid it disappearing
+  // during loading.
+  const componentResolving = isComponent && componentLoading;
   const moesifAllowed = isComponent ? component?.componentType === 'BI' : true;
 
-  // If Moesif was selected but isn't allowed for this component (non-BI), fall
-  // back to the OpenSearch backend.
-  useEffect(() => {
-    if (!moesifAllowed && backend === 'moesif') setBackend('opensearch');
-  }, [moesifAllowed, backend]);
+  // Derive the effective backend, falling back to OpenSearch whenever Moesif is
+  // unavailable (e.g. a non-BI component) so no corrective state update is
+  // needed.
+  const effectiveBackend: MetricsBackend = moesifAllowed ? backend : 'opensearch';
 
-  const backendSelector = moesifAllowed ? (
+  const backendSelector = moesifAllowed || componentResolving ? (
     <ToggleButtonGroup
-      value={backend}
+      value={effectiveBackend}
       exclusive
       size="small"
       onChange={(_e, value: MetricsBackend | null) => {
@@ -69,5 +76,5 @@ export default function Metrics(scope: ProjectScope | ComponentScope): JSX.Eleme
     </ToggleButtonGroup>
   ) : undefined;
 
-  return backend === 'moesif' && moesifAllowed ? <MetricsMoesif scope={scope} backendSelector={backendSelector} /> : <MetricsOpenSearch scope={scope} backendSelector={backendSelector} />;
+  return effectiveBackend === 'moesif' ? <MetricsMoesif scope={scope} backendSelector={backendSelector} /> : <MetricsOpenSearch scope={scope} backendSelector={backendSelector} />;
 }

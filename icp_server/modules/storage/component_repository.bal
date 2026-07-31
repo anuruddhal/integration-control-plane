@@ -336,37 +336,50 @@ public isolated function getComponentByProjectAndHandler(string projectId, strin
     return mapToComponent(componentRecords[0]);
 }
 
-// Whether a Moesif metrics config row already exists for the component. Used to
-// decide between INSERT and UPDATE (dialect-agnostic upsert) since MySQL may
-// report 0 affected rows on a no-op UPDATE.
-isolated function moesifConfigExists(string componentId) returns boolean|error {
-    sql:ParameterizedQuery selectQuery =
-        `SELECT component_id FROM component_moesif_config WHERE component_id = ${componentId}`;
-    record {|string component_id;|}|sql:Error result = dbClient->queryRow(selectQuery);
-    if result is sql:NoRowsError {
-        return false;
-    }
-    if result is sql:Error {
-        return result;
-    }
-    return true;
-}
-
 // Persist the Moesif Collector Application ID against a component (project + integration combo).
 // Upserts into component_moesif_config. Returns the number of affected rows.
 public isolated function updateComponentMoesifApplicationId(string componentId, string applicationId) returns int|error {
-    if check moesifConfigExists(componentId) {
-        sql:ParameterizedQuery updateQuery =
-            `UPDATE component_moesif_config SET application_id = ${applicationId},
-                updated_at = ${time:utcToString(time:utcNow())}
-             WHERE component_id = ${componentId}`;
-        sql:ExecutionResult result = check dbClient->execute(updateQuery);
-        return result.affectedRowCount ?: 0;
+    sql:ExecutionResult result;
+    if dbType == MSSQL {
+        result = check dbClient->execute(`
+            MERGE INTO component_moesif_config AS target
+            USING (VALUES (${componentId}, ${applicationId}))
+                   AS source (component_id, application_id)
+            ON (target.component_id = source.component_id)
+            WHEN MATCHED THEN
+                UPDATE SET application_id = source.application_id, updated_at = GETDATE()
+            WHEN NOT MATCHED THEN
+                INSERT (component_id, application_id)
+                VALUES (source.component_id, source.application_id);
+        `);
+    } else if dbType == ORACLE {
+        result = check dbClient->execute(`
+            MERGE INTO component_moesif_config target
+            USING (SELECT ${componentId} AS component_id, ${applicationId} AS application_id FROM dual) source
+            ON (target.component_id = source.component_id)
+            WHEN MATCHED THEN
+                UPDATE SET application_id = source.application_id, updated_at = CURRENT_TIMESTAMP
+            WHEN NOT MATCHED THEN
+                INSERT (component_id, application_id)
+                VALUES (source.component_id, source.application_id)
+        `);
+    } else if dbType == POSTGRESQL {
+        result = check dbClient->execute(`
+            INSERT INTO component_moesif_config (component_id, application_id)
+            VALUES (${componentId}, ${applicationId})
+            ON CONFLICT (component_id) DO UPDATE SET
+                application_id = EXCLUDED.application_id,
+                updated_at = CURRENT_TIMESTAMP
+        `);
+    } else {
+        result = check dbClient->execute(`
+            INSERT INTO component_moesif_config (component_id, application_id)
+            VALUES (${componentId}, ${applicationId})
+            ON DUPLICATE KEY UPDATE
+                application_id = VALUES(application_id),
+                updated_at = CURRENT_TIMESTAMP
+        `);
     }
-    sql:ParameterizedQuery insertQuery =
-        `INSERT INTO component_moesif_config (component_id, application_id)
-         VALUES (${componentId}, ${applicationId})`;
-    sql:ExecutionResult result = check dbClient->execute(insertQuery);
     return result.affectedRowCount ?: 0;
 }
 
@@ -403,18 +416,47 @@ public isolated function getComponentMoesifDashboardsCreated(string componentId)
 // Records whether the Moesif metrics dashboards have been created for a
 // component. Upserts into component_moesif_config. Returns the number of affected rows.
 public isolated function updateComponentMoesifDashboardsCreated(string componentId, boolean created) returns int|error {
-    if check moesifConfigExists(componentId) {
-        sql:ParameterizedQuery updateQuery =
-            `UPDATE component_moesif_config SET dashboards_created = ${created},
-                updated_at = ${time:utcToString(time:utcNow())}
-             WHERE component_id = ${componentId}`;
-        sql:ExecutionResult result = check dbClient->execute(updateQuery);
-        return result.affectedRowCount ?: 0;
+    sql:ExecutionResult result;
+    if dbType == MSSQL {
+        result = check dbClient->execute(`
+            MERGE INTO component_moesif_config AS target
+            USING (VALUES (${componentId}, ${created}))
+                   AS source (component_id, dashboards_created)
+            ON (target.component_id = source.component_id)
+            WHEN MATCHED THEN
+                UPDATE SET dashboards_created = source.dashboards_created, updated_at = GETDATE()
+            WHEN NOT MATCHED THEN
+                INSERT (component_id, dashboards_created)
+                VALUES (source.component_id, source.dashboards_created);
+        `);
+    } else if dbType == ORACLE {
+        result = check dbClient->execute(`
+            MERGE INTO component_moesif_config target
+            USING (SELECT ${componentId} AS component_id, ${created} AS dashboards_created FROM dual) source
+            ON (target.component_id = source.component_id)
+            WHEN MATCHED THEN
+                UPDATE SET dashboards_created = source.dashboards_created, updated_at = CURRENT_TIMESTAMP
+            WHEN NOT MATCHED THEN
+                INSERT (component_id, dashboards_created)
+                VALUES (source.component_id, source.dashboards_created)
+        `);
+    } else if dbType == POSTGRESQL {
+        result = check dbClient->execute(`
+            INSERT INTO component_moesif_config (component_id, dashboards_created)
+            VALUES (${componentId}, ${created})
+            ON CONFLICT (component_id) DO UPDATE SET
+                dashboards_created = EXCLUDED.dashboards_created,
+                updated_at = CURRENT_TIMESTAMP
+        `);
+    } else {
+        result = check dbClient->execute(`
+            INSERT INTO component_moesif_config (component_id, dashboards_created)
+            VALUES (${componentId}, ${created})
+            ON DUPLICATE KEY UPDATE
+                dashboards_created = VALUES(dashboards_created),
+                updated_at = CURRENT_TIMESTAMP
+        `);
     }
-    sql:ParameterizedQuery insertQuery =
-        `INSERT INTO component_moesif_config (component_id, dashboards_created)
-         VALUES (${componentId}, ${created})`;
-    sql:ExecutionResult result = check dbClient->execute(insertQuery);
     return result.affectedRowCount ?: 0;
 }
 
@@ -425,19 +467,54 @@ public isolated function updateComponentMoesifDashboardsCreated(string component
 // Upserts into component_moesif_config. Returns the number of affected rows.
 public isolated function updateComponentMoesifDashboardDetails(string componentId, string workspaceId,
         string managementKey) returns int|error {
-    if check moesifConfigExists(componentId) {
-        sql:ParameterizedQuery updateQuery =
-            `UPDATE component_moesif_config SET workspace_id = ${workspaceId},
-                management_key = ${managementKey}, dashboards_created = ${true},
-                updated_at = ${time:utcToString(time:utcNow())}
-             WHERE component_id = ${componentId}`;
-        sql:ExecutionResult result = check dbClient->execute(updateQuery);
-        return result.affectedRowCount ?: 0;
+    sql:ExecutionResult result;
+    if dbType == MSSQL {
+        result = check dbClient->execute(`
+            MERGE INTO component_moesif_config AS target
+            USING (VALUES (${componentId}, ${workspaceId}, ${managementKey}, ${true}))
+                   AS source (component_id, workspace_id, management_key, dashboards_created)
+            ON (target.component_id = source.component_id)
+            WHEN MATCHED THEN
+                UPDATE SET workspace_id = source.workspace_id, management_key = source.management_key,
+                    dashboards_created = source.dashboards_created, updated_at = GETDATE()
+            WHEN NOT MATCHED THEN
+                INSERT (component_id, workspace_id, management_key, dashboards_created)
+                VALUES (source.component_id, source.workspace_id, source.management_key, source.dashboards_created);
+        `);
+    } else if dbType == ORACLE {
+        result = check dbClient->execute(`
+            MERGE INTO component_moesif_config target
+            USING (SELECT ${componentId} AS component_id, ${workspaceId} AS workspace_id,
+                          ${managementKey} AS management_key, ${true} AS dashboards_created FROM dual) source
+            ON (target.component_id = source.component_id)
+            WHEN MATCHED THEN
+                UPDATE SET workspace_id = source.workspace_id, management_key = source.management_key,
+                    dashboards_created = source.dashboards_created, updated_at = CURRENT_TIMESTAMP
+            WHEN NOT MATCHED THEN
+                INSERT (component_id, workspace_id, management_key, dashboards_created)
+                VALUES (source.component_id, source.workspace_id, source.management_key, source.dashboards_created)
+        `);
+    } else if dbType == POSTGRESQL {
+        result = check dbClient->execute(`
+            INSERT INTO component_moesif_config (component_id, workspace_id, management_key, dashboards_created)
+            VALUES (${componentId}, ${workspaceId}, ${managementKey}, ${true})
+            ON CONFLICT (component_id) DO UPDATE SET
+                workspace_id = EXCLUDED.workspace_id,
+                management_key = EXCLUDED.management_key,
+                dashboards_created = EXCLUDED.dashboards_created,
+                updated_at = CURRENT_TIMESTAMP
+        `);
+    } else {
+        result = check dbClient->execute(`
+            INSERT INTO component_moesif_config (component_id, workspace_id, management_key, dashboards_created)
+            VALUES (${componentId}, ${workspaceId}, ${managementKey}, ${true})
+            ON DUPLICATE KEY UPDATE
+                workspace_id = VALUES(workspace_id),
+                management_key = VALUES(management_key),
+                dashboards_created = VALUES(dashboards_created),
+                updated_at = CURRENT_TIMESTAMP
+        `);
     }
-    sql:ParameterizedQuery insertQuery =
-        `INSERT INTO component_moesif_config (component_id, workspace_id, management_key, dashboards_created)
-         VALUES (${componentId}, ${workspaceId}, ${managementKey}, ${true})`;
-    sql:ExecutionResult result = check dbClient->execute(insertQuery);
     return result.affectedRowCount ?: 0;
 }
 

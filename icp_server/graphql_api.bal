@@ -2643,7 +2643,16 @@ service /graphql on graphqlListener {
         string? applicationId = check storage:getComponentMoesifApplicationId(component.id);
         boolean configured = applicationId is string && applicationId.trim().length() > 0;
         boolean dashboardsCreated = check storage:getComponentMoesifDashboardsCreated(component.id);
-        return {configured, applicationId: configured ? applicationId : (), dashboardsCreated};
+
+        // The stored Collector Application ID is sensitive, so only expose it to
+        // callers that can edit or manage the integration. View-only callers
+        // receive just the status flags.
+        boolean canManage = check auth:hasAnyPermission(userContext.userId,
+                [auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope);
+        if canManage {
+            return {configured, applicationId: configured ? applicationId : (), dashboardsCreated};
+        }
+        return {configured, dashboardsCreated};
     }
 
     // Mint a short-lived Moesif workspace access token and return the embed URL so
@@ -2667,7 +2676,7 @@ service /graphql on graphqlListener {
 
         record {|string? workspaceId; string? managementKey;|}? embedDetails = check storage:getComponentMoesifEmbedDetails(componentId);
         if embedDetails is () {
-            return error("Integration not found");
+            return error("Moesif metrics dashboard has not been created for this integration yet");
         }
         string? workspaceId = embedDetails.workspaceId;
         string? managementKey = embedDetails.managementKey;
@@ -2723,10 +2732,9 @@ service /graphql on graphqlListener {
 
         // Persist the workspace id and the Management API key so the UI can later
         // mint short-lived access tokens and embed the workspace metrics chart.
-        int affected = check storage:updateComponentMoesifDashboardDetails(componentId, workspaceId, trimmedToken);
-        if affected == 0 {
-            return error("Moesif dashboards linked but failed to update the integration record");
-        }
+        // The component is already resolved above, so a zero affected-row count
+        // (a MySQL no-op update with unchanged values) still counts as success.
+        _ = check storage:updateComponentMoesifDashboardDetails(componentId, workspaceId, trimmedToken);
 
         storage:logAuditEvent(storage:AUDIT_COMPONENT_UPDATE, userId = userContext.userId,
                 resourceType = storage:AUDIT_RESOURCE_COMPONENT, resourceId = componentId,
@@ -2759,10 +2767,10 @@ service /graphql on graphqlListener {
             return error("Moesif Collector Application ID must not be empty");
         }
 
-        int affected = check storage:updateComponentMoesifApplicationId(componentId, trimmedAppId);
-        if affected == 0 {
-            return error("Failed to persist Moesif configuration: integration not found");
-        }
+        // The component is already resolved above, so a zero affected-row count
+        // (a MySQL no-op update with an unchanged Application ID) still counts as
+        // success.
+        _ = check storage:updateComponentMoesifApplicationId(componentId, trimmedAppId);
 
         storage:logAuditEvent(storage:AUDIT_COMPONENT_UPDATE, userId = userContext.userId,
                 resourceType = storage:AUDIT_RESOURCE_COMPONENT, resourceId = componentId,

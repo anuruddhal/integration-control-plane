@@ -17,6 +17,7 @@
 import ballerina/http;
 import ballerina/log;
 import ballerina/time;
+import ballerina/url;
 
 // Base URL for the Moesif Management API. Overridable via configuration.
 // See https://www.moesif.com/docs/api/ (Management API).
@@ -25,6 +26,14 @@ configurable string moesifManagementBaseUrl = "https://api.moesif.com/v1";
 // Base URL for the public embedded-workspace viewer. The final iframe src is
 // `${moesifEmbedBaseUrl}/${workspaceId}?embed=true#${accessToken}`.
 configurable string moesifEmbedBaseUrl = "https://www.moesif.com/public/em/ws";
+
+// Request timeout (seconds) for Moesif Management API calls.
+const decimal MOESIF_HTTP_TIMEOUT_SECONDS = 30;
+
+// Shared Moesif Management API HTTP client, reused across requests instead of
+// constructing a new client per call. The base URL is fixed and authentication
+// is passed per-request as a Bearer header, so a single shared client is safe.
+final http:Client moesifClient = check new (moesifManagementBaseUrl, timeout = MOESIF_HTTP_TIMEOUT_SECONDS);
 
 // Time-to-live (seconds) of the minted workspace access token. Kept short; the
 // frontend re-requests a fresh token before it expires.
@@ -68,11 +77,11 @@ public type MoesifWorkspaceEmbed record {|
 // (usually because the template hasn't been imported yet).
 public isolated function discoverMoesifMetricsWorkspaceId(string managementApiKey, string moesifAppId)
         returns string|error {
-    http:Client moesifClient = check new (moesifManagementBaseUrl);
     map<string|string[]> headers = {"Authorization": string `Bearer ${managementApiKey}`};
 
+    string encodedAppId = check url:encode(moesifAppId, "UTF-8");
     json dashboards = check getFromMoesif(moesifClient,
-            string `/~/dashboards?app_id=${moesifAppId}&take=${MOESIF_DASHBOARD_LIST_TAKE}`, headers, "dashboards");
+            string `/~/dashboards?app_id=${encodedAppId}&take=${MOESIF_DASHBOARD_LIST_TAKE}`, headers, "dashboards");
 
     string? workspaceId = findMoesifWorkspaceIdForDashboard(dashboards, MOESIF_DASHBOARD_NAME);
     if workspaceId is () {
@@ -95,7 +104,6 @@ public isolated function discoverMoesifMetricsWorkspaceId(string managementApiKe
 // `read:workspaces` scope.
 public isolated function generateMoesifWorkspaceAccessToken(string managementApiKey, string workspaceId)
         returns MoesifWorkspaceEmbed|error {
-    http:Client moesifClient = check new (moesifManagementBaseUrl);
     map<string|string[]> headers = {"Authorization": string `Bearer ${managementApiKey}`};
 
     time:Utc now = time:utcNow();
@@ -107,8 +115,10 @@ public isolated function generateMoesifWorkspaceAccessToken(string managementApi
             "to": time:utcToString(now)
         }
     };
+    string encodedWorkspaceId = check url:encode(workspaceId, "UTF-8");
+    string encodedExpiration = check url:encode(expiration, "UTF-8");
     json response = check postToMoesif(moesifClient,
-            string `/portal/~/workspaces/${workspaceId}/access_token?expiration=${expiration}`, body, headers, "workspace access token");
+            string `/portal/~/workspaces/${encodedWorkspaceId}/access_token?expiration=${encodedExpiration}`, body, headers, "workspace access token");
     map<json> responseMap = check response.ensureType();
     json tokenValue = responseMap["token"];
     if tokenValue !is string {
