@@ -171,7 +171,7 @@ secret = "${secret}"
   if (!workflowMgt) return base;
   return `${base}
 
-${workflowManagementToml('<project name>', secret)}`;
+${workflowManagementToml('<project name>', '<integration name>', secret)}`;
 }
 
 function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () => void }) {
