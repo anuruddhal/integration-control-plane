@@ -16,6 +16,19 @@
  * under the License.
  */
 
+// The escapes TOML defines for a basic (double-quoted) string.
+const TOML_ESCAPES: Record<string, string> = { '\\': '\\\\', '"': '\\"', '\n': '\\n', '\r': '\\r', '\t': '\\t', '\b': '\\b', '\f': '\\f' };
+
+/**
+ * Escapes a value for interpolation into a double-quoted TOML string. Handlers are free text — the
+ * create forms only require "at least one letter or number" — so a name containing a quote would
+ * otherwise close the string early and yield a config that fails to parse once pasted. Done in one
+ * pass so an escaped backslash is not re-escaped.
+ */
+function tomlString(value: string): string {
+  return value.replace(/[\\"\n\r\t\b\f]/g, (c) => TOML_ESCAPES[c]);
+}
+
 /**
  * The `main.bal` imports a BI runtime needs. The ICP bridge is always required; workflow management
  * additionally needs its own module imported, because the `[ballerina.workflow.management]`
@@ -38,13 +51,13 @@ export function runtimeImports(workflowMgt: boolean): string {
 export function workflowManagementToml(project: string, integration: string, secret: string): string {
   return `[ballerina.workflow]
 # mode = "LOCAL"
-namespace = "${project}"
-taskQueue = "${integration}"
+namespace = "${tomlString(project)}"
+taskQueue = "${tomlString(integration)}"
 
 [ballerina.workflow.management]
 enableManagementApi = true
 enableApiKey = true
-apiKeyValue = "${secret}"
+apiKeyValue = "${tomlString(secret)}"
 apiKeyHeader = "X-API-Key"
 enableBasicAuth = false`;
 }
