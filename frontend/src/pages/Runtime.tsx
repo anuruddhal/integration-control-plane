@@ -55,6 +55,7 @@ import { useCreateOrgSecret, useDeleteRuntime, useRevokeOrgSecret } from '../api
 import { hasComponent, type ProjectScope, type ComponentScope } from '../nav';
 import { formatDistanceToNow } from '../utils/time';
 import { runtimeImports, workflowManagementToml } from '../utils/runtimeToml';
+import { isWorkflowIntegration } from '../constants/integrationTypes';
 import Authorized from '../components/Authorized';
 import { Permissions } from '../constants/permissions';
 import { technologyLabel } from '../constants/technologies';
@@ -106,6 +107,7 @@ function AddRuntimeModal({
   environmentName,
   componentId,
   componentType,
+  displayType,
   projectHandle,
   integrationHandle,
   onClose,
@@ -114,6 +116,7 @@ function AddRuntimeModal({
   environmentName: string;
   componentId: string;
   componentType?: string;
+  displayType?: string;
   projectHandle: string;
   integrationHandle: string;
   onClose: () => void;
@@ -122,8 +125,13 @@ function AddRuntimeModal({
   const queryClient = useQueryClient();
   const [secret, setSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [workflowMgt, setWorkflowMgt] = useState(false);
+  const [workflowMgtChoice, setWorkflowMgtChoice] = useState(false);
   const isBI = componentType === 'BI';
+  // A Workflow integration exists to host workflows, so its runtime always registers with workflow
+  // management enabled and the toggle is not offered. Derived rather than seeded into state so a
+  // late-arriving integration type still takes effect.
+  const alwaysWorkflowMgt = isWorkflowIntegration(displayType);
+  const workflowMgt = alwaysWorkflowMgt || workflowMgtChoice;
 
   const handleGenerate = () => {
     setError(null);
@@ -165,7 +173,7 @@ function AddRuntimeModal({
             <Alert severity="warning" sx={{ mb: 2 }}>
               <strong>The secret will be shown once — copy it before closing.</strong>
             </Alert>
-            {isBI && <FormControlLabel control={<Switch checked={workflowMgt} onChange={(e) => setWorkflowMgt(e.target.checked)} />} label="Enable Workflow Management" sx={{ display: 'flex', mb: 2 }} />}
+            {isBI && !alwaysWorkflowMgt && <FormControlLabel control={<Switch checked={workflowMgtChoice} onChange={(e) => setWorkflowMgtChoice(e.target.checked)} />} label="Enable Workflow Management" sx={{ display: 'flex', mb: 2 }} />}
             <Button variant="contained" onClick={handleGenerate} disabled={createMutation.isPending}>
               {createMutation.isPending ? 'Generating...' : 'Generate Secret'}
             </Button>
@@ -312,6 +320,7 @@ function EnvironmentRuntimeCard({
   environmentId,
   componentId,
   componentType,
+  displayType,
   projectHandle,
   integrationHandle,
   projectId,
@@ -324,6 +333,7 @@ function EnvironmentRuntimeCard({
   environmentId: string;
   componentId: string | undefined;
   componentType?: string;
+  displayType?: string;
   projectHandle: string;
   integrationHandle: string;
   projectId: string;
@@ -578,7 +588,16 @@ function EnvironmentRuntimeCard({
 
       {drawerOpen && componentId && <BoundSecretDrawer componentId={componentId} environmentId={environmentId} environmentName={environmentName} onClose={() => setDrawerOpen(false)} />}
       {addOpen && componentId && (
-        <AddRuntimeModal environmentId={environmentId} environmentName={environmentName} componentId={componentId} componentType={componentType} projectHandle={projectHandle} integrationHandle={integrationHandle} onClose={() => setAddOpen(false)} />
+        <AddRuntimeModal
+          environmentId={environmentId}
+          environmentName={environmentName}
+          componentId={componentId}
+          componentType={componentType}
+          displayType={displayType}
+          projectHandle={projectHandle}
+          integrationHandle={integrationHandle}
+          onClose={() => setAddOpen(false)}
+        />
       )}
     </>
   );
@@ -674,6 +693,7 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
             environmentId={env.id}
             componentId={componentId}
             componentType={component?.componentType}
+            displayType={component?.displayType}
             projectHandle={projectHandle}
             integrationHandle={integrationHandle}
             projectId={projectId}
