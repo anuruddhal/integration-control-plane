@@ -62,6 +62,7 @@ import { ArtifactTypeSelector } from './ArtifactDetail';
 import Authorized from './Authorized';
 import { Permissions } from '../constants/permissions';
 import { hasComponent, resourceUrl, useScope } from '../nav';
+import { isWorkflowIntegration } from '../constants/integrationTypes';
 import { ENTRY_POINT_CONFIG, ENTRY_POINT_DETAIL_TABS, type SelectedArtifact, type TabProps } from './artifact-config';
 import SyncSwitch from './SyncSwitch';
 import CopyButton from './CopyButton';
@@ -564,6 +565,7 @@ function EntryPointsList({
   componentId,
   projectId,
   componentType,
+  displayType,
   isOnline,
   onOpenDrawer,
   onSelectionChange,
@@ -572,6 +574,7 @@ function EntryPointsList({
   componentId: string;
   projectId: string;
   componentType: string;
+  displayType?: string;
   isOnline: boolean;
   onOpenDrawer: (a: GqlArtifact, type: string, envId: string, tab: string) => void;
   onSelectionChange?: (entry: { artifact: GqlArtifact; type: string } | null) => void;
@@ -580,23 +583,29 @@ function EntryPointsList({
   const navigate = useNavigate();
   const scope = useScope();
   const isMI = componentType === 'MI';
+  // A Workflow integration is presented by its workflow definitions alone. Its BI runtime also
+  // reports the service and listener artifacts that host the workflow engine, but those are
+  // implementation detail rather than something the integration exposes.
+  const workflowOnly = isWorkflowIntegration(displayType);
 
   const { data: apis = EMPTY_ARTIFACTS, isLoading: loadingApis } = useArtifacts('RestApi', envId, componentId, { enabled: isMI, active: isOnline });
   const { data: proxies = EMPTY_ARTIFACTS, isLoading: loadingProxies } = useArtifacts('ProxyService', envId, componentId, { enabled: isMI, active: isOnline });
   const { data: inboundEps = EMPTY_ARTIFACTS, isLoading: loadingInbound } = useArtifacts('InboundEndpoint', envId, componentId, { enabled: isMI, active: isOnline });
   const { data: tasks = EMPTY_ARTIFACTS, isLoading: loadingTasks } = useArtifacts('Task', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: services = EMPTY_ARTIFACTS, isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI, active: isOnline });
-  const { data: automations = EMPTY_ARTIFACTS, isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: services = EMPTY_ARTIFACTS, isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI && !workflowOnly, active: isOnline });
+  const { data: automations = EMPTY_ARTIFACTS, isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI && !workflowOnly, active: isOnline });
   const { data: workflows = EMPTY_ARTIFACTS, isLoading: loadingWorkflows } = useArtifacts('Workflow', envId, componentId, { enabled: !isMI, active: isOnline });
 
-  const isLoading = isMI ? loadingApis || loadingProxies || loadingInbound || loadingTasks : loadingServices || loadingAutomations || loadingWorkflows;
+  const isLoading = isMI ? loadingApis || loadingProxies || loadingInbound || loadingTasks : workflowOnly ? loadingWorkflows : loadingServices || loadingAutomations || loadingWorkflows;
 
   const allEntryPoints = useMemo(
     () =>
       isMI
         ? [...apis.map((a) => ({ artifact: a, type: 'RestApi' })), ...proxies.map((a) => ({ artifact: a, type: 'ProxyService' })), ...inboundEps.map((a) => ({ artifact: a, type: 'InboundEndpoint' })), ...tasks.map((a) => ({ artifact: a, type: 'Task' }))]
-        : [...services.map((a) => ({ artifact: a, type: 'Service' })), ...workflows.map((a) => ({ artifact: a, type: 'Workflow' })), ...automations.map((a) => ({ artifact: a, type: 'Automation' }))],
-    [isMI, apis, proxies, inboundEps, tasks, services, workflows, automations],
+        : workflowOnly
+          ? workflows.map((a) => ({ artifact: a, type: 'Workflow' }))
+          : [...services.map((a) => ({ artifact: a, type: 'Service' })), ...workflows.map((a) => ({ artifact: a, type: 'Workflow' })), ...automations.map((a) => ({ artifact: a, type: 'Automation' }))],
+    [isMI, workflowOnly, apis, proxies, inboundEps, tasks, services, workflows, automations],
   );
 
   const allKeys = new Set(
@@ -736,6 +745,7 @@ export default function Environment({
   componentId,
   projectId,
   componentType,
+  displayType,
   onSelectArtifact,
   onOpenDrawerForTab,
 }: {
@@ -743,6 +753,7 @@ export default function Environment({
   componentId: string;
   projectId: string;
   componentType: string;
+  displayType?: string;
   onSelectArtifact: (a: GqlArtifact, type: string, envId: string) => void;
   onOpenDrawerForTab: (a: GqlArtifact, type: string, envId: string, tab: string) => void;
 }) {
@@ -1084,7 +1095,7 @@ export default function Environment({
           </Stack>
         )}
         {(componentType !== 'MI' || viewMode === 'entryPoints') && (
-          <EntryPointsList envId={env.id} componentId={componentId} projectId={projectId} componentType={componentType} isOnline={isOnline} onOpenDrawer={onOpenDrawerForTab} onSelectionChange={setCurrentEntryPoint} />
+          <EntryPointsList envId={env.id} componentId={componentId} projectId={projectId} componentType={componentType} displayType={displayType} isOnline={isOnline} onOpenDrawer={onOpenDrawerForTab} onSelectionChange={setCurrentEntryPoint} />
         )}
         {componentType === 'MI' && viewMode === 'allArtifacts' && <ArtifactTypeSelector envId={env.id} componentId={componentId} onSelectArtifact={onSelectArtifact} />}
       </CardContent>
