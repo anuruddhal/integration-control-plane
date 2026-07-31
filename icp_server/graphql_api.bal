@@ -2613,6 +2613,166 @@ service /graphql on graphqlListener {
         return component;
     }
 
+    // Report whether an integration (project + component combo) is configured for Moesif metrics.
+    // Resolves the component by componentId OR by projectId + componentHandler, then returns a
+    // status flag indicating whether a Moesif Collector Application ID has been stored against it.
+    isolated resource function get moesifMetricsConfig(graphql:Context context, string? componentId, string? projectId, string? componentHandler) returns types:MoesifMetricsConfigStatus|error {
+        types:UserContextV2 userContext = check extractUserContext(context);
+
+        types:Component? component = ();
+        if componentId is string {
+            component = check storage:getComponentById(componentId);
+        } else if projectId is string && componentHandler is string {
+            component = check storage:getComponentByProjectAndHandler(projectId, componentHandler);
+        } else {
+            return error("Either componentId or (projectId and componentHandler) must be provided");
+        }
+
+        if component is () {
+            return error("Integration not found");
+        }
+
+        // Users with view, edit or manage permissions can read the configuration status.
+        types:AccessScope scope = auth:buildScopeFromContext(component.projectId, integrationId = component.id);
+        if !check auth:hasAnyPermission(userContext.userId,
+                [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
+            log:printWarn("Attempt to read Moesif metrics config without permission", userId = userContext.userId, componentId = component.id);
+            return error("Insufficient permissions to view this integration");
+        }
+
+        string? applicationId = check storage:getComponentMoesifApplicationId(component.id);
+        boolean configured = applicationId is string && applicationId.trim().length() > 0;
+        boolean dashboardsCreated = check storage:getComponentMoesifDashboardsCreated(component.id);
+        return {configured, applicationId: configured ? applicationId : (), dashboardsCreated};
+    }
+
+    // Mint a short-lived Moesif workspace access token and return the embed URL so
+    // the UI can render the metrics dashboard in an iframe. Reads the stored
+    // workspace id + Management API key for the integration and calls the Moesif
+    // portal API. The token expires after ~1 hour, so the UI should re-query
+    // before then. Requires view, edit or manage permission.
+    isolated resource function get moesifDashboardEmbed(graphql:Context context, string componentId) returns types:MoesifDashboardEmbed|error {
+        types:UserContextV2 userContext = check extractUserContext(context);
+
+        types:Component? component = check storage:getComponentById(componentId);
+        if component is () {
+            return error("Integration not found");
+        }
+
+        types:AccessScope scope = auth:buildScopeFromContext(component.projectId, integrationId = componentId);
+        if !check auth:hasAnyPermission(userContext.userId,
+                [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
+            return error("Insufficient permissions to view Moesif metrics for this integration");
+        }
+
+        record {|string? workspaceId; string? managementKey;|}? embedDetails = check storage:getComponentMoesifEmbedDetails(componentId);
+        if embedDetails is () {
+            return error("Integration not found");
+        }
+        string? workspaceId = embedDetails.workspaceId;
+        string? managementKey = embedDetails.managementKey;
+        if workspaceId is () || workspaceId.trim().length() == 0
+                || managementKey is () || managementKey.trim().length() == 0 {
+            return error("Moesif metrics dashboard has not been created for this integration yet");
+        }
+
+        MoesifWorkspaceEmbed|error embed = generateMoesifWorkspaceAccessToken(managementKey, workspaceId);
+        if embed is error {
+            log:printError("Failed to generate Moesif workspace access token", 'error = embed, componentId = componentId);
+            return error(string `Failed to generate Moesif dashboard embed: ${embed.message()}`);
+        }
+        return {workspaceId: embed.workspaceId, accessToken: embed.accessToken, embedUrl: embed.embedUrl};
+    }
+
+    // Link an integration to its Moesif metrics dashboard. The user imports the
+    // ICP metrics template into Moesif and sets the workspace sharing to Public;
+    // this call then discovers the imported dashboard's workspace id (via the
+    // supplied Management API token) and records it against the component so the
+    // embed can mint access tokens. Requires edit or manage permission.
+    isolated remote function createMoesifDashboards(graphql:Context context, string componentId, string managementApiKey, string moesifAppId) returns types:MoesifMetricsConfigStatus|error {
+        types:UserContextV2 userContext = check extractUserContext(context);
+
+        types:Component? component = check storage:getComponentById(componentId);
+        if component is () {
+            return error("Integration not found");
+        }
+
+        types:AccessScope scope = auth:buildScopeFromContext(component.projectId, integrationId = componentId);
+        if !check auth:hasAnyPermission(userContext.userId,
+                [auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
+            return error("Insufficient permissions to create Moesif dashboards for this component");
+        }
+
+        string trimmedToken = managementApiKey.trim();
+        if trimmedToken.length() == 0 {
+            return error("Moesif Management API token must not be empty");
+        }
+
+        string trimmedAppId = moesifAppId.trim();
+        if trimmedAppId.length() == 0 {
+            return error("Moesif Application ID must not be empty");
+        }
+
+        // Discover the imported dashboard's workspace id via the Moesif
+        // Management API (the user imports the template + sets it Public first).
+        string|error workspaceId = discoverMoesifMetricsWorkspaceId(trimmedToken, trimmedAppId);
+        if workspaceId is error {
+            log:printError("Failed to link Moesif dashboards", 'error = workspaceId, componentId = componentId);
+            return error(string `Failed to link Moesif dashboards: ${workspaceId.message()}`);
+        }
+
+        // Persist the workspace id and the Management API key so the UI can later
+        // mint short-lived access tokens and embed the workspace metrics chart.
+        int affected = check storage:updateComponentMoesifDashboardDetails(componentId, workspaceId, trimmedToken);
+        if affected == 0 {
+            return error("Moesif dashboards linked but failed to update the integration record");
+        }
+
+        storage:logAuditEvent(storage:AUDIT_COMPONENT_UPDATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_COMPONENT, resourceId = componentId,
+                details = string `Moesif metrics dashboards created for component '${component.name}' by '${userContext.username}'`,
+                clientIp = userContext.clientIp, userAgent = userContext.userAgent);
+
+        string? applicationId = check storage:getComponentMoesifApplicationId(componentId);
+        boolean configured = applicationId is string && applicationId.trim().length() > 0;
+        return {configured, applicationId: configured ? applicationId : (), dashboardsCreated: true};
+    }
+
+    // Persist the Moesif Collector Application ID against an integration (project + component combo),
+    // marking it as configured for Moesif metrics. Requires edit or manage permission.
+    isolated remote function configureMoesifMetrics(graphql:Context context, string componentId, string applicationId) returns types:MoesifMetricsConfigStatus|error {
+        types:UserContextV2 userContext = check extractUserContext(context);
+
+        types:Component? component = check storage:getComponentById(componentId);
+        if component is () {
+            return error("Integration not found");
+        }
+
+        types:AccessScope scope = auth:buildScopeFromContext(component.projectId, integrationId = componentId);
+        if !check auth:hasAnyPermission(userContext.userId,
+                [auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
+            return error("Insufficient permissions to configure Moesif metrics for this component");
+        }
+
+        string trimmedAppId = applicationId.trim();
+        if trimmedAppId.length() == 0 {
+            return error("Moesif Collector Application ID must not be empty");
+        }
+
+        int affected = check storage:updateComponentMoesifApplicationId(componentId, trimmedAppId);
+        if affected == 0 {
+            return error("Failed to persist Moesif configuration: integration not found");
+        }
+
+        storage:logAuditEvent(storage:AUDIT_COMPONENT_UPDATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_COMPONENT, resourceId = componentId,
+                details = string `Moesif metrics configured for component '${component.name}' by '${userContext.username}'`,
+                clientIp = userContext.clientIp, userAgent = userContext.userAgent);
+
+        boolean dashboardsCreated = check storage:getComponentMoesifDashboardsCreated(componentId);
+        return {configured: true, applicationId: trimmedAppId, dashboardsCreated};
+    }
+
     // Delete a component V2 - with detailed response
     isolated remote function deleteComponentV2(graphql:Context context, string orgHandler, string componentId, string projectId) returns types:DeleteComponentV2Response|error {
         types:UserContextV2 userContext = check extractUserContext(context);

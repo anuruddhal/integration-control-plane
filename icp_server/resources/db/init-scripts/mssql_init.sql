@@ -192,6 +192,33 @@ BEGIN
 END;
 GO
 
+-- Moesif metrics configuration for a component (kept separate from components to
+-- isolate provider secrets and avoid sparse columns on the core table).
+CREATE TABLE component_moesif_config (
+    component_id CHAR(36) PRIMARY KEY,
+    application_id NVARCHAR (512) NULL,
+    dashboards_created BIT NOT NULL DEFAULT 0,
+    workspace_id NVARCHAR (512) NULL,
+    management_key NVARCHAR (4000) NULL,
+    created_at DATETIME2 NOT NULL DEFAULT GETDATE (),
+    updated_at DATETIME2 NOT NULL DEFAULT GETDATE (),
+    CONSTRAINT fk_moesif_config_component FOREIGN KEY (component_id) REFERENCES components (component_id) ON DELETE CASCADE
+);
+GO
+
+CREATE TRIGGER trg_moesif_config_updated_at
+ON component_moesif_config
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE component_moesif_config
+    SET updated_at = GETDATE()
+    FROM component_moesif_config m
+    INNER JOIN inserted i ON m.component_id = i.component_id;
+END;
+GO
+
 CREATE TABLE environments (
     environment_id CHAR(36) PRIMARY KEY,
     name NVARCHAR (200) NOT NULL UNIQUE, -- e.g., dev, stage, prod

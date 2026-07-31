@@ -336,6 +336,128 @@ public isolated function getComponentByProjectAndHandler(string projectId, strin
     return mapToComponent(componentRecords[0]);
 }
 
+// Whether a Moesif metrics config row already exists for the component. Used to
+// decide between INSERT and UPDATE (dialect-agnostic upsert) since MySQL may
+// report 0 affected rows on a no-op UPDATE.
+isolated function moesifConfigExists(string componentId) returns boolean|error {
+    sql:ParameterizedQuery selectQuery =
+        `SELECT component_id FROM component_moesif_config WHERE component_id = ${componentId}`;
+    record {|string component_id;|}|sql:Error result = dbClient->queryRow(selectQuery);
+    if result is sql:NoRowsError {
+        return false;
+    }
+    if result is sql:Error {
+        return result;
+    }
+    return true;
+}
+
+// Persist the Moesif Collector Application ID against a component (project + integration combo).
+// Upserts into component_moesif_config. Returns the number of affected rows.
+public isolated function updateComponentMoesifApplicationId(string componentId, string applicationId) returns int|error {
+    if check moesifConfigExists(componentId) {
+        sql:ParameterizedQuery updateQuery =
+            `UPDATE component_moesif_config SET application_id = ${applicationId},
+                updated_at = ${time:utcToString(time:utcNow())}
+             WHERE component_id = ${componentId}`;
+        sql:ExecutionResult result = check dbClient->execute(updateQuery);
+        return result.affectedRowCount ?: 0;
+    }
+    sql:ParameterizedQuery insertQuery =
+        `INSERT INTO component_moesif_config (component_id, application_id)
+         VALUES (${componentId}, ${applicationId})`;
+    sql:ExecutionResult result = check dbClient->execute(insertQuery);
+    return result.affectedRowCount ?: 0;
+}
+
+// Retrieve the Moesif Collector Application ID stored against a component.
+// Returns () when the component is not configured for Moesif metrics.
+public isolated function getComponentMoesifApplicationId(string componentId) returns string?|error {
+    sql:ParameterizedQuery selectQuery =
+        `SELECT application_id FROM component_moesif_config WHERE component_id = ${componentId}`;
+    record {|string? application_id;|}|sql:Error result = dbClient->queryRow(selectQuery);
+    if result is sql:NoRowsError {
+        return ();
+    }
+    if result is sql:Error {
+        return result;
+    }
+    return result.application_id;
+}
+
+// Retrieve whether the Moesif metrics dashboards have been created for a
+// component. Returns false when the component does not exist or the flag is unset.
+public isolated function getComponentMoesifDashboardsCreated(string componentId) returns boolean|error {
+    sql:ParameterizedQuery selectQuery =
+        `SELECT dashboards_created FROM component_moesif_config WHERE component_id = ${componentId}`;
+    boolean|sql:Error result = dbClient->queryRow(selectQuery);
+    if result is sql:NoRowsError {
+        return false;
+    }
+    if result is sql:Error {
+        return result;
+    }
+    return result;
+}
+
+// Records whether the Moesif metrics dashboards have been created for a
+// component. Upserts into component_moesif_config. Returns the number of affected rows.
+public isolated function updateComponentMoesifDashboardsCreated(string componentId, boolean created) returns int|error {
+    if check moesifConfigExists(componentId) {
+        sql:ParameterizedQuery updateQuery =
+            `UPDATE component_moesif_config SET dashboards_created = ${created},
+                updated_at = ${time:utcToString(time:utcNow())}
+             WHERE component_id = ${componentId}`;
+        sql:ExecutionResult result = check dbClient->execute(updateQuery);
+        return result.affectedRowCount ?: 0;
+    }
+    sql:ParameterizedQuery insertQuery =
+        `INSERT INTO component_moesif_config (component_id, dashboards_created)
+         VALUES (${componentId}, ${created})`;
+    sql:ExecutionResult result = check dbClient->execute(insertQuery);
+    return result.affectedRowCount ?: 0;
+}
+
+// Persist the Moesif embed details against a component after the metrics
+// workspace is created: the workspace id (used to build the embed URL and mint
+// workspace access tokens) and the Management API key (used to mint short-lived
+// workspace access tokens on demand). Also flips dashboards_created to TRUE.
+// Upserts into component_moesif_config. Returns the number of affected rows.
+public isolated function updateComponentMoesifDashboardDetails(string componentId, string workspaceId,
+        string managementKey) returns int|error {
+    if check moesifConfigExists(componentId) {
+        sql:ParameterizedQuery updateQuery =
+            `UPDATE component_moesif_config SET workspace_id = ${workspaceId},
+                management_key = ${managementKey}, dashboards_created = ${true},
+                updated_at = ${time:utcToString(time:utcNow())}
+             WHERE component_id = ${componentId}`;
+        sql:ExecutionResult result = check dbClient->execute(updateQuery);
+        return result.affectedRowCount ?: 0;
+    }
+    sql:ParameterizedQuery insertQuery =
+        `INSERT INTO component_moesif_config (component_id, workspace_id, management_key, dashboards_created)
+         VALUES (${componentId}, ${workspaceId}, ${managementKey}, ${true})`;
+    sql:ExecutionResult result = check dbClient->execute(insertQuery);
+    return result.affectedRowCount ?: 0;
+}
+
+// Retrieve the Moesif workspace id + Management API key stored against a
+// component so a caller can mint a workspace access token and build the embed
+// URL. Returns () for either field when it has not been set.
+public isolated function getComponentMoesifEmbedDetails(string componentId)
+        returns record {|string? workspaceId; string? managementKey;|}?|error {
+    sql:ParameterizedQuery selectQuery =
+        `SELECT workspace_id, management_key FROM component_moesif_config WHERE component_id = ${componentId}`;
+    record {|string? workspace_id; string? management_key;|}|sql:Error result = dbClient->queryRow(selectQuery);
+    if result is sql:NoRowsError {
+        return ();
+    }
+    if result is sql:Error {
+        return result;
+    }
+    return {workspaceId: result.workspace_id, managementKey: result.management_key};
+}
+
 // Delete a component by ID
 public isolated function deleteComponent(string componentId) returns error? {
     // Revoke all org secrets bound to this component (detaches runtimes + deletes secrets).

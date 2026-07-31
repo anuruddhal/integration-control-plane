@@ -1163,7 +1163,7 @@ public isolated function deleteLogLevel(string runtimeId, string componentName) 
 // Delete all log levels for a specific runtime
 public isolated function deleteAllLogLevels(string runtimeId) returns error? {
     _ = check dbClient->execute(`
-        DELETE FROM bi_runtime_log_levels 
+        DELETE FROM bi_runtime_log_levels
         WHERE runtime_id = ${runtimeId}
     `);
 }
