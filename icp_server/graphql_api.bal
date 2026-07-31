@@ -2730,6 +2730,12 @@ service /graphql on graphqlListener {
             return error(string `Failed to link Moesif dashboards: ${workspaceId.message()}`);
         }
 
+        // Persist the same Collector Application ID used to discover the
+        // workspace as the integration's collector configuration, so the
+        // dashboard credentials and the stored collector App ID can never
+        // reference different Moesif applications.
+        _ = check storage:updateComponentMoesifApplicationId(componentId, trimmedAppId);
+
         // Persist the workspace id and the Management API key so the UI can later
         // mint short-lived access tokens and embed the workspace metrics chart.
         // The component is already resolved above, so a zero affected-row count

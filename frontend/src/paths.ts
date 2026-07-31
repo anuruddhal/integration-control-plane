@@ -207,8 +207,6 @@ export { loginApiUrl, refreshTokenApiUrl, revokeTokenApiUrl, oidcAuthorizeApiUrl
 export const observabilityLogsApiUrl = (): string => window.API_CONFIG.observabilityUrl + '/logs?live=true';
 // Metrics URL helper
 export const observabilityMetricsApiUrl = (): string => window.API_CONFIG.observabilityUrl + '/metrics';
-// Moesif metrics URL helper (scaffold: wire the real backend later)
-export const moesifMetricsApiUrl = (): string => window.API_CONFIG.observabilityUrl + '/metrics/moesif';
 
 // ---------------------------------------------------------------------------
 // WSDL/SOAP namespace constants
