@@ -42,10 +42,7 @@ export default function Metrics(scope: ProjectScope | ComponentScope): JSX.Eleme
 
   const isComponent = hasComponent(scope);
   const { data: project } = useProjectByHandler(scope.project);
-  const { data: component, isLoading: componentLoading } = useComponentByHandler(
-    project?.id ?? '',
-    isComponent ? scope.component : undefined,
-  );
+  const { data: component, isLoading: componentLoading } = useComponentByHandler(project?.id ?? '', isComponent ? scope.component : undefined);
 
   // While the component query is still resolving we don't yet know its
   // technology, so keep the backend selector mounted to avoid it disappearing
@@ -58,23 +55,24 @@ export default function Metrics(scope: ProjectScope | ComponentScope): JSX.Eleme
   // needed.
   const effectiveBackend: MetricsBackend = moesifAllowed ? backend : 'opensearch';
 
-  const backendSelector = moesifAllowed || componentResolving ? (
-    <ToggleButtonGroup
-      value={effectiveBackend}
-      exclusive
-      size="small"
-      onChange={(_e, value: MetricsBackend | null) => {
-        if (value) setBackend(value);
-      }}
-      aria-label="Metrics backend">
-      <ToggleButton value="opensearch" aria-label="OpenSearch metrics">
-        OpenSearch
-      </ToggleButton>
-      <ToggleButton value="moesif" aria-label="Moesif metrics">
-        Moesif
-      </ToggleButton>
-    </ToggleButtonGroup>
-  ) : undefined;
+  const backendSelector =
+    moesifAllowed || componentResolving ? (
+      <ToggleButtonGroup
+        value={effectiveBackend}
+        exclusive
+        size="small"
+        onChange={(_e, value: MetricsBackend | null) => {
+          if (value) setBackend(value);
+        }}
+        aria-label="Metrics backend">
+        <ToggleButton value="opensearch" aria-label="OpenSearch metrics">
+          OpenSearch
+        </ToggleButton>
+        <ToggleButton value="moesif" aria-label="Moesif metrics">
+          Moesif
+        </ToggleButton>
+      </ToggleButtonGroup>
+    ) : undefined;
 
   return effectiveBackend === 'moesif' ? <MetricsMoesif scope={scope} backendSelector={backendSelector} /> : <MetricsOpenSearch scope={scope} backendSelector={backendSelector} />;
 }
