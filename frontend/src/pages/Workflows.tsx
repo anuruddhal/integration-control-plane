@@ -17,7 +17,7 @@
  */
 
 import { Autocomplete, Box, CircularProgress, PageContent, Stack, Tab, Tabs, TextField, Typography } from '@wso2/oxygen-ui';
-import { useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { useSearchParams } from 'react-router';
 import { useProjectByHandler, useComponentByHandler, useComponents, useEnvironments } from '../api/queries';
 import NotFound from '../components/NotFound';
@@ -73,25 +73,43 @@ export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Ele
   // Optional deep-link params (e.g. from the Overview page's "View Instances" action or the
   // start-workflow success dialog): ?tab=admin&type=<workflowType>&workflowId=<id>&env=<environmentId>
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialWorkflowType = searchParams.get('type') ?? undefined;
-  const initialWorkflowId = searchParams.get('workflowId') ?? undefined;
+  // Held in state rather than read from the URL on every render. The admin view unmounts on a tab
+  // switch and re-seeds its filters from these on mount, so leaving them in the URL would reapply a
+  // search the user had since cleared. Kept here, above the tabs, so they can be dropped once used.
+  const [deepLink, setDeepLink] = useState<{ workflowType?: string; workflowId?: string }>(() => ({
+    workflowType: searchParams.get('type') ?? undefined,
+    workflowId: searchParams.get('workflowId') ?? undefined,
+  }));
+  const urlWorkflowType = searchParams.get('type');
+  const urlWorkflowId = searchParams.get('workflowId');
+  // A deep link can also arrive without remounting this page — "View Instance" from the start
+  // dialog navigates to these same params — so pick those up when they appear.
+  useEffect(() => {
+    if (urlWorkflowType === null && urlWorkflowId === null) return;
+    setDeepLink({ workflowType: urlWorkflowType ?? undefined, workflowId: urlWorkflowId ?? undefined });
+  }, [urlWorkflowType, urlWorkflowId]);
   // The active tab is driven by the URL, so navigating here from elsewhere (e.g. clicking a
   // workflow ID in User Actions or Review Activities) switches tabs deterministically.
   const tabKey: 'user' | 'admin' = searchParams.get('tab') === 'admin' ? 'admin' : 'user';
-  const setTabKey = (v: 'user' | 'admin') =>
+  const setTabKey = (v: 'user' | 'admin') => {
+    // Leaving the admin view discards its deep link, in state and in the URL alike: it has already
+    // been applied, and re-applying it on the way back would resurrect a cleared filter.
+    setDeepLink({});
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
         next.set('tab', v);
+        next.delete('type');
+        next.delete('workflowId');
         return next;
       },
       { replace: true },
     );
+  };
   const [selectedEnvId, setSelectedEnvId] = useState(searchParams.get('env') ?? '');
 
-  // Deep-link params seed component state once; remount the admin portal when they change so
-  // in-page navigation (e.g. "View Instance" from the start dialog) re-applies them.
-  const deepLinkKey = `${initialWorkflowType ?? ''}:${initialWorkflowId ?? ''}`;
+  // Remounts the admin portal when the deep link changes, so a new one re-seeds the filters.
+  const deepLinkKey = `${deepLink.workflowType ?? ''}:${deepLink.workflowId ?? ''}`;
 
   if (loadingProject || loadingComponent || loadingEnvs || loadingComponents)
     return (
@@ -160,7 +178,7 @@ export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Ele
           ) : activeTab === 'user' ? (
             <UserPortal targets={targets} environmentId={activeEnvId} taskQueue={taskQueue} />
           ) : (
-            <AdminPortal key={deepLinkKey} targets={targets} environmentId={activeEnvId} taskQueue={taskQueue} initialWorkflowType={initialWorkflowType} initialWorkflowId={initialWorkflowId} />
+            <AdminPortal key={deepLinkKey} targets={targets} environmentId={activeEnvId} taskQueue={taskQueue} initialWorkflowType={deepLink.workflowType} initialWorkflowId={deepLink.workflowId} />
           )}
         </>
       )}
