@@ -22,6 +22,7 @@ import { useState } from 'react';
 import SchemaFormFields from './SchemaFormFields';
 import { buildFormResult, formatTime, gatewayScope, humanizeKey, ownerLabel, ownerScope, parseFormSchema, sectionTitleSx, sortByStartTimeDesc, unescapeRoleName, type PortalScope } from './helpers';
 import { DetailRow, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope } from './shared';
+import { ReviewActivities } from './AdminPortal';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
 import { useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, usePendingTaskCount, type HumanTask } from '../../api/workflows';
@@ -52,7 +53,7 @@ type Toast = { severity: 'success' | 'error'; message: string } | null;
 
 export default function UserPortal({ targets, environmentId, taskQueue }: PortalScope) {
   const scope: PortalScope = { targets, environmentId, taskQueue };
-  const [view, setView] = useState<'tasks' | 'history'>('tasks');
+  const [view, setView] = useState<'tasks' | 'reviews' | 'history'>('tasks');
   const [toast, setToast] = useState<Toast>(null);
   const { data: pendingCount } = usePendingTaskCount(gatewayScope(scope), taskQueue);
 
@@ -62,6 +63,14 @@ export default function UserPortal({ targets, environmentId, taskQueue }: Portal
         <Button variant={view === 'tasks' ? 'contained' : 'outlined'} size="small" onClick={() => setView('tasks')}>
           My Tasks
         </Button>
+        {/* The proxy authorizes /review-activities with the workflow permissions, not the human-task
+            ones that gate this tab, so the view is only offered to someone who can actually load it
+            — a Viewer holds view_human_tasks alone and would otherwise be shown a view that 403s. */}
+        <Authorized permissions={[Permissions.WORKFLOW_VIEW_WORKFLOWS, Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+          <Button variant={view === 'reviews' ? 'contained' : 'outlined'} size="small" onClick={() => setView('reviews')}>
+            Review Activities
+          </Button>
+        </Authorized>
         <Button variant={view === 'history' ? 'contained' : 'outlined'} size="small" onClick={() => setView('history')}>
           History
         </Button>
@@ -69,7 +78,7 @@ export default function UserPortal({ targets, environmentId, taskQueue }: Portal
         {pendingCount !== undefined && <Chip label={`${pendingCount} pending`} size="small" color={pendingCount > 0 ? 'info' : 'default'} />}
       </Stack>
 
-      {view === 'tasks' ? <MyTasks scope={scope} onToast={setToast} /> : <TaskHistory scope={scope} onToast={setToast} />}
+      {view === 'tasks' ? <MyTasks scope={scope} onToast={setToast} /> : view === 'reviews' ? <ReviewActivities scope={scope} onToast={setToast} /> : <TaskHistory scope={scope} onToast={setToast} />}
 
       <Snackbar open={toast !== null} autoHideDuration={4000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         {toast ? (

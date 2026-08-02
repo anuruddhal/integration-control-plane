@@ -182,12 +182,9 @@ function useTimeRangeFilter() {
 
 export default function AdminPortal({ targets, environmentId, taskQueue, initialWorkflowType, initialWorkflowId }: PortalScope & { initialWorkflowType?: string; initialWorkflowId?: string }) {
   const scope: PortalScope = { targets, environmentId, taskQueue };
-  const [view, setView] = useState<'workflows' | 'retry'>('workflows');
   const [toast, setToast] = useState<Toast>(null);
-  // WorkflowsAdmin's filters live here, not inside it, so switching to Review Activities and
-  // back preserves them — WorkflowsAdmin unmounts on view change and would otherwise re-seed
-  // from the deep-link props, reapplying a search the user had already cleared. Deep-link
-  // params seed these once, at initial mount (the whole portal remounts when they change).
+  // WorkflowsAdmin's filters live here rather than inside it: deep-link params seed them once, at
+  // initial mount, and the whole portal remounts when those params change.
   const [status, setStatus] = useState('All');
   // The Autocomplete matches options by workflowType, so a minimal {workflowType} object selects it.
   const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(initialWorkflowType ? { workflowType: initialWorkflowType } : null);
@@ -196,20 +193,7 @@ export default function AdminPortal({ targets, environmentId, taskQueue, initial
 
   return (
     <>
-      <Stack direction="row" gap={1} sx={{ mb: 2 }}>
-        <Button variant={view === 'workflows' ? 'contained' : 'outlined'} size="small" onClick={() => setView('workflows')}>
-          Workflows
-        </Button>
-        <Button variant={view === 'retry' ? 'contained' : 'outlined'} size="small" onClick={() => setView('retry')}>
-          Review Activities
-        </Button>
-      </Stack>
-
-      {view === 'workflows' ? (
-        <WorkflowsAdmin scope={scope} onToast={setToast} status={status} setStatus={setStatus} selectedType={selectedType} setSelectedType={setSelectedType} search={search} setSearch={setSearch} timeFilter={timeFilter} />
-      ) : (
-        <ReviewActivitiesAdmin scope={scope} onToast={setToast} />
-      )}
+      <WorkflowsAdmin scope={scope} onToast={setToast} status={status} setStatus={setStatus} selectedType={selectedType} setSelectedType={setSelectedType} search={search} setSearch={setSearch} timeFilter={timeFilter} />
 
       <Snackbar open={toast !== null} autoHideDuration={4000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         {toast ? (
@@ -535,7 +519,11 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
 
 // ── Review activities ───────────────────────────────────────────────────────────
 
-function ReviewActivitiesAdmin({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) => void }) {
+/**
+ * Review activities are human-in-the-loop decisions on gated or failed activities, so they belong
+ * with the user's own work rather than with workflow administration — UserPortal renders this.
+ */
+export function ReviewActivities({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) => void }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All');
   const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(null);
