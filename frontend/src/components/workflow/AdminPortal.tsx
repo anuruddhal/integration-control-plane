@@ -109,7 +109,7 @@ function DefinitionsUnavailableNotice({ failed }: { failed: { componentName: str
 
 // ── Shared filter controls (used by the Workflows and Review Activities views) ─────
 
-function StatusFilter({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) {
+export function StatusFilter({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) {
   return <Autocomplete size="small" sx={{ width: 180 }} options={options} value={value} disableClearable getOptionLabel={statusLabel} onChange={(_, v) => onChange(v ?? 'All')} renderInput={(params) => <TextField {...params} label="Status" />} />;
 }
 
@@ -525,7 +525,8 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
  */
 export function ReviewActivities({ scope, onToast }: { scope: PortalScope; onToast: (t: Toast) => void }) {
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('All');
+  // Pending is what a reviewer is here for; the other statuses are a look back.
+  const [status, setStatus] = useState('PENDING');
   const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(null);
   // Like the workflow list, the dialog opens against the integration that owns the row.
   const [open, setOpen] = useState<{ taskId: string; taskQueue?: string } | null>(null);
@@ -552,7 +553,7 @@ export function ReviewActivities({ scope, onToast }: { scope: PortalScope; onToa
 
   // The review-activity API has no workflow-name filter; the qualified task name carries it, so filter client-side.
   const items = sortByStartTimeDesc((page?.items ?? []).filter((t) => !selectedType || splitQualifiedName(t.taskName ?? t.activityName).workflow === selectedType.workflowType));
-  const hasFilters = status !== 'All' || !!selectedType || !!search || !!integration || timeFilter.active;
+  const hasFilters = status !== 'PENDING' || !!selectedType || !!search || !!integration || timeFilter.active;
 
   return (
     <>
@@ -575,7 +576,7 @@ export function ReviewActivities({ scope, onToast }: { scope: PortalScope; onToa
           <Button
             size="small"
             onClick={() => {
-              setStatus('All');
+              setStatus('PENDING');
               setSelectedType(null);
               setSearch('');
               setIntegration(null);
