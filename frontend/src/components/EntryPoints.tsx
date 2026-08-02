@@ -56,8 +56,8 @@ import { useUpdateArtifactTracingStatus, useUpdateArtifactStatisticsStatus } fro
 import { useUpdateArtifactStatus, useUpdateListenerState, useTriggerTask } from '../api/mutations';
 import { useListMiUsers, useCreateMiUser, useDeleteMiUser } from '../api/miUsers';
 import { ArtifactApiDefinition, ServiceResources, ServiceListeners, AutomationExecutions, ProxyApiReference } from './ArtifactTabs';
-import { SchemaDisclosure } from './workflow/shared';
 import { StartWorkflowDialog, type Toast as WorkflowToast } from './workflow/AdminPortal';
+import WorkflowInstancesPanel from './workflow/WorkflowInstancesPanel';
 import { ArtifactTypeSelector } from './ArtifactDetail';
 import Authorized from './Authorized';
 import { Permissions } from '../constants/permissions';
@@ -494,16 +494,12 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
             ))}
           </Box>
         )}
+        {/* Listing instances calls /workflows, which the proxy gates on the workflow view permission,
+            so the panel is only rendered for someone who can actually load it. */}
         {artifactType === 'Workflow' && (
-          <Box sx={{ px: 2, py: 1.5 }}>
-            {artifact.inputSchema ? (
-              <SchemaDisclosure schema={String(artifact.inputSchema)} />
-            ) : (
-              <Typography variant="caption" color="text.secondary">
-                No input schema defined for this workflow.
-              </Typography>
-            )}
-          </Box>
+          <Authorized permissions={[Permissions.WORKFLOW_VIEW_WORKFLOWS, Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+            <WorkflowInstancesPanel componentId={componentId} environmentId={envId} workflowType={artifactName} taskQueue={hasComponent(scope) ? scope.component : undefined} />
+          </Authorized>
         )}
         {/* pt: 0 for Service — it's the first block rendered (no header/overview above it here), so
             the grid's own mb above already provides the gap; adding padding-top on top of that
