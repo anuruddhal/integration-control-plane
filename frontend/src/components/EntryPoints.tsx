@@ -496,9 +496,12 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
         )}
         {/* Listing instances calls /workflows, which the proxy gates on the workflow view permission,
             so the panel is only rendered for someone who can actually load it. */}
-        {artifactType === 'Workflow' && (
+        {/* hasComponent narrows the scope so the task queue is a string: the panel must never run its
+            query unscoped, which would list the other integrations' runs too. This page only renders
+            at integration scope, so the guard is a type-level guarantee rather than a live branch. */}
+        {artifactType === 'Workflow' && hasComponent(scope) && (
           <Authorized permissions={[Permissions.WORKFLOW_VIEW_WORKFLOWS, Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
-            <WorkflowInstancesPanel componentId={componentId} environmentId={envId} workflowType={artifactName} taskQueue={hasComponent(scope) ? scope.component : undefined} />
+            <WorkflowInstancesPanel componentId={componentId} environmentId={envId} workflowType={artifactName} taskQueue={scope.component} />
           </Authorized>
         )}
         {/* pt: 0 for Service — it's the first block rendered (no header/overview above it here), so

@@ -30,10 +30,11 @@ const emptySx = { py: 3, textAlign: 'center', color: 'text.secondary' } as const
  * entry point is selected. Deliberately narrow: search by workflow id is the only filter, since the
  * full set of filters lives on the Workflows page, which a workflow id links through to.
  *
- * Scoped to the integration by `taskQueue` — a project shares one Temporal namespace, so without it
- * the list would also carry runs belonging to the project's other integrations.
+ * `taskQueue` scopes the list to one integration and is required: a project shares one Temporal
+ * namespace, so a query without it would also carry runs belonging to the project's other
+ * integrations. Callers that cannot supply one must not render the panel.
  */
-export default function WorkflowInstancesPanel({ componentId, environmentId, workflowType, taskQueue }: { componentId: string; environmentId: string; workflowType: string; taskQueue?: string }): JSX.Element {
+export default function WorkflowInstancesPanel({ componentId, environmentId, workflowType, taskQueue }: { componentId: string; environmentId: string; workflowType: string; taskQueue: string }): JSX.Element {
   const [search, setSearch] = useState('');
   const {
     data: page,
