@@ -2658,3 +2658,24 @@ public type ValidatedRuntime record {|
 public type SystemInfo record {|
     string version;
 |};
+
+// Reports whether an integration (project + component combo) is configured for
+// Moesif metrics. `configured` is true when a Collector Application ID has been
+// stored against the component; `applicationId` carries that id when present.
+// `dashboardsCreated` is true once the Moesif workspace/dashboard has been
+// successfully created for the integration.
+public type MoesifMetricsConfigStatus record {|
+    boolean configured;
+    string? applicationId?;
+    boolean dashboardsCreated;
+|};
+
+// A short-lived descriptor the UI uses to embed a Moesif metrics dashboard in an
+// iframe. `workspaceId` identifies the embedded workspace, `accessToken` is the
+// minted workspace access token (valid for ~1 hour), and `embedUrl` is the
+// fully-formed iframe src (`.../ws/{workspaceId}?embed=true#{accessToken}`).
+public type MoesifDashboardEmbed record {|
+    string workspaceId;
+    string accessToken;
+    string embedUrl;
+|};
