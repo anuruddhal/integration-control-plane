@@ -56,12 +56,13 @@ import { useUpdateArtifactTracingStatus, useUpdateArtifactStatisticsStatus } fro
 import { useUpdateArtifactStatus, useUpdateListenerState, useTriggerTask } from '../api/mutations';
 import { useListMiUsers, useCreateMiUser, useDeleteMiUser } from '../api/miUsers';
 import { ArtifactApiDefinition, ServiceResources, ServiceListeners, AutomationExecutions, ProxyApiReference } from './ArtifactTabs';
-import { SchemaDisclosure } from './workflow/shared';
 import { StartWorkflowDialog, type Toast as WorkflowToast } from './workflow/AdminPortal';
+import WorkflowInstancesPanel from './workflow/WorkflowInstancesPanel';
 import { ArtifactTypeSelector } from './ArtifactDetail';
 import Authorized from './Authorized';
 import { Permissions } from '../constants/permissions';
-import { resourceUrl, useScope } from '../nav';
+import { hasComponent, resourceUrl, useScope } from '../nav';
+import { isWorkflowIntegration } from '../constants/integrationTypes';
 import { ENTRY_POINT_CONFIG, ENTRY_POINT_DETAIL_TABS, type SelectedArtifact, type TabProps } from './artifact-config';
 import SyncSwitch from './SyncSwitch';
 import CopyButton from './CopyButton';
@@ -493,16 +494,15 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
             ))}
           </Box>
         )}
-        {artifactType === 'Workflow' && (
-          <Box sx={{ px: 2, py: 1.5 }}>
-            {artifact.inputSchema ? (
-              <SchemaDisclosure schema={String(artifact.inputSchema)} />
-            ) : (
-              <Typography variant="caption" color="text.secondary">
-                No input schema defined for this workflow.
-              </Typography>
-            )}
-          </Box>
+        {/* Listing instances calls /workflows, which the proxy gates on the workflow view permission,
+            so the panel is only rendered for someone who can actually load it. */}
+        {/* hasComponent narrows the scope so the task queue is a string: the panel must never run its
+            query unscoped, which would list the other integrations' runs too. This page only renders
+            at integration scope, so the guard is a type-level guarantee rather than a live branch. */}
+        {artifactType === 'Workflow' && hasComponent(scope) && (
+          <Authorized permissions={[Permissions.WORKFLOW_VIEW_WORKFLOWS, Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
+            <WorkflowInstancesPanel componentId={componentId} environmentId={envId} workflowType={artifactName} taskQueue={scope.component} />
+          </Authorized>
         )}
         {/* pt: 0 for Service — it's the first block rendered (no header/overview above it here), so
             the grid's own mb above already provides the gap; adding padding-top on top of that
@@ -536,7 +536,14 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
           {listenerToggleError}
         </Alert>
       </Snackbar>
-      {startWorkflowOpen && <StartWorkflowDialog scope={{ componentId, environmentId: envId }} initialWorkflowType={artifactName} onClose={() => setStartWorkflowOpen(false)} onToast={setWorkflowToast} />}
+      {startWorkflowOpen && (
+        <StartWorkflowDialog
+          scope={{ targets: [{ componentId, componentName: '', handler: hasComponent(scope) ? scope.component : '' }], environmentId: envId }}
+          initialWorkflowType={artifactName}
+          onClose={() => setStartWorkflowOpen(false)}
+          onToast={setWorkflowToast}
+        />
+      )}
       {viewingApiDocs && apiDocsRuntimeId && (
         <Suspense fallback={null}>
           <OpenApiDefinitionsDrawer runtimeId={apiDocsRuntimeId} onClose={() => setViewingApiDocs(false)} serviceBasePath={artifact.basePath?.toString()} />
@@ -557,6 +564,7 @@ function EntryPointsList({
   componentId,
   projectId,
   componentType,
+  displayType,
   isOnline,
   onOpenDrawer,
   onSelectionChange,
@@ -565,6 +573,7 @@ function EntryPointsList({
   componentId: string;
   projectId: string;
   componentType: string;
+  displayType?: string;
   isOnline: boolean;
   onOpenDrawer: (a: GqlArtifact, type: string, envId: string, tab: string) => void;
   onSelectionChange?: (entry: { artifact: GqlArtifact; type: string } | null) => void;
@@ -573,23 +582,29 @@ function EntryPointsList({
   const navigate = useNavigate();
   const scope = useScope();
   const isMI = componentType === 'MI';
+  // A Workflow integration is presented by its workflow definitions alone. Its BI runtime also
+  // reports the service and listener artifacts that host the workflow engine, but those are
+  // implementation detail rather than something the integration exposes.
+  const workflowOnly = isWorkflowIntegration(displayType);
 
   const { data: apis = EMPTY_ARTIFACTS, isLoading: loadingApis } = useArtifacts('RestApi', envId, componentId, { enabled: isMI, active: isOnline });
   const { data: proxies = EMPTY_ARTIFACTS, isLoading: loadingProxies } = useArtifacts('ProxyService', envId, componentId, { enabled: isMI, active: isOnline });
   const { data: inboundEps = EMPTY_ARTIFACTS, isLoading: loadingInbound } = useArtifacts('InboundEndpoint', envId, componentId, { enabled: isMI, active: isOnline });
   const { data: tasks = EMPTY_ARTIFACTS, isLoading: loadingTasks } = useArtifacts('Task', envId, componentId, { enabled: isMI, active: isOnline });
-  const { data: services = EMPTY_ARTIFACTS, isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI, active: isOnline });
-  const { data: automations = EMPTY_ARTIFACTS, isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI, active: isOnline });
+  const { data: services = EMPTY_ARTIFACTS, isLoading: loadingServices } = useArtifacts('Service', envId, componentId, { enabled: !isMI && !workflowOnly, active: isOnline });
+  const { data: automations = EMPTY_ARTIFACTS, isLoading: loadingAutomations } = useArtifacts('Automation', envId, componentId, { enabled: !isMI && !workflowOnly, active: isOnline });
   const { data: workflows = EMPTY_ARTIFACTS, isLoading: loadingWorkflows } = useArtifacts('Workflow', envId, componentId, { enabled: !isMI, active: isOnline });
 
-  const isLoading = isMI ? loadingApis || loadingProxies || loadingInbound || loadingTasks : loadingServices || loadingAutomations || loadingWorkflows;
+  const isLoading = isMI ? loadingApis || loadingProxies || loadingInbound || loadingTasks : workflowOnly ? loadingWorkflows : loadingServices || loadingAutomations || loadingWorkflows;
 
   const allEntryPoints = useMemo(
     () =>
       isMI
         ? [...apis.map((a) => ({ artifact: a, type: 'RestApi' })), ...proxies.map((a) => ({ artifact: a, type: 'ProxyService' })), ...inboundEps.map((a) => ({ artifact: a, type: 'InboundEndpoint' })), ...tasks.map((a) => ({ artifact: a, type: 'Task' }))]
-        : [...services.map((a) => ({ artifact: a, type: 'Service' })), ...workflows.map((a) => ({ artifact: a, type: 'Workflow' })), ...automations.map((a) => ({ artifact: a, type: 'Automation' }))],
-    [isMI, apis, proxies, inboundEps, tasks, services, workflows, automations],
+        : workflowOnly
+          ? workflows.map((a) => ({ artifact: a, type: 'Workflow' }))
+          : [...services.map((a) => ({ artifact: a, type: 'Service' })), ...workflows.map((a) => ({ artifact: a, type: 'Workflow' })), ...automations.map((a) => ({ artifact: a, type: 'Automation' }))],
+    [isMI, workflowOnly, apis, proxies, inboundEps, tasks, services, workflows, automations],
   );
 
   const allKeys = new Set(
@@ -729,6 +744,7 @@ export default function Environment({
   componentId,
   projectId,
   componentType,
+  displayType,
   onSelectArtifact,
   onOpenDrawerForTab,
 }: {
@@ -736,6 +752,7 @@ export default function Environment({
   componentId: string;
   projectId: string;
   componentType: string;
+  displayType?: string;
   onSelectArtifact: (a: GqlArtifact, type: string, envId: string) => void;
   onOpenDrawerForTab: (a: GqlArtifact, type: string, envId: string, tab: string) => void;
 }) {
@@ -1077,7 +1094,7 @@ export default function Environment({
           </Stack>
         )}
         {(componentType !== 'MI' || viewMode === 'entryPoints') && (
-          <EntryPointsList envId={env.id} componentId={componentId} projectId={projectId} componentType={componentType} isOnline={isOnline} onOpenDrawer={onOpenDrawerForTab} onSelectionChange={setCurrentEntryPoint} />
+          <EntryPointsList envId={env.id} componentId={componentId} projectId={projectId} componentType={componentType} displayType={displayType} isOnline={isOnline} onOpenDrawer={onOpenDrawerForTab} onSelectionChange={setCurrentEntryPoint} />
         )}
         {componentType === 'MI' && viewMode === 'allArtifacts' && <ArtifactTypeSelector envId={env.id} componentId={componentId} onSelectArtifact={onSelectArtifact} />}
       </CardContent>

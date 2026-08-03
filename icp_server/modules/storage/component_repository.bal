@@ -31,7 +31,9 @@ final readonly & string[] SUPPORTED_DISPLAY_TYPES = [
     "scheduledTask",
     "miCronjob",
     "ballerinaEventHandler",
-    "miEventHandler"
+    "miEventHandler",
+    // Workflow has no MI counterpart: the workflow engine is Ballerina-only.
+    "ballerinaWorkflow"
 ];
 
 // Subtypes for the integration types that share a generic service display_type

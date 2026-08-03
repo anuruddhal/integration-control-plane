@@ -16,17 +16,19 @@
  * under the License.
  */
 
-import { Bot, Clock, Folder, Globe, HardDrive, Layers, Radio, Repeat, Server, Sparkles, Wrench, Zap } from '@wso2/oxygen-ui-icons-react';
+import { Bot, Clock, Folder, Globe, HardDrive, Layers, Radio, Repeat, Server, Sparkles, SquareCheck, UserCheck, Workflow, Wrench, Zap } from '@wso2/oxygen-ui-icons-react';
 import type { ReactNode } from 'react';
 import type { Technology } from './technologies';
 
-export type IntegrationType = 'service' | 'automation' | 'file-integration' | 'event-integration' | 'ai-agent' | 'mcp-server';
+export type IntegrationType = 'service' | 'automation' | 'file-integration' | 'event-integration' | 'ai-agent' | 'mcp-server' | 'workflow';
 
 export interface IntegrationTypeOption {
   id: IntegrationType;
   title: string;
   description: string;
   icons: { icon: ReactNode; label: string }[];
+  /** Technologies offering this type. Omitted means every technology. */
+  technologies?: Technology[];
 }
 
 /**
@@ -51,6 +53,21 @@ export const INTEGRATION_TYPES: IntegrationTypeOption[] = [
       { icon: <Clock size={16} />, label: 'Scheduled' },
       { icon: <Repeat size={16} />, label: 'Recurring' },
     ],
+  },
+  {
+    id: 'workflow',
+    title: 'Workflow',
+    description: 'Orchestrate long-running processes with durable state and human tasks',
+    // Icons match how the execution graph and timeline draw these node kinds (iconByType in
+    // components/workflow/graphVisuals.ts), so a workflow reads the same here as it does once running.
+    icons: [
+      { icon: <Workflow size={16} />, label: 'Durable' },
+      { icon: <SquareCheck size={16} />, label: 'Activities' },
+      { icon: <UserCheck size={16} />, label: 'Human tasks' },
+    ],
+    // The workflow engine and its management API are Ballerina-only (see [ballerina.workflow] in the
+    // runtime config), so this type is not offered for MI.
+    technologies: ['BI'],
   },
   {
     id: 'file-integration',
@@ -104,6 +121,7 @@ export function resolveDisplayType(technology: Technology, integrationType: Inte
   if (technology === 'BI') {
     if (integrationType === 'automation') return 'scheduledTask';
     if (integrationType === 'event-integration') return 'ballerinaEventHandler';
+    if (integrationType === 'workflow') return 'ballerinaWorkflow';
     return 'ballerinaService';
   }
   if (integrationType === 'automation') return 'miCronjob';
@@ -142,6 +160,8 @@ export function integrationTypeLabel(displayType: string, componentSubType?: str
       return 'MCP Server';
   }
   switch (displayType) {
+    case 'ballerinaWorkflow':
+      return 'Workflow';
     case 'scheduledTask':
     case 'miCronjob':
       return 'Automation';
@@ -151,4 +171,18 @@ export function integrationTypeLabel(displayType: string, componentSubType?: str
     default:
       return 'Integration as API';
   }
+}
+
+/** The integration types on offer for a technology (see {@link IntegrationTypeOption.technologies}). */
+export function integrationTypesFor(technology: Technology): IntegrationTypeOption[] {
+  return INTEGRATION_TYPES.filter((t) => !t.technologies || t.technologies.includes(technology));
+}
+
+/**
+ * Whether an integration is a workflow one, from the fields the backend persists. Used to decide
+ * whether the integration-level Workflows view applies — a project-level one always does, since a
+ * project's workflow data is namespace-wide rather than tied to any single integration.
+ */
+export function isWorkflowIntegration(displayType?: string | null): boolean {
+  return displayType === 'ballerinaWorkflow';
 }
