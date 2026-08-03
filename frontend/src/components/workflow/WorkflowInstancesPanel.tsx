@@ -53,11 +53,10 @@ export default function WorkflowInstancesPanel({ componentId, environmentId, wor
 
   return (
     <Box sx={{ px: 2, py: 1.5 }}>
-      <Stack direction="row" alignItems="center" gap={1.5} sx={{ mb: 1.5 }} flexWrap="wrap">
+      <Stack alignItems="flex-start" gap={1} sx={{ mb: 1.5 }}>
         <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10, fontWeight: 600 }}>
           RUNNING INSTANCES
         </Typography>
-        <Box sx={{ flex: 1 }} />
         <SearchField value={search} onChange={setSearch} placeholder="Search by workflow ID" sx={{ width: 260 }} />
       </Stack>
 
