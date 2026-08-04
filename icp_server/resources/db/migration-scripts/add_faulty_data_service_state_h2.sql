@@ -6,7 +6,7 @@
 -- Run once against the main ICP DB.
 
 ALTER TABLE mi_data_service_artifacts ADD COLUMN IF NOT EXISTS error_message CLOB;
+ALTER TABLE mi_data_service_artifacts DROP CONSTRAINT IF EXISTS ck_mi_ds_state;
 UPDATE mi_data_service_artifacts SET state = 'Active' WHERE LOWER(state) <> 'faulty';
 ALTER TABLE mi_data_service_artifacts ALTER COLUMN state SET DEFAULT 'Active';
-ALTER TABLE mi_data_service_artifacts DROP CONSTRAINT IF EXISTS ck_mi_ds_state;
 ALTER TABLE mi_data_service_artifacts ADD CONSTRAINT ck_mi_ds_state CHECK (state IN ('Active', 'Faulty'));
