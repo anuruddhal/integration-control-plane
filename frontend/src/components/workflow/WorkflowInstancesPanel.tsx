@@ -69,28 +69,33 @@ export default function WorkflowInstancesPanel({ componentId, environmentId, wor
         <Typography sx={emptySx}>{search ? 'No running instances match that workflow ID.' : 'No running instances.'}</Typography>
       ) : (
         <>
-          <ListingTable>
-            <ListingTable.Head>
-              <ListingTable.Row>
-                <ListingTable.Cell>Workflow ID</ListingTable.Cell>
-                <ListingTable.Cell>Status</ListingTable.Cell>
-                <ListingTable.Cell>Started</ListingTable.Cell>
-              </ListingTable.Row>
-            </ListingTable.Head>
-            <ListingTable.Body>
-              {items.map((wf) => (
-                <ListingTable.Row key={`${wf.workflowId}:${wf.runId ?? ''}`}>
-                  <ListingTable.Cell>
-                    <WorkflowIdLink workflowId={wf.workflowId} environmentId={environmentId} />
-                  </ListingTable.Cell>
-                  <ListingTable.Cell>
-                    <StatusChip status={wf.status} />
-                  </ListingTable.Cell>
-                  <ListingTable.Cell>{formatTime(wf.startTime)}</ListingTable.Cell>
+          {/* Bounded and scrollable: this sits inside the integration overview card, and the query
+              returns up to 50 runs, which would otherwise stretch the card to whatever is in flight.
+              maxHeight rather than a fixed height so a couple of runs do not leave a mostly empty box. */}
+          <Box sx={{ maxHeight: 260, overflowY: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+            <ListingTable>
+              <ListingTable.Head>
+                <ListingTable.Row>
+                  <ListingTable.Cell>Workflow ID</ListingTable.Cell>
+                  <ListingTable.Cell>Status</ListingTable.Cell>
+                  <ListingTable.Cell>Started</ListingTable.Cell>
                 </ListingTable.Row>
-              ))}
-            </ListingTable.Body>
-          </ListingTable>
+              </ListingTable.Head>
+              <ListingTable.Body>
+                {items.map((wf) => (
+                  <ListingTable.Row key={`${wf.workflowId}:${wf.runId ?? ''}`}>
+                    <ListingTable.Cell>
+                      <WorkflowIdLink workflowId={wf.workflowId} environmentId={environmentId} />
+                    </ListingTable.Cell>
+                    <ListingTable.Cell>
+                      <StatusChip status={wf.status} />
+                    </ListingTable.Cell>
+                    <ListingTable.Cell>{formatTime(wf.startTime)}</ListingTable.Cell>
+                  </ListingTable.Row>
+                ))}
+              </ListingTable.Body>
+            </ListingTable>
+          </Box>
           {page?.hasMore && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
               Showing the first {items.length}. Open Workflows to narrow further.
