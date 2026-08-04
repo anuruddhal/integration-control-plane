@@ -1231,15 +1231,23 @@ public type DataService record {
     string name;
     string description?;
     string wsdl?;
+    // Canonical deployment state exposed by the control plane: "Active" or "Faulty".
     @sql:Column {
         name: "dataservice_state"
     }
-    ArtifactState state = "enabled";
+    string state = "Active";
+    // Raw state reported by the runtime bridge in the heartbeat payload (e.g. "active", "faulty").
+    string status?;
     boolean? stateInSync = ();
     @sql:Column {
         name: "composite_app"
     }
     string compositeApp?;
+    // Error message when state is "Faulty" (data service failed to deploy)
+    @sql:Column {
+        name: "error_message"
+    }
+    string? errorMessage?;
     string[] runtimeIds?;
     ArtifactRuntimeInfo[]? runtimes?;
 };
@@ -1276,6 +1284,13 @@ public type CompositeAppArtifact record {
 public type CompositeAppFaultStackTrace record {
     string runtimeId;
     string appName;
+    string faultStackTrace;
+};
+
+// Response type for Data Service fault stack trace query
+public type DataServiceFaultStackTrace record {
+    string runtimeId;
+    string serviceName;
     string faultStackTrace;
 };
 

@@ -1160,6 +1160,45 @@ service /graphql on graphqlListener {
         return {runtimeId, appName: trimmedAppName, faultStackTrace};
     }
 
+    isolated resource function get dataServiceFaultStackTrace(graphql:Context context, string runtimeId, string serviceName) returns types:DataServiceFaultStackTrace|error {
+        string trimmedServiceName = serviceName.trim();
+        if trimmedServiceName == "" {
+            return error("Data service name must not be empty");
+        }
+        types:UserContextV2 userContext = check extractUserContext(context);
+        log:printDebug("Fetching Data Service fault stack trace", userId = userContext.userId, runtimeId = runtimeId, serviceName = trimmedServiceName);
+
+        types:Runtime? runtime = check storage:getRuntimeById(runtimeId);
+        if runtime is () {
+            log:printWarn("Runtime not found for Data Service fault stack trace query", userId = userContext.userId, runtimeId = runtimeId);
+            return error("Runtime not found");
+        }
+
+        types:AccessScope scope = auth:buildScopeFromContext(runtime.component.projectId, runtime.component.id, runtime.environment.id);
+
+        if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
+            log:printWarn("Attempt to access Data Service fault stack trace without permission", userId = userContext.userId, runtimeId = runtimeId, serviceName = trimmedServiceName);
+            return error("Unauthorized");
+        }
+
+        if runtime.status != types:RUNNING {
+            log:printWarn("Runtime is not online for Data Service fault stack trace query", userId = userContext.userId, runtimeId = runtimeId, status = runtime.status);
+            return error("Runtime is not online");
+        }
+
+        string baseUrl = check storage:buildManagementBaseUrl(runtime.managementHostname, runtime.managementPort);
+        log:printDebug("Calling MI management API for Data Service fault stack trace", runtimeId = runtimeId, serviceName = trimmedServiceName, baseUrl = baseUrl);
+        http:Client mgmtClient = check (artifactsApiAllowInsecureTLS
+            ? new (baseUrl, {secureSocket: {enable: false}})
+            : new (baseUrl));
+
+        string hmacToken = check storage:issueRuntimeHmacToken(runtimeId);
+
+        string faultStackTrace = check mi_management:fetchDataServiceFaultStackTrace(mgmtClient, hmacToken, trimmedServiceName);
+        log:printDebug("Successfully fetched Data Service fault stack trace", runtimeId = runtimeId, serviceName = trimmedServiceName);
+        return {runtimeId, serviceName: trimmedServiceName, faultStackTrace};
+    }
+
     // Get Inbound Endpoints for a specific environment and component
     isolated resource function get inboundEndpointsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:InboundEndpointsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
@@ -1543,17 +1582,12 @@ service /graphql on graphqlListener {
             return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
+        // Data services report their deployment state ("Active"/"Faulty") directly in the
+        // heartbeat, exactly like Composite Apps. The state is stored (normalized) on the
+        // artifact record, so it is returned as-is without reconcile overriding it.
         types:DataService[] result = check storage:getDataServicesByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
             return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
-        }
-        map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
-        foreach types:DataService a in result {
-            types:ArtifactStateField? s = stateOf(sm, a.name, "data-service", "status");
-            if s is types:ArtifactStateField {
-                a.state = <types:ArtifactState>s.value;
-                a.stateInSync = s.inSync;
-            }
         }
         [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
         return {items: result.slice(sliceFrom, sliceTo), pageInfo};

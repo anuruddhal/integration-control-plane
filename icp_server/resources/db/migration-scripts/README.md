@@ -2,7 +2,7 @@
 
 This directory contains two kinds of SQL scripts:
 
-1. **In-place v2 schema upgrades** (`add_workflow_feature_<engine>.sql`, `add_openapi_definitions_<engine>.sql`, `add_integration_types_<engine>.sql`) — bring an existing ICP v2 database up to the current schema.
+1. **In-place v2 schema upgrades** (`add_workflow_feature_<engine>.sql`, `add_openapi_definitions_<engine>.sql`, `add_integration_types_<engine>.sql`, `add_faulty_data_service_state_<engine>.sql`) — bring an existing ICP v2 database up to the current schema.
 2. **ICP v1 → v2 user migration** (`v1_to_v2_<engine>.sql`) — migrate user accounts, credentials, and role assignments from ICP v1.
 
 ---
@@ -159,6 +159,59 @@ sqlcmd -S <server> -U <user> -P <password> -d <icp_db_name> -i add_integration_t
 
 # Oracle (run as the ICP schema owner)
 sqlplus <icp_schema_user>/<password>@//<host>:1521/<service_name> @add_integration_types_oracle.sql
+```
+
+---
+
+## Upgrading an existing ICP v2 deployment: faulty data service tracking
+
+Deployments whose database was initialised **before data services reported a
+deploy failure** must run the faulty data service upgrade script once against the
+**main ICP DB** — **before** deploying this server version. Fresh installs do not
+need it — the `*_init.sql` scripts already contain everything.
+
+Without it, every full heartbeat that carries a data service fails: the heartbeat
+now inserts `mi_data_service_artifacts.error_message` and reports the artifact
+state as `Active` or `Faulty`, so a missing `error_message` column (or the old
+`enabled`/`disabled` state CHECK/ENUM) errors out the insert and aborts the whole
+heartbeat transaction.
+
+Pick the script matching your database engine:
+
+| Engine | Script |
+|---|---|
+| H2 | `add_faulty_data_service_state_h2.sql` |
+| MySQL / MariaDB | `add_faulty_data_service_state_mysql.sql` |
+| PostgreSQL | `add_faulty_data_service_state_postgresql.sql` |
+| Microsoft SQL Server | `add_faulty_data_service_state_mssql.sql` |
+| Oracle (19c+) | `add_faulty_data_service_state_oracle.sql` |
+
+Each script adds `mi_data_service_artifacts.error_message` (the deploy failure
+message the runtime bridge reports when `state = 'Faulty'`), canonicalizes every
+previously deployed service to `Active`, and restricts the state contract to
+`('Active', 'Faulty')`.
+
+The scripts are **idempotent** — safe to re-run. No server restart is required;
+the next heartbeat starts populating the column.
+
+```bash
+# H2 (server may stay running thanks to AUTO_SERVER)
+java -cp <path-to-h2.jar> org.h2.tools.RunScript \
+  -url "jdbc:h2:file:./database/icp_db;MODE=MySQL;AUTO_SERVER=TRUE" \
+  -user <db_user> -password <db_password> \
+  -script add_faulty_data_service_state_h2.sql
+
+# MySQL
+mysql -u <admin_user> -p <icp_db_name> < add_faulty_data_service_state_mysql.sql
+
+# PostgreSQL
+psql -U <admin_user> -d <icp_db_name> -f add_faulty_data_service_state_postgresql.sql
+
+# Microsoft SQL Server
+sqlcmd -S <server> -U <user> -P <password> -d <icp_db_name> -i add_faulty_data_service_state_mssql.sql
+
+# Oracle (run as the ICP schema owner)
+sqlplus <icp_schema_user>/<password>@//<host>:1521/<service_name> @add_faulty_data_service_state_oracle.sql
 ```
 
 ---

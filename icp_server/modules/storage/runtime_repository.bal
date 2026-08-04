@@ -779,15 +779,33 @@ public isolated function getLocalEntriesForRuntime(string runtimeId) returns typ
 // Get data services for a specific runtime
 public isolated function getDataServicesForRuntime(string runtimeId) returns types:DataService[]|error {
     types:DataService[] serviceList = [];
-    stream<types:DataService, sql:Error?> serviceStream = dbClient->query(`
-        SELECT service_name, description, wsdl, state, composite_app
-        FROM mi_data_service_artifacts 
+    // Bind to an explicit record so the "Faulty" state and error_message (present
+    // only when a data service failed to deploy) are read reliably.
+    stream<record {string service_name; string? description; string? wsdl; string state; string? composite_app; string? error_message;}, sql:Error?> serviceStream = dbClient->query(`
+        SELECT service_name, description, wsdl, state, composite_app, error_message
+        FROM mi_data_service_artifacts
         WHERE runtime_id = ${runtimeId}
     `);
 
-    check from types:DataService serviceRecord in serviceStream
+    check from record {string service_name; string? description; string? wsdl; string state; string? composite_app; string? error_message;} serviceRecord in serviceStream
         do {
-            serviceList.push(serviceRecord);
+            types:DataService dataService = {
+                name: serviceRecord.service_name,
+                state: serviceRecord.state
+            };
+            if serviceRecord.description is string {
+                dataService.description = serviceRecord.description;
+            }
+            if serviceRecord.wsdl is string {
+                dataService.wsdl = serviceRecord.wsdl;
+            }
+            if serviceRecord.composite_app is string {
+                dataService.compositeApp = serviceRecord.composite_app;
+            }
+            if serviceRecord.error_message is string {
+                dataService.errorMessage = serviceRecord.error_message;
+            }
+            serviceList.push(dataService);
         };
 
     return serviceList;
