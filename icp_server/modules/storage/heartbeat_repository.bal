@@ -480,7 +480,7 @@ isolated function writeObservedStateMI(string runtimeId, string componentId, str
         entries.push([{artifactName: le.name, artifactType: "local-entry"}, {"status": le.state}]);
     }
     foreach types:DataService ds in <types:DataService[]>artifacts.dataServices {
-        entries.push([{artifactName: ds.name, artifactType: "data-service"}, {"status": ds.state}]);
+        entries.push([{artifactName: ds.name, artifactType: "data-service"}, {"status": normalizeDataServiceState(ds.state)}]);
     }
     foreach types:Connector conn in <types:Connector[]>artifacts.connectors {
         entries.push([{artifactName: conn.name, artifactType: "connector"}, {"status": conn.state}]);
@@ -1310,28 +1310,30 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
     foreach types:DataService dataService in <types:DataService[]>heartbeat.artifacts.dataServices {
         string artifactId = uuid:createType4AsString();
         string? compositeApp = dataService?.compositeApp;
+        string? errorMessage = dataService?.errorMessage;
+        string dsState = normalizeDataServiceState(dataService.status ?: dataService.state);
         if isMSSQL() {
             _ = check dbClient->execute(`
-                INSERT INTO mi_data_service_artifacts (runtime_id, service_name, artifact_id, description, wsdl, state, composite_app)
+                INSERT INTO mi_data_service_artifacts (runtime_id, service_name, artifact_id, description, wsdl, state, composite_app, error_message)
                 VALUES (${runtimeId}, ${dataService.name}, ${artifactId}, ${dataService.description},
-                        ${dataService.wsdl}, ${dataService.state}, ${compositeApp});
+                        ${dataService.wsdl}, ${dsState}, ${compositeApp}, ${errorMessage});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
                 INSERT INTO mi_data_service_artifacts (
-                    runtime_id, service_name, description, wsdl, state, composite_app
+                    runtime_id, service_name, description, wsdl, state, composite_app, error_message
                 ) VALUES (
                     ${runtimeId}, ${dataService.name}, ${dataService.description},
-                    ${dataService.wsdl}, ${dataService.state}, ${compositeApp}
+                    ${dataService.wsdl}, ${dsState}, ${compositeApp}, ${errorMessage}
                 )
             `);
         } else {
             _ = check dbClient->execute(`
                 INSERT INTO mi_data_service_artifacts (
-                    runtime_id, service_name, artifact_id, description, wsdl, state, composite_app
+                    runtime_id, service_name, artifact_id, description, wsdl, state, composite_app, error_message
                 ) VALUES (
                     ${runtimeId}, ${dataService.name}, ${artifactId}, ${dataService.description},
-                    ${dataService.wsdl}, ${dataService.state}, ${compositeApp}
+                    ${dataService.wsdl}, ${dsState}, ${compositeApp}, ${errorMessage}
                 )
             `);
         }
@@ -1461,6 +1463,17 @@ isolated function normalizeCompositeAppState(string state) returns string {
         return "Active";
     }
     return trimmed == "" ? "Unknown" : trimmed;
+}
+
+// Normalize a data service state reported by the runtime bridge to the values
+// exposed by the control plane: "Active" or "Faulty".
+isolated function normalizeDataServiceState(string state) returns string {
+    string trimmed = state.trim();
+    string normalized = trimmed.toLowerAscii();
+    if normalized == "faulty" {
+        return "Faulty";
+    }
+    return "Active";
 }
 
 // Insert runtime log levels for BI components

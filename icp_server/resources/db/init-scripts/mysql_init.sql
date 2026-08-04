@@ -1007,11 +1007,9 @@ CREATE TABLE mi_data_service_artifacts (
     artifact_id CHAR(36) NOT NULL UNIQUE,
     description TEXT NULL,
     wsdl TEXT NULL,
-    state ENUM(
-        'enabled',
-        'disabled'
-    ) NOT NULL DEFAULT 'enabled',
+    state ENUM('Active', 'Faulty') NOT NULL DEFAULT 'Active',
     composite_app VARCHAR(200) NULL,
+    error_message TEXT NULL, -- Error message when state is Faulty (data service failed to deploy)
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (runtime_id, service_name),
