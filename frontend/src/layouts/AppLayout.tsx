@@ -138,7 +138,8 @@ export default function AppLayout(): JSX.Element {
         // Only workflow integrations have this view; at project level it always applies.
         return !hasComponent(targetScope) || isWorkflowIntegration(components.find((c) => c.id === targetComponentId)?.displayType) ? 'workflows' : 'overview';
       case 'test':
-        return 'test';
+        // Only integrations that expose a service have anything to test.
+        return isWorkflowIntegration(components.find((c) => c.id === targetComponentId)?.displayType) ? 'overview' : 'test';
       case 'access-control': {
         const perms: string[] = [...ALL_USER_MGT_PERMISSIONS];
         if (hasProject(targetScope)) perms.push(Permissions.PROJECT_EDIT, Permissions.PROJECT_MANAGE);
@@ -171,9 +172,13 @@ export default function AppLayout(): JSX.Element {
   // component list is still loading `currentComponent` is undefined, so the item stays hidden until
   // its type is known rather than appearing and then disappearing.
   const showWorkflows = !hasComponent(scope) || isWorkflowIntegration(currentComponent?.displayType);
+  // The Test Console drives a service's packed OpenAPI definition, and a workflow integration exposes
+  // workflows rather than services - so it has nothing to test there.
+  const showTest = !isWorkflowIntegration(currentComponent?.displayType);
   const items = sidebarItems(scope, resource)
     .filter((item) => item.resource !== 'access-control' || canSeeAccessControl)
-    .filter((item) => item.resource !== 'workflows' || showWorkflows);
+    .filter((item) => item.resource !== 'workflows' || showWorkflows)
+    .filter((item) => item.resource !== 'test' || showTest);
 
   return (
     <AppShell>
