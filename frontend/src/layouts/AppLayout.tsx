@@ -167,14 +167,16 @@ export default function AppLayout(): JSX.Element {
     accessControlPerms.push(Permissions.INTEGRATION_EDIT, Permissions.INTEGRATION_MANAGE);
   }
   const canSeeAccessControl = hasAnyPermission(accessControlPerms, projectId || undefined, componentId);
-  // Workflows is an integration-level view only for workflow integrations. Project level is
-  // unaffected: a project's workflow data is namespace-wide, not tied to one integration. While the
-  // component list is still loading `currentComponent` is undefined, so the item stays hidden until
-  // its type is known rather than appearing and then disappearing.
+  // Two integration-level entries depend on the integration's type, and each stays hidden until
+  // `currentComponent` resolves — the same way access control waits on its permissions — so neither is
+  // offered and then withdrawn once the type is known.
+  //
+  // Workflows applies only to a workflow integration. Project level is unaffected: a project's
+  // workflow data is namespace-wide, not tied to one integration.
   const showWorkflows = !hasComponent(scope) || isWorkflowIntegration(currentComponent?.displayType);
-  // The Test Console drives a service's packed OpenAPI definition, and a workflow integration exposes
-  // workflows rather than services - so it has nothing to test there.
-  const showTest = !isWorkflowIntegration(currentComponent?.displayType);
+  // The Test Console drives a service's packed OpenAPI definition, so it applies to every type except
+  // workflow, which exposes workflows rather than services.
+  const showTest = !!currentComponent && !isWorkflowIntegration(currentComponent.displayType);
   const items = sidebarItems(scope, resource)
     .filter((item) => item.resource !== 'access-control' || canSeeAccessControl)
     .filter((item) => item.resource !== 'workflows' || showWorkflows)
