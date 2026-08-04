@@ -37,7 +37,7 @@ function useViewWorkflowById(environmentId: string): (workflowId: string) => voi
   const navigate = useNavigate();
   const scope = useScope();
   return (workflowId: string) => {
-    navigate(`${resourceUrl(scope, 'workflows')}?tab=admin&workflowId=${encodeURIComponent(workflowId)}&env=${encodeURIComponent(environmentId)}`);
+    navigate(`${resourceUrl(scope, 'workflows')}?tab=management&workflowId=${encodeURIComponent(workflowId)}&env=${encodeURIComponent(environmentId)}`);
   };
 }
 

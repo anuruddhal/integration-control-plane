@@ -25,7 +25,7 @@ import { DetailRow, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope 
 import { ReviewActivities, StatusFilter } from './AdminPortal';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
-import { useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, usePendingTaskCount, type HumanTask } from '../../api/workflows';
+import { useCompleteHumanTask, useFailHumanTask, useHumanTask, useHumanTasks, type HumanTask } from '../../api/workflows';
 
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const;
 
@@ -55,30 +55,16 @@ function taskDisplayName(t?: HumanTask): string {
 
 type Toast = { severity: 'success' | 'error'; message: string } | null;
 
-export default function UserPortal({ targets, environmentId, taskQueue }: PortalScope) {
+/**
+ * Hosts the two user-facing workflow views. Which one shows is decided by the page's tabs, so this
+ * only dispatches and owns the toast both views report through.
+ */
+export default function UserPortal({ targets, environmentId, taskQueue, view }: PortalScope & { view: 'tasks' | 'reviews' }) {
   const scope: PortalScope = { targets, environmentId, taskQueue };
-  const [view, setView] = useState<'tasks' | 'reviews'>('tasks');
   const [toast, setToast] = useState<Toast>(null);
-  const { data: pendingCount } = usePendingTaskCount(gatewayScope(scope), taskQueue);
 
   return (
     <>
-      <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2 }}>
-        <Button variant={view === 'tasks' ? 'contained' : 'outlined'} size="small" onClick={() => setView('tasks')}>
-          My Tasks
-        </Button>
-        {/* The proxy authorizes /review-activities with the workflow permissions, not the human-task
-            ones that gate this tab, so the view is only offered to someone who can actually load it
-            — a Viewer holds view_human_tasks alone and would otherwise be shown a view that 403s. */}
-        <Authorized permissions={[Permissions.WORKFLOW_VIEW_WORKFLOWS, Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
-          <Button variant={view === 'reviews' ? 'contained' : 'outlined'} size="small" onClick={() => setView('reviews')}>
-            Review Activities
-          </Button>
-        </Authorized>
-        <Box sx={{ flex: 1 }} />
-        {pendingCount !== undefined && <Chip label={`${pendingCount} pending`} size="small" color={pendingCount > 0 ? 'info' : 'default'} />}
-      </Stack>
-
       {view === 'tasks' ? <MyTasks scope={scope} onToast={setToast} /> : <ReviewActivities scope={scope} onToast={setToast} />}
 
       <Snackbar open={toast !== null} autoHideDuration={4000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

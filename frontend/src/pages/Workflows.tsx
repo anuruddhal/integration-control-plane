@@ -16,7 +16,7 @@
  * under the License.
  */
 
-import { Autocomplete, Box, CircularProgress, PageContent, Stack, Tab, Tabs, TextField, Typography } from '@wso2/oxygen-ui';
+import { Autocomplete, Box, Chip, CircularProgress, PageContent, Stack, Tab, Tabs, TextField, Typography } from '@wso2/oxygen-ui';
 import { useEffect, useState, type JSX } from 'react';
 import { useSearchParams } from 'react-router';
 import { useProjectByHandler, useComponentByHandler, useComponents, useEnvironments } from '../api/queries';
@@ -27,8 +27,26 @@ import { useAccessControl } from '../contexts/AccessControlContext';
 import { useLoadComponentPermissions, useLoadProjectPermissions } from '../hooks/usePermissionLoader';
 import { Permissions } from '../constants/permissions';
 import { resourceUrl, broaden, hasComponent, type ComponentScope, type ProjectScope } from '../nav';
-import type { WorkflowTarget } from '../api/workflows';
+import { usePendingReviewActivityCount, usePendingTaskCount, type WorkflowTarget } from '../api/workflows';
+import { gatewayScope } from '../components/workflow/helpers';
 import { isWorkflowIntegration } from '../constants/integrationTypes';
+
+/**
+ * Tab title with the amount of work waiting behind it. Omitted at zero, and while the count is still
+ * loading, so a tab only grows a badge when there is something to act on.
+ */
+function TabLabel({ title, count, capped }: { title: string; count?: number; capped?: boolean }): JSX.Element {
+  return (
+    <Stack direction="row" alignItems="center" gap={0.75}>
+      <span>{title}</span>
+      {count !== undefined && count > 0 && <Chip label={capped ? `${count}+` : count} size="small" color="primary" sx={{ height: 18, fontSize: 11, fontWeight: 600, '& .MuiChip-label': { px: 0.75 } }} />}
+    </Stack>
+  );
+}
+
+type TabKey = 'tasks' | 'reviews' | 'management';
+// Tab order, and the order a permitted fallback is picked in.
+const TAB_ORDER: TabKey[] = ['tasks', 'reviews', 'management'];
 
 export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Element {
   const componentLevel = hasComponent(scope);
@@ -70,8 +88,8 @@ export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Ele
   // project scope.
   const taskQueue = componentLevel ? component?.handler : undefined;
 
-  // Optional deep-link params (e.g. from the Overview page's "View Instances" action or the
-  // start-workflow success dialog): ?tab=admin&type=<workflowType>&workflowId=<id>&env=<environmentId>
+  // Optional deep-link params (e.g. from the Overview page's "View Workflows" action or the
+  // start-workflow success dialog): ?tab=management&type=<workflowType>&workflowId=<id>&env=<environmentId>
   const [searchParams, setSearchParams] = useSearchParams();
   // Held in state rather than read from the URL on every render. The admin view unmounts on a tab
   // switch and re-seeds its filters from these on mount, so leaving them in the URL would reapply a
@@ -89,9 +107,11 @@ export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Ele
     setDeepLink({ workflowType: urlWorkflowType ?? undefined, workflowId: urlWorkflowId ?? undefined });
   }, [urlWorkflowType, urlWorkflowId]);
   // The active tab is driven by the URL, so navigating here from elsewhere (e.g. clicking a
-  // workflow ID in User Actions or Review Activities) switches tabs deterministically.
-  const tabKey: 'user' | 'admin' = searchParams.get('tab') === 'admin' ? 'admin' : 'user';
-  const setTabKey = (v: 'user' | 'admin') => {
+  // workflow ID in a task or review) switches tabs deterministically. `admin` is still accepted so
+  // links made before the tabs were flattened keep working.
+  const requestedTab = searchParams.get('tab');
+  const tabKey: TabKey = requestedTab === 'management' || requestedTab === 'admin' ? 'management' : requestedTab === 'reviews' ? 'reviews' : 'tasks';
+  const setTabKey = (v: TabKey) => {
     // Leaving the admin view discards its deep link, in state and in the URL alike: it has already
     // been applied, and re-applying it on the way back would resurrect a cleared filter.
     setDeepLink({});
@@ -111,6 +131,26 @@ export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Ele
   // Remounts the admin portal when the deep link changes, so a new one re-seeds the filters.
   const deepLinkKey = `${deepLink.workflowType ?? ''}:${deepLink.workflowId ?? ''}`;
 
+  const activeEnvId = environments.some((e) => e.id === selectedEnvId) ? selectedEnvId : (environments[0]?.id ?? '');
+  const selectedEnv = environments.find((e) => e.id === activeEnvId) ?? null;
+  // Each tab is gated by its dedicated workflow permission.
+  const permScope = componentLevel ? componentId : undefined;
+  const canViewHumanTasks = hasAnyPermission([Permissions.WORKFLOW_VIEW_HUMAN_TASKS, Permissions.WORKFLOW_MANAGE_HUMAN_TASKS], projectId, permScope);
+  const canViewWorkflows = hasAnyPermission([Permissions.WORKFLOW_VIEW_WORKFLOWS, Permissions.WORKFLOW_MANAGE_WORKFLOWS], projectId, permScope);
+  // Review Activities is gated on the workflow permissions, not the human-task ones: the proxy
+  // authorizes /review-activities on that branch, so a Viewer holding only view_human_tasks would
+  // otherwise be offered a tab that 403s on load.
+  const allowedTabs: Record<TabKey, boolean> = { tasks: canViewHumanTasks, reviews: canViewWorkflows, management: canViewWorkflows };
+  // Resolve the requested tab to one the user may see, else the first they may (null = none).
+  const activeTab: TabKey | null = allowedTabs[tabKey] ? tabKey : (TAB_ORDER.find((t) => allowedTabs[t]) ?? null);
+
+  // Counts for the tab badges. Both poll, so each is skipped when its tab is not on offer — and both
+  // read through the same gateway runtime the views themselves use.
+  const gateway = gatewayScope({ targets, environmentId: activeEnvId, taskQueue });
+  // Declared above the early returns below, so these hooks run in the same order on every render.
+  const { data: pendingTasks } = usePendingTaskCount(gateway, taskQueue, allowedTabs.tasks);
+  const { data: pendingReviews } = usePendingReviewActivityCount(gateway, taskQueue, allowedTabs.reviews);
+
   if (loadingProject || loadingComponent || loadingEnvs || loadingComponents)
     return (
       <PageContent sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
@@ -118,15 +158,6 @@ export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Ele
       </PageContent>
     );
   if (componentLevel && !component) return <NotFound message="Component not found" backTo={resourceUrl(broaden(scope)!, 'overview')} backLabel="Back to Project" />;
-
-  const activeEnvId = environments.some((e) => e.id === selectedEnvId) ? selectedEnvId : (environments[0]?.id ?? '');
-  const selectedEnv = environments.find((e) => e.id === activeEnvId) ?? null;
-  // Each tab is gated by its dedicated workflow permission.
-  const permScope = componentLevel ? componentId : undefined;
-  const canViewHumanTasks = hasAnyPermission([Permissions.WORKFLOW_VIEW_HUMAN_TASKS, Permissions.WORKFLOW_MANAGE_HUMAN_TASKS], projectId, permScope);
-  const canViewWorkflows = hasAnyPermission([Permissions.WORKFLOW_VIEW_WORKFLOWS, Permissions.WORKFLOW_MANAGE_WORKFLOWS], projectId, permScope);
-  // Resolve the requested tab to one the user is allowed to see (null = neither).
-  const activeTab: 'user' | 'admin' | null = tabKey === 'admin' && canViewWorkflows ? 'admin' : tabKey === 'user' && canViewHumanTasks ? 'user' : canViewHumanTasks ? 'user' : canViewWorkflows ? 'admin' : null;
 
   return (
     <PageContent>
@@ -166,19 +197,20 @@ export default function Workflows(scope: ComponentScope | ProjectScope): JSX.Ele
       ) : (
         <>
           <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-            <Tabs value={activeTab} onChange={(_, v) => setTabKey(v as 'user' | 'admin')}>
-              {canViewHumanTasks && <Tab label="User Actions" value="user" />}
-              {canViewWorkflows && <Tab label="Admin Actions" value="admin" />}
+            <Tabs value={activeTab} onChange={(_, v) => setTabKey(v as TabKey)}>
+              {allowedTabs.tasks && <Tab label={<TabLabel title="My Tasks" count={pendingTasks} />} value="tasks" />}
+              {allowedTabs.reviews && <Tab label={<TabLabel title="Review Activities" count={pendingReviews?.count} capped={pendingReviews?.capped} />} value="reviews" />}
+              {allowedTabs.management && <Tab label="Workflow Executions" value="management" />}
             </Tabs>
           </Box>
           {!activeEnvId ? (
             <Typography color="text.secondary" sx={{ py: 6, textAlign: 'center' }}>
               Select an environment to continue.
             </Typography>
-          ) : activeTab === 'user' ? (
-            <UserPortal targets={targets} environmentId={activeEnvId} taskQueue={taskQueue} />
-          ) : (
+          ) : activeTab === 'management' ? (
             <AdminPortal key={deepLinkKey} targets={targets} environmentId={activeEnvId} taskQueue={taskQueue} initialWorkflowType={deepLink.workflowType} initialWorkflowId={deepLink.workflowId} />
+          ) : (
+            <UserPortal targets={targets} environmentId={activeEnvId} taskQueue={taskQueue} view={activeTab === 'reviews' ? 'reviews' : 'tasks'} />
           )}
         </>
       )}

@@ -292,11 +292,12 @@ function fetchPendingTaskCount(componentId: string, environmentId: string, taskQ
   return wfRequest<{ count: number }>(componentId, environmentId, `human-tasks/pending-count${buildQuery({ taskQueue })}`).then((d) => d.count ?? 0);
 }
 
-export function usePendingTaskCount(s: Scope, taskQueue?: string) {
+/** `enabled` lets a caller skip the poll when the count is not being shown. */
+export function usePendingTaskCount(s: Scope, taskQueue?: string, enabled = true) {
   return useQuery({
     queryKey: ['wf', 'pending-count', s.componentId, s.environmentId, taskQueue],
     queryFn: () => fetchPendingTaskCount(s.componentId, s.environmentId, taskQueue),
-    enabled: enabledFor(s),
+    enabled: enabledFor(s) && enabled,
     refetchInterval: 30000,
   });
 }
@@ -356,6 +357,9 @@ export interface ReviewActivityFilters {
 // full set rather than only the first page.
 const REVIEW_ACTIVITY_MAX_PAGES = 20;
 
+// Page size the badge count reads; a full page is reported as capped rather than as an exact total.
+const PENDING_REVIEW_PAGE = 50;
+
 async function fetchReviewActivities(componentId: string, environmentId: string, filters: ReviewActivityFilters): Promise<Page<ReviewActivity>> {
   const items: ReviewActivity[] = [];
   let pageToken: string | undefined;
@@ -373,6 +377,31 @@ export function useReviewActivities(s: Scope, filters: ReviewActivityFilters) {
     queryKey: ['wf', 'review-activities', s.componentId, s.environmentId, filters],
     queryFn: () => fetchReviewActivities(s.componentId, s.environmentId, filters),
     enabled: enabledFor(s),
+  });
+}
+
+/** How many review activities are awaiting a decision, and whether that count hit the page cap. */
+export interface PendingReviewCount {
+  count: number;
+  capped: boolean;
+}
+
+/**
+ * Count of review activities awaiting a decision, for the tab badge. The runtime has no count
+ * endpoint, so this reads a single PENDING page — one request, unlike the listing, which walks up to
+ * REVIEW_ACTIVITY_MAX_PAGES so its client-side filters see everything. A full page reports `capped`
+ * so the badge can say "50+" rather than claim exactly 50.
+ */
+export function usePendingReviewActivityCount(s: Scope, taskQueue?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['wf', 'pending-review-count', s.componentId, s.environmentId, taskQueue],
+    queryFn: (): Promise<PendingReviewCount> =>
+      wfRequest<Page<ReviewActivity>>(s.componentId, s.environmentId, `review-activities${buildQuery({ status: 'PENDING', taskQueue, limit: PENDING_REVIEW_PAGE })}`).then((p) => ({
+        count: p.items?.length ?? 0,
+        capped: p.hasMore === true,
+      })),
+    enabled: enabledFor(s) && enabled,
+    refetchInterval: 30000,
   });
 }
 
@@ -402,7 +431,7 @@ export function useReviewDecision(s: Scope) {
       else init = { method: 'POST' };
       return wfRequest<unknown>(s.componentId, s.environmentId, `review-activities/${encodeURIComponent(taskId)}/${decision}`, init);
     },
-    onSuccess: () => invalidateForEnvironment(qc, s.environmentId, 'review-activities'),
+    onSuccess: () => invalidateForEnvironment(qc, s.environmentId, 'review-activities', 'pending-review-count'),
   });
 }
 
