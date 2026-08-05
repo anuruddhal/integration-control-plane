@@ -19,7 +19,7 @@ import { Alert, Button, Card, CardContent, Chip, CircularProgress, Dialog, Dialo
 import { BarChart3, Download, RefreshCw } from '@wso2/oxygen-ui-icons-react';
 import { useState, type JSX } from 'react';
 import { useProjectByHandler, useComponentByHandler, useComponents, useEnvironments } from '../api/queries';
-import { useMoesifMetricsConfig, useConfigureMoesifMetrics, useCreateMoesifDashboards, useMoesifDashboardEmbed } from '../api/metricsMoesif';
+import { useMoesifMetricsConfig, useConfigureMoesifMetrics, useCreateMoesifDashboards, useMoesifDashboardEmbed, useMoesifApplications } from '../api/metricsMoesif';
 import { downloadMoesifMetricsTemplate, MOESIF_METRICS_WORKSPACE_NAME } from '../assets/moesifMetricsTemplate';
 import CodeBoxWithCopy from '../components/CodeBoxWithCopy';
 import EmptyListing from '../components/EmptyListing';
@@ -28,8 +28,10 @@ import { resourceUrl, broaden, hasComponent } from '../nav';
 import type { MetricsPageProps } from './MetricsOpenSearch';
 
 // Read scopes required on the Moesif Management API Key so the backend can list
-// dashboards (to discover the imported workspace) and mint embed access tokens.
+// applications (to select one), list dashboards (to discover the imported
+// workspace) and mint embed access tokens.
 const REQUIRED_ENTITY_SCOPES: { entity: string; actions: string[] }[] = [
+  { entity: 'Apps', actions: ['read'] },
   { entity: 'Dashboards', actions: ['read'] },
   { entity: 'Workspaces', actions: ['read'] },
 ];
@@ -158,6 +160,7 @@ function MoesifRuntimeConfigCard({ onSave, saving, error, currentAppId, onCancel
 // backend re-discovers the workspace and overwrites the stored credentials). An
 // optional Cancel action returns to the metrics view.
 function MoesifDashboardCard({
+  componentId,
   applicationId,
   onCreate,
   creating,
@@ -166,6 +169,7 @@ function MoesifDashboardCard({
   isEdit,
   onCancel,
 }: {
+  componentId: string;
   applicationId: string;
   onCreate: (token: string, moesifAppId: string) => void;
   creating: boolean;
@@ -178,6 +182,30 @@ function MoesifDashboardCard({
   const [moesifAppId, setMoesifAppId] = useState('');
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const effectiveAppId = applicationId.trim() || '<MOESIF_COLLECTOR_APPLICATION_ID>';
+
+  // Fetch the Moesif applications the entered Management API Key can access
+  const listApps = useMoesifApplications();
+  const apps = listApps.data ?? [];
+  const trimmedToken = token.trim();
+
+  // Changing the key invalidates any applications fetched for the previous key
+  const handleTokenChange = (value: string): void => {
+    setToken(value);
+    if (listApps.data || listApps.error) {
+      listApps.reset();
+    }
+    if (moesifAppId) {
+      setMoesifAppId('');
+    }
+  };
+
+  const handleFetchApps = (): void => {
+    listApps.mutate(
+      { componentId, managementApiKey: trimmedToken },
+      // Auto-select when the key can access exactly one application.
+      { onSuccess: (fetched) => fetched.length === 1 && setMoesifAppId(fetched[0].id) },
+    );
+  };
   return (
     <Card variant="outlined" sx={{ maxWidth: 720, mx: 'auto', mt: 2 }}>
       <CardContent>
@@ -220,7 +248,7 @@ function MoesifDashboardCard({
           </li>
           <li>
             <Typography variant="body2">
-              Provide a Moesif <strong>Management API Key</strong> (with the read scopes below) and your <strong>Moesif Application ID</strong>, then {isEdit ? 'update the credentials' : 'link the dashboard'}.
+              Provide a Moesif <strong>Management API Key</strong> (with the read scopes below), <strong>fetch your applications</strong> and select the one to use, then {isEdit ? 'update the credentials' : 'link the dashboard'}.
             </Typography>
           </li>
         </Stack>
@@ -240,9 +268,36 @@ function MoesifDashboardCard({
 
         <Divider sx={{ my: 2 }} />
 
-        <TextField label="Management API Key" placeholder="Paste your Moesif Management API Key" value={token} onChange={(e) => setToken(e.target.value)} type="password" fullWidth size="small" autoComplete="off" sx={{ mb: 2 }} />
+        <Stack direction="row" gap={1} alignItems="flex-start" sx={{ mb: 2 }}>
+          <TextField label="Management API Key" placeholder="Paste your Moesif Management API Key" value={token} onChange={(e) => handleTokenChange(e.target.value)} type="password" fullWidth size="small" autoComplete="off" />
+          <Button variant="outlined" onClick={handleFetchApps} disabled={!trimmedToken || listApps.isPending} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {listApps.isPending ? 'Fetching…' : 'Fetch applications'}
+          </Button>
+        </Stack>
 
-        <TextField label="Moesif Application ID" placeholder="Enter the Moesif Application ID" value={moesifAppId} onChange={(e) => setMoesifAppId(e.target.value)} fullWidth size="small" autoComplete="off" sx={{ mb: 2 }} />
+        {/* The application list is populated from the entered key. Only shown
+            after a successful fetch so the user selects an application rather
+            than pasting its id. */}
+        {listApps.isSuccess &&
+          (apps.length > 0 ? (
+            <TextField select label="Moesif Application" value={moesifAppId} onChange={(e) => setMoesifAppId(e.target.value)} fullWidth size="small" sx={{ mb: 2 }} helperText="Select the Moesif application to link.">
+              {apps.map((app) => (
+                <MenuItem key={app.id} value={app.id}>
+                  {app.name} ({app.id})
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              No Moesif applications were found for this Management API Key.
+            </Alert>
+          ))}
+
+        {!!listApps.error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {(listApps.error as Error).message || 'Failed to fetch Moesif applications.'}
+          </Alert>
+        )}
 
         {!!error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -259,7 +314,7 @@ function MoesifDashboardCard({
               Cancel
             </Button>
           )}
-          <Button variant="contained" disabled={!token.trim() || !moesifAppId.trim() || creating} onClick={() => onCreate(token.trim(), moesifAppId.trim())}>
+          <Button variant="contained" disabled={!trimmedToken || !moesifAppId || creating} onClick={() => onCreate(trimmedToken, moesifAppId)}>
             {isEdit ? (creating ? 'Updating…' : 'Update credentials') : creating ? 'Linking…' : 'Link dashboard'}
           </Button>
         </Stack>
@@ -434,6 +489,7 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
       <PageContent>
         {header}
         <MoesifDashboardCard
+          componentId={targetComponentId}
           applicationId={configuredAppId}
           creating={createDashboards.isPending}
           error={createDashboards.error}
@@ -453,6 +509,7 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
       <PageContent>
         {header}
         <MoesifDashboardCard
+          componentId={targetComponentId}
           applicationId={configuredAppId}
           isEdit
           creating={createDashboards.isPending}

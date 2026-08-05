@@ -14,6 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import icp_server.types;
+
 import ballerina/http;
 import ballerina/log;
 import ballerina/time;
@@ -56,6 +58,11 @@ const string MOESIF_WORKSPACE_NAME = "Response time metrics";
 // high enough to return all dashboards in a single page for a typical org.
 const int MOESIF_DASHBOARD_LIST_TAKE = 1000;
 
+// `take` value for the "list applications" call. Moesif returns the full set of
+// applications the Management API key can access regardless of this value, so
+// the documented `take=0` is used to fetch them all in a single request.
+const int MOESIF_APP_LIST_TAKE = 0;
+
 // A short-lived embed descriptor for a Moesif workspace: the minted access
 // token and the fully-formed iframe src the UI should load.
 public type MoesifWorkspaceEmbed record {|
@@ -95,6 +102,21 @@ public isolated function discoverMoesifMetricsWorkspaceId(string managementApiKe
     }
     return error(string `Could not find the imported Moesif "${MOESIF_DASHBOARD_NAME}" dashboard for app_id ${moesifAppId}. ` +
             string `Import the metrics template into Moesif and set the "${MOESIF_WORKSPACE_NAME}" workspace sharing to Public, then try again.`);
+}
+
+// Lists the Moesif applications the given Management API key can access, so the
+// UI can present them for selection instead of asking the user to paste an
+// Application ID. Calls the Moesif Management API `/~/apps` endpoint and maps
+// each returned application to its id + name. Requires a Management API key with
+// the `read:apps` scope. Returns an error when the request fails (e.g. an
+// invalid key or a missing scope).
+public isolated function listMoesifApplications(string managementApiKey)
+        returns types:MoesifApplication[]|error {
+    map<string|string[]> headers = {"Authorization": string `Bearer ${managementApiKey}`};
+
+    json apps = check getFromMoesif(moesifClient,
+            string `/~/apps?take=${MOESIF_APP_LIST_TAKE}`, headers, "applications");
+    return extractMoesifApplications(apps);
 }
 
 // Mints a short-lived embed access token for the given workspace via the Moesif
@@ -308,4 +330,47 @@ isolated function findMoesifIdByName(json node, string name) returns string? {
         }
     }
     return ();
+}
+
+// Maps a Moesif `/~/apps` response into the id + name pairs the UI selects from.
+// The endpoint returns the applications either as a bare JSON array or wrapped
+// in an object (e.g. under a `results`/`apps` field), so both shapes are
+// handled. Each application id is read from `id` (falling back to `_id`) and the
+// label from `name` (falling back to the id when unnamed). Applications without
+// a resolvable id are skipped.
+isolated function extractMoesifApplications(json apps) returns types:MoesifApplication[]|error {
+    json[] appList;
+    if apps is json[] {
+        appList = apps;
+    } else if apps is map<json> {
+        json results = apps["results"];
+        json appsField = apps["apps"];
+        if results is json[] {
+            appList = results;
+        } else if appsField is json[] {
+            appList = appsField;
+        } else {
+            return error("Unexpected Moesif applications response shape");
+        }
+    } else {
+        return error("Unexpected Moesif applications response shape");
+    }
+
+    types:MoesifApplication[] applications = [];
+    foreach json app in appList {
+        if app !is map<json> {
+            continue;
+        }
+        json idValue = app["id"];
+        if idValue !is string {
+            idValue = app["_id"];
+        }
+        if idValue !is string || idValue.trim().length() == 0 {
+            continue;
+        }
+        json nameValue = app["name"];
+        string name = nameValue is string && nameValue.trim().length() > 0 ? nameValue : idValue;
+        applications.push({id: idValue, name});
+    }
+    return applications;
 }

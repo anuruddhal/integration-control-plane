@@ -86,6 +86,28 @@ export function useCreateMoesifDashboards() {
   });
 }
 
+// ── Moesif applications (selectable list for the dashboard-linking step) ──
+
+export interface MoesifApplication {
+  id: string;
+  name: string;
+}
+
+const MOESIF_APPLICATIONS_QUERY = `
+  query MoesifApplications($componentId: String!, $managementApiKey: String!) {
+    moesifApplications(componentId: $componentId, managementApiKey: $managementApiKey) {
+      id, name
+    }
+  }`;
+
+// Fetches the Moesif applications the given Management API Key can access
+export function useMoesifApplications() {
+  return useMutation({
+    mutationFn: (input: { componentId: string; managementApiKey: string }) =>
+      gql<{ moesifApplications: MoesifApplication[] }>(MOESIF_APPLICATIONS_QUERY, input).then((d) => d.moesifApplications),
+  });
+}
+
 // ── Moesif dashboard embed (short-lived workspace access token + iframe src) ──
 
 // A short-lived descriptor used to embed the Moesif metrics dashboard in an

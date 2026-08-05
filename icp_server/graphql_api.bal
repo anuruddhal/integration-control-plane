@@ -2727,6 +2727,34 @@ service /graphql on graphqlListener {
         return {workspaceId: embed.workspaceId, accessToken: embed.accessToken, embedUrl: embed.embedUrl};
     }
 
+    // List the Moesif applications the supplied Management API key can access. Requires edit or manage permission on the integration to read the API key.
+    isolated resource function get moesifApplications(graphql:Context context, string componentId, string managementApiKey) returns types:MoesifApplication[]|error {
+        types:UserContextV2 userContext = check extractUserContext(context);
+
+        types:Component? component = check storage:getComponentById(componentId);
+        if component is () {
+            return error("Integration not found");
+        }
+
+        types:AccessScope scope = auth:buildScopeFromContext(component.projectId, integrationId = componentId);
+        if !check auth:hasAnyPermission(userContext.userId,
+                [auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
+            return error("Insufficient permissions to list Moesif applications for this integration");
+        }
+
+        string trimmedToken = managementApiKey.trim();
+        if trimmedToken.length() == 0 {
+            return error("Moesif Management API token must not be empty");
+        }
+
+        types:MoesifApplication[]|error applications = listMoesifApplications(trimmedToken);
+        if applications is error {
+            log:printError("Failed to list Moesif applications", 'error = applications, componentId = componentId);
+            return error(string `Failed to list Moesif applications: ${applications.message()}`);
+        }
+        return applications;
+    }
+
     // Link an integration to its Moesif metrics dashboard. The user imports the
     // ICP metrics template into Moesif and sets the workspace sharing to Public;
     // this call then discovers the imported dashboard's workspace id (via the
