@@ -267,7 +267,7 @@ function WorkflowsAdmin({
         </Tooltip>
         <Authorized permissions={[Permissions.WORKFLOW_MANAGE_WORKFLOWS]}>
           <Button variant="contained" size="small" startIcon={<Play size={14} />} onClick={() => setStartOpen(true)}>
-            Start Workflow
+            Start New Workflow
           </Button>
         </Authorized>
       </Stack>
@@ -439,7 +439,7 @@ export function StartWorkflowDialog({ scope, initialWorkflowType, onClose, onToa
   const viewInstance = () => {
     if (!started) return;
     onClose();
-    navigate(`${resourceUrl(navScope, 'workflows')}?tab=admin&workflowId=${encodeURIComponent(started.workflowId)}&env=${encodeURIComponent(scope.environmentId)}`);
+    navigate(`${resourceUrl(navScope, 'workflows')}?tab=management&workflowId=${encodeURIComponent(started.workflowId)}&env=${encodeURIComponent(scope.environmentId)}`);
   };
 
   if (started) {

@@ -38,7 +38,6 @@ import {
   PageContent,
   PageTitle,
   Stack,
-  Switch,
   TablePagination,
   Typography,
 } from '@wso2/oxygen-ui';
@@ -86,14 +85,15 @@ secret = "${secret}"
 }
 
 function biToml(envName: string, secret: string, projectHandle: string, integrationHandle: string, workflowMgt: boolean): string {
+  // The bridge's workflow keys belong to a Workflow integration only, like the [ballerina.workflow]
+  // blocks appended below — no other integration type's snippet mentions workflows at all.
+  const workflowKeys = workflowMgt ? '\nenableWorkflowManagement = true\n# workflowManagementApiPort = 8234' : '';
   const base = `[wso2.icp.runtime.bridge]
 environment = "${envName}"
 project = "${projectHandle}"
 integration = "${integrationHandle}"
 runtime = "<unique id for the runtime>"
-secret = "${secret}"
-enableWorkflowManagement = true
-# workflowManagementApiPort = 8234
+secret = "${secret}"${workflowKeys}
 # serverUrl = "https://<hostname>:9445"
 # runtimeBaseUrl = "http://<hostname>"`;
   if (!workflowMgt) return base;
@@ -125,13 +125,12 @@ function AddRuntimeModal({
   const queryClient = useQueryClient();
   const [secret, setSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [workflowMgtChoice, setWorkflowMgtChoice] = useState(false);
+
   const isBI = componentType === 'BI';
-  // A Workflow integration exists to host workflows, so its runtime always registers with workflow
-  // management enabled and the toggle is not offered. Derived rather than seeded into state so a
-  // late-arriving integration type still takes effect.
-  const alwaysWorkflowMgt = isWorkflowIntegration(displayType);
-  const workflowMgt = alwaysWorkflowMgt || workflowMgtChoice;
+  // Only a Workflow integration gets workflow configuration; no other type carries anything workflow
+  // related, so this follows the integration's type with nothing to choose. Derived rather than held
+  // in state so a late-arriving type still takes effect.
+  const workflowMgt = isWorkflowIntegration(displayType);
 
   const handleGenerate = () => {
     setError(null);
@@ -173,7 +172,6 @@ function AddRuntimeModal({
             <Alert severity="warning" sx={{ mb: 2 }}>
               <strong>The secret will be shown once — copy it before closing.</strong>
             </Alert>
-            {isBI && !alwaysWorkflowMgt && <FormControlLabel control={<Switch checked={workflowMgtChoice} onChange={(e) => setWorkflowMgtChoice(e.target.checked)} />} label="Enable Workflow Management" sx={{ display: 'flex', mb: 2 }} />}
             <Button variant="contained" onClick={handleGenerate} disabled={createMutation.isPending}>
               {createMutation.isPending ? 'Generating...' : 'Generate Secret'}
             </Button>
