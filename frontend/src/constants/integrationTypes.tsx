@@ -166,6 +166,8 @@ export function integrationTypeFromStored(displayType: string, componentSubType?
     case 'ballerinaEventHandler':
     case 'miEventHandler':
       return 'event-integration';
+    case 'ballerinaWorkflow':
+      return 'workflow';
     default:
       return 'service';
   }

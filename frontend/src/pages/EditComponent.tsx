@@ -132,7 +132,7 @@ export default function EditComponent(scope: ProjectScope | ComponentScope): JSX
         <Typography variant="h5" sx={{ mb: 2 }}>
           Integration Type
         </Typography>
-        <IntegrationTypeSelector selected={integrationType} onSelect={setIntegrationType} />
+        <IntegrationTypeSelector selected={integrationType} onSelect={setIntegrationType} technology={component.componentType as Technology} />
       </Box>
 
       <TextField

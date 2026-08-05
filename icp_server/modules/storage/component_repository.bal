@@ -26,9 +26,12 @@ import ballerina/uuid;
 // one runtime, so a BI integration cannot carry an MI display_type. `service` is
 // the legacy value written before integrations carried a type and predates the
 // distinction, so it is accepted for either. Adding an integration type means
-// adding its value under both runtimes.
+// adding its value under every runtime that offers it; a type one runtime cannot
+// run is simply absent there, as Workflow is for MI.
 final readonly & map<string[]> SUPPORTED_DISPLAY_TYPES_BY_RUNTIME = {
-    "BI": ["service", "ballerinaService", "scheduledTask", "ballerinaEventHandler"],
+    // The workflow engine and its management API are Ballerina-only, so
+    // `ballerinaWorkflow` has no MI counterpart.
+    "BI": ["service", "ballerinaService", "scheduledTask", "ballerinaEventHandler", "ballerinaWorkflow"],
     "MI": ["service", "miApiService", "miCronjob", "miEventHandler"]
 };
 
@@ -39,29 +42,6 @@ final readonly & map<string[]> SUPPORTED_SUB_TYPES_BY_RUNTIME = {
     "BI": ["ballerinaFileIntegration", "aiAgent", "MCP"],
     "MI": ["miFileIntegration", "aiAgent", "MCP"]
 };
-// Integration types ICP records, encoded as devant encodes them. `service` is the
-// legacy value written before integrations carried a type; the rest are produced
-// by the create form. Adding an integration type means adding its value here.
-final readonly & string[] SUPPORTED_DISPLAY_TYPES = [
-    "service",
-    "ballerinaService",
-    "miApiService",
-    "scheduledTask",
-    "miCronjob",
-    "ballerinaEventHandler",
-    "miEventHandler",
-    // Workflow has no MI counterpart: the workflow engine is Ballerina-only.
-    "ballerinaWorkflow"
-];
-
-// Subtypes for the integration types that share a generic service display_type
-// and cannot be told apart by it alone.
-final readonly & string[] SUPPORTED_COMPONENT_SUB_TYPES = [
-    "ballerinaFileIntegration",
-    "miFileIntegration",
-    "aiAgent",
-    "MCP"
-];
 
 // display_types a subtype may accompany. A subtype exists only to disambiguate a
 // generic service, so pairing one with e.g. `scheduledTask` is contradictory.
@@ -81,12 +61,12 @@ isolated function validateIntegrationMetadata(string componentType, string displ
         return error(string `Unsupported runtime: ${componentType}`);
     }
     if allowedDisplayTypes.indexOf(displayType) is () {
-        return error(string `Integration type ${displayType} is not valid for a ${componentType} integration`);
+        return error(string `Unsupported integration type ${displayType} for a ${componentType} integration`);
     }
     if componentSubType is string {
         string[] allowedSubTypes = SUPPORTED_SUB_TYPES_BY_RUNTIME[componentType] ?: [];
         if allowedSubTypes.indexOf(componentSubType) is () {
-            return error(string `Integration subtype ${componentSubType} is not valid for a ${componentType} integration`);
+            return error(string `Unsupported integration subtype ${componentSubType} for a ${componentType} integration`);
         }
         string[] subTypedDisplayTypes = SUB_TYPED_DISPLAY_TYPES_BY_RUNTIME[componentType] ?: [];
         if subTypedDisplayTypes.indexOf(displayType) is () {
