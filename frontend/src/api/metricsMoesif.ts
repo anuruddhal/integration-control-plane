@@ -103,8 +103,7 @@ const MOESIF_APPLICATIONS_QUERY = `
 // Fetches the Moesif applications the given Management API Key can access
 export function useMoesifApplications() {
   return useMutation({
-    mutationFn: (input: { componentId: string; managementApiKey: string }) =>
-      gql<{ moesifApplications: MoesifApplication[] }>(MOESIF_APPLICATIONS_QUERY, input).then((d) => d.moesifApplications),
+    mutationFn: (input: { componentId: string; managementApiKey: string }) => gql<{ moesifApplications: MoesifApplication[] }>(MOESIF_APPLICATIONS_QUERY, input).then((d) => d.moesifApplications),
   });
 }
 
