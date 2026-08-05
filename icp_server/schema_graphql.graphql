@@ -131,6 +131,10 @@ type Query {
     componentId: String!
     pagination: PaginationInput
   ): DataServicesPage!
+  dataServiceFaultStackTrace(
+    runtimeId: String!
+    serviceName: String!
+  ): DataServiceFaultStackTrace
   dataSourcesByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
@@ -695,8 +699,16 @@ type DataService {
   name: String!
   description: String
   wsdl: String
-  state: ArtifactState!
+  state: String!
+  errorMessage: String
+  faultStackTrace: String
   compositeApp: String
+}
+
+type DataServiceFaultStackTrace {
+  runtimeId: String!
+  serviceName: String!
+  faultStackTrace: String!
 }
 
 # ============================================

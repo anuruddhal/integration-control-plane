@@ -38,7 +38,6 @@ import {
   PageContent,
   PageTitle,
   Stack,
-  Switch,
   TablePagination,
   Typography,
 } from '@wso2/oxygen-ui';
@@ -54,7 +53,8 @@ import { useProjectByHandler, useEnvironments, useComponentByHandler, useCompone
 import { useCreateOrgSecret, useDeleteRuntime, useRevokeOrgSecret } from '../api/mutations';
 import { hasComponent, type ProjectScope, type ComponentScope } from '../nav';
 import { formatDistanceToNow } from '../utils/time';
-import { workflowManagementToml } from '../utils/runtimeToml';
+import { runtimeImports, workflowManagementToml } from '../utils/runtimeToml';
+import { isWorkflowIntegration } from '../constants/integrationTypes';
 import Authorized from '../components/Authorized';
 import { Permissions } from '../constants/permissions';
 import { technologyLabel } from '../constants/technologies';
@@ -85,18 +85,21 @@ secret = "${secret}"
 }
 
 function biToml(envName: string, secret: string, projectHandle: string, integrationHandle: string, workflowMgt: boolean): string {
+  // The bridge's workflow keys belong to a Workflow integration only, like the [ballerina.workflow]
+  // blocks appended below — no other integration type's snippet mentions workflows at all.
+  const workflowKeys = workflowMgt ? '\nenableWorkflowManagement = true\n# workflowManagementApiPort = 8234' : '';
   const base = `[wso2.icp.runtime.bridge]
 environment = "${envName}"
 project = "${projectHandle}"
 integration = "${integrationHandle}"
 runtime = "<unique id for the runtime>"
-secret = "${secret}"
-# serverUrl="https://<hostname>:9445"
-# runtimeBaseUrl="http://<hostname>"`;
+secret = "${secret}"${workflowKeys}
+# serverUrl = "https://<hostname>:9445"
+# runtimeBaseUrl = "http://<hostname>"`;
   if (!workflowMgt) return base;
   return `${base}
 
-${workflowManagementToml(secret)}`;
+${workflowManagementToml(integrationHandle, secret)}`;
 }
 
 function AddRuntimeModal({
@@ -104,6 +107,7 @@ function AddRuntimeModal({
   environmentName,
   componentId,
   componentType,
+  displayType,
   projectHandle,
   integrationHandle,
   onClose,
@@ -112,6 +116,7 @@ function AddRuntimeModal({
   environmentName: string;
   componentId: string;
   componentType?: string;
+  displayType?: string;
   projectHandle: string;
   integrationHandle: string;
   onClose: () => void;
@@ -120,8 +125,12 @@ function AddRuntimeModal({
   const queryClient = useQueryClient();
   const [secret, setSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [workflowMgt, setWorkflowMgt] = useState(false);
+
   const isBI = componentType === 'BI';
+  // Only a Workflow integration gets workflow configuration; no other type carries anything workflow
+  // related, so this follows the integration's type with nothing to choose. Derived rather than held
+  // in state so a late-arriving type still takes effect.
+  const workflowMgt = isWorkflowIntegration(displayType);
 
   const handleGenerate = () => {
     setError(null);
@@ -163,7 +172,6 @@ function AddRuntimeModal({
             <Alert severity="warning" sx={{ mb: 2 }}>
               <strong>The secret will be shown once — copy it before closing.</strong>
             </Alert>
-            {isBI && <FormControlLabel control={<Switch checked={workflowMgt} onChange={(e) => setWorkflowMgt(e.target.checked)} />} label="Enable Workflow Management" sx={{ display: 'flex', mb: 2 }} />}
             <Button variant="contained" onClick={handleGenerate} disabled={createMutation.isPending}>
               {createMutation.isPending ? 'Generating...' : 'Generate Secret'}
             </Button>
@@ -184,9 +192,17 @@ function AddRuntimeModal({
                 </DialogContentText>
                 <CodeBoxWithCopy code={`[build-options]\nremoteManagement = true`} />
                 <DialogContentText sx={{ mb: 1 }}>
-                  Import wso2/icp.runtime.bridge to your runtime's <strong>main.bal</strong> file:
+                  {workflowMgt ? (
+                    <>
+                      Add the following imports to your runtime's <strong>main.bal</strong> file:
+                    </>
+                  ) : (
+                    <>
+                      Import wso2/icp.runtime.bridge to your runtime's <strong>main.bal</strong> file:
+                    </>
+                  )}
                 </DialogContentText>
-                <CodeBoxWithCopy code={`import wso2/icp.runtime.bridge as _;`} />
+                <CodeBoxWithCopy code={runtimeImports(workflowMgt)} />
               </>
             )}
           </>
@@ -302,6 +318,7 @@ function EnvironmentRuntimeCard({
   environmentId,
   componentId,
   componentType,
+  displayType,
   projectHandle,
   integrationHandle,
   projectId,
@@ -314,6 +331,7 @@ function EnvironmentRuntimeCard({
   environmentId: string;
   componentId: string | undefined;
   componentType?: string;
+  displayType?: string;
   projectHandle: string;
   integrationHandle: string;
   projectId: string;
@@ -568,7 +586,16 @@ function EnvironmentRuntimeCard({
 
       {drawerOpen && componentId && <BoundSecretDrawer componentId={componentId} environmentId={environmentId} environmentName={environmentName} onClose={() => setDrawerOpen(false)} />}
       {addOpen && componentId && (
-        <AddRuntimeModal environmentId={environmentId} environmentName={environmentName} componentId={componentId} componentType={componentType} projectHandle={projectHandle} integrationHandle={integrationHandle} onClose={() => setAddOpen(false)} />
+        <AddRuntimeModal
+          environmentId={environmentId}
+          environmentName={environmentName}
+          componentId={componentId}
+          componentType={componentType}
+          displayType={displayType}
+          projectHandle={projectHandle}
+          integrationHandle={integrationHandle}
+          onClose={() => setAddOpen(false)}
+        />
       )}
     </>
   );
@@ -664,6 +691,7 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
             environmentId={env.id}
             componentId={componentId}
             componentType={component?.componentType}
+            displayType={component?.displayType}
             projectHandle={projectHandle}
             integrationHandle={integrationHandle}
             projectId={projectId}
