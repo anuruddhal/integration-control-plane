@@ -1644,6 +1644,9 @@ public type ComponentUpdateInput record {
     string version?;
     string labels?;
     string serviceAccessMode?;
+    // Integration type. Written as a pair with componentSubType — see
+    // storage:updateComponent. Omit to leave the recorded type unchanged.
+    string displayType?;
 
     // Extended fields (accepted for compatibility but may not be persisted)
     string apiId?;

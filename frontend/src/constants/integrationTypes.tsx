@@ -149,6 +149,30 @@ export function resolveComponentSubType(technology: Technology, integrationType:
  * Components created before integration types existed carry the legacy `service`
  * displayType and read back as Integration as API.
  */
+export function integrationTypeFromStored(displayType: string, componentSubType?: string | null): IntegrationType {
+  switch (componentSubType) {
+    case 'ballerinaFileIntegration':
+    case 'miFileIntegration':
+      return 'file-integration';
+    case 'aiAgent':
+      return 'ai-agent';
+    case 'MCP':
+      return 'mcp-server';
+  }
+  switch (displayType) {
+    case 'scheduledTask':
+    case 'miCronjob':
+      return 'automation';
+    case 'ballerinaEventHandler':
+    case 'miEventHandler':
+      return 'event-integration';
+    case 'ballerinaWorkflow':
+      return 'workflow';
+    default:
+      return 'service';
+  }
+}
+
 export function integrationTypeLabel(displayType: string, componentSubType?: string | null): string {
   switch (componentSubType) {
     case 'ballerinaFileIntegration':

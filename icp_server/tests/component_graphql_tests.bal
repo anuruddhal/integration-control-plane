@@ -455,11 +455,11 @@ function testGetComponentArtifactTypesNoPermission() returns error? {
 // Test: Create component - every integration type the create form can produce
 // =============================================================================
 
-// Every value in SUPPORTED_DISPLAY_TYPES (component_repository.bal) must actually be creatable:
-// one missing from the allowlist is rejected with "Unsupported integration type", making that
-// integration type unusable. The list below is a copy, so it cannot detect the frontend adding a
-// type - adding one means updating the allowlist, this list, and resolveDisplayType in
-// frontend/src/constants/integrationTypes.tsx together.
+// Every value in SUPPORTED_DISPLAY_TYPES_BY_RUNTIME (component_repository.bal) must actually be
+// creatable on the runtime it is listed under: one missing from the allowlist is rejected with
+// "Unsupported integration type", making that integration type unusable. The list below is a copy,
+// so it cannot detect the frontend adding a type - adding one means updating the allowlist, this
+// list, and resolveDisplayType in frontend/src/constants/integrationTypes.tsx together.
 @test:Config {
     groups: ["component-graphql", "create-component"]
 }
