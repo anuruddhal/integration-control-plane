@@ -2697,3 +2697,9 @@ public type MoesifDashboardEmbed record {|
     string accessToken;
     string embedUrl;
 |};
+
+// A Moesif application the supplied Management API key can access.
+public type MoesifApplication record {|
+    string id;
+    string name;
+|};
