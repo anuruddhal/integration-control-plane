@@ -20,23 +20,21 @@ import { gql } from './graphql';
 
 // ── Moesif metrics configuration (per project + integration) ──
 
-// Whether an integration (project + component combo) has been configured for
-// Moesif metrics (a Collector Application ID stored against it) and whether its
-// metrics workspace/dashboard has been created in Moesif.
+// Whether an integration (project + component combo) has had its Moesif metrics
+// workspace/dashboard created/linked in Moesif. This single flag drives the UI
+// (setup flow vs. embedded dashboard).
 export interface MoesifMetricsConfigStatus {
-  configured: boolean;
-  applicationId?: string | null;
   dashboardsCreated: boolean;
 }
 
 const MOESIF_METRICS_CONFIG_QUERY = `
   query MoesifMetricsConfig($componentId: String!) {
     moesifMetricsConfig(componentId: $componentId) {
-      configured, applicationId, dashboardsCreated
+      dashboardsCreated
     }
   }`;
 
-// Reads whether the given integration is configured for Moesif metrics.
+// Reads whether the given integration has its Moesif metrics dashboard linked.
 export function useMoesifMetricsConfig(componentId: string | undefined) {
   return useQuery<MoesifMetricsConfigStatus>({
     queryKey: ['moesif-metrics-config', componentId],
@@ -46,29 +44,10 @@ export function useMoesifMetricsConfig(componentId: string | undefined) {
   });
 }
 
-const CONFIGURE_MOESIF_METRICS_MUTATION = `
-  mutation ConfigureMoesifMetrics($componentId: String!, $applicationId: String!) {
-    configureMoesifMetrics(componentId: $componentId, applicationId: $applicationId) {
-      configured, applicationId
-    }
-  }`;
-
-// Persists the Moesif Collector Application ID against the integration, marking
-// it as configured for Moesif metrics.
-export function useConfigureMoesifMetrics() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { componentId: string; applicationId: string }) => gql<{ configureMoesifMetrics: MoesifMetricsConfigStatus }>(CONFIGURE_MOESIF_METRICS_MUTATION, input).then((d) => d.configureMoesifMetrics),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: ['moesif-metrics-config', variables.componentId] });
-    },
-  });
-}
-
 const CREATE_MOESIF_DASHBOARDS_MUTATION = `
   mutation CreateMoesifDashboards($componentId: String!, $managementApiKey: String!, $moesifAppId: String!) {
     createMoesifDashboards(componentId: $componentId, managementApiKey: $managementApiKey, moesifAppId: $moesifAppId) {
-      configured, applicationId, dashboardsCreated
+      dashboardsCreated
     }
   }`;
 

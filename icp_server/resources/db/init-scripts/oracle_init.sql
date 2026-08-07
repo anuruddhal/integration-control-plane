@@ -176,7 +176,6 @@ END;
 -- isolate provider secrets and avoid sparse columns on the core table).
 CREATE TABLE component_moesif_config (
     component_id CHAR(36) PRIMARY KEY,
-    application_id VARCHAR2(512 CHAR) NULL,
     dashboards_created NUMBER(1) DEFAULT 0 NOT NULL CHECK (dashboards_created IN (0, 1)),
     workspace_id VARCHAR2(512 CHAR) NULL,
     management_key VARCHAR2(4000 CHAR) NULL,
