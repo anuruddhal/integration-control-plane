@@ -40,7 +40,7 @@ const MOESIF_MAIN_BAL_IMPORT = 'import ballerinax/moesif as _;';
 
 // Short description shown when introducing Moesif on the landing/config view.
 // The leading "Moesif" is rendered in bold at the call site.
-const MOESIF_DESCRIPTION = '(a WSO2 company) allows you to observe your service integrations with real-time monitoring, behavioral analytics, and AI-powered insights into API adoption and usage.';
+const MOESIF_DESCRIPTION = ' (a WSO2 company) allows you to observe your service integrations with real-time monitoring, behavioral analytics, and AI-powered insights into API adoption and usage.';
 
 // Build the metrics-only Config.toml snippet for publishing metrics to Moesif.
 // Based on https://ballerina.io/learn/supported-observability-tools-and-platforms/moesif/
@@ -177,7 +177,7 @@ function MoesifDashboardCard({
         </li>
         <li>
           <Typography variant="body2">
-            In Moesif, go to <strong>Dashboard Templates → Import Json Template</strong> and import the downloaded file. This creates the <strong>Metrics</strong> dashboard.
+            In Moesif, go to <strong>Dashboard Templates → Import Json Template</strong> and import the downloaded file. This creates the <strong>Application Metrics</strong> dashboard.
           </Typography>
         </li>
         <li>

@@ -124,6 +124,10 @@ isolated function isOpenSearchAvailable() returns boolean {
         log:printDebug(string `OpenSearch availability probe failed: ${probe.message()}`);
         return false;
     }
+    if probe.statusCode < 200 || probe.statusCode >= 300 {
+        log:printDebug(string `OpenSearch availability probe returned non-success status code: ${probe.statusCode}`);
+        return false;
+    }
     return true;
 }
 
