@@ -15,11 +15,11 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { Alert, Button, Card, CardContent, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, IconButton, MenuItem, PageContent, Select, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
+import { Alert, Button, Card, CardContent, Chip, CircularProgress, Divider, IconButton, MenuItem, PageContent, Select, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
 import { BarChart3, Download, RefreshCw } from '@wso2/oxygen-ui-icons-react';
 import { useState, type JSX } from 'react';
 import { useProjectByHandler, useComponentByHandler, useComponents, useEnvironments } from '../api/queries';
-import { useMoesifMetricsConfig, useConfigureMoesifMetrics, useCreateMoesifDashboards, useMoesifDashboardEmbed, useMoesifApplications } from '../api/metricsMoesif';
+import { useMoesifMetricsConfig, useCreateMoesifDashboards, useMoesifDashboardEmbed, useMoesifApplications } from '../api/metricsMoesif';
 import { downloadMoesifMetricsTemplate, MOESIF_METRICS_WORKSPACE_NAME } from '../assets/moesifMetricsTemplate';
 import CodeBoxWithCopy from '../components/CodeBoxWithCopy';
 import EmptyListing from '../components/EmptyListing';
@@ -38,6 +38,10 @@ const REQUIRED_ENTITY_SCOPES: { entity: string; actions: string[] }[] = [
 
 const MOESIF_MAIN_BAL_IMPORT = 'import ballerinax/moesif as _;';
 
+// Short description shown when introducing Moesif on the landing/config view.
+// The leading "Moesif" is rendered in bold at the call site.
+const MOESIF_DESCRIPTION = ' (a WSO2 company) allows you to observe your service integrations with real-time monitoring, behavioral analytics, and AI-powered insights into API adoption and usage.';
+
 // Build the metrics-only Config.toml snippet for publishing metrics to Moesif.
 // Based on https://ballerina.io/learn/supported-observability-tools-and-platforms/moesif/
 function moesifConfigToml(applicationId: string): string {
@@ -52,136 +56,74 @@ metricsReporterFlushInterval = 15000        # Optional. Default: 15000 (ms)
 metricsReporterClientTimeout = 10000        # Optional. Default: 10000 (ms)`;
 }
 
-// Popup showing the runtime configuration instructions for publishing metrics to Moesif.
-function MoesifInstructionsDialog({ applicationId, open, onClose }: { applicationId: string; open: boolean; onClose: () => void }): JSX.Element {
+// Runtime configuration instructions for publishing metrics to Moesif. Rendered
+// inline (directly on the page) so it can be shown without a popup.
+function MoesifInstructionsContent({ applicationId }: { applicationId: string }): JSX.Element {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Configure Moesif Metrics</DialogTitle>
-      <DialogContent>
-        <DialogContentText sx={{ mb: 1 }}>
-          Add the following import to your runtime's <strong>main.bal</strong> file:
-        </DialogContentText>
-        <CodeBoxWithCopy code={MOESIF_MAIN_BAL_IMPORT} />
+    <>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        If you already have a{' '}
+        <a href="https://www.moesif.com/" target="_blank" rel="noreferrer">
+          Moesif
+        </a>{' '}
+        account, create an application for the integration you want to track and copy its <strong>Collector Application ID</strong>. Otherwise, sign up for Moesif with your organization and application details to obtain a Collector Application ID.
+      </Typography>
 
-        <DialogContentText sx={{ mb: 1, mt: 2 }}>
-          Add the following configuration to your runtime's <strong>Config.toml</strong> file:
-        </DialogContentText>
-        <CodeBoxWithCopy code={moesifConfigToml(applicationId)} />
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        Add the following import to your runtime's <strong>main.bal</strong> file:
+      </Typography>
+      <CodeBoxWithCopy code={MOESIF_MAIN_BAL_IMPORT} />
 
-        <Alert severity="info" sx={{ mt: 2 }}>
-          After applying this configuration you need to <strong>restart the runtime</strong> for it to start publishing metrics to Moesif.
-        </Alert>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
-    </Dialog>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1, mt: 2 }}>
+        Add the following configuration to your runtime's <strong>Config.toml</strong> file:
+      </Typography>
+      <CodeBoxWithCopy code={moesifConfigToml(applicationId)} />
+
+      <Alert severity="info" sx={{ mt: 2 }}>
+        After applying this configuration you need to <strong>restart the runtime</strong> for it to start publishing metrics to Moesif.
+      </Alert>
+    </>
   );
 }
 
-// Step 1: Configure the runtime to publish metrics to Moesif. Persists the
-// Collector Application ID against the integration (project + component combo).
-// When `currentAppId` is provided the card is in edit mode: the field is
-// pre-filled with the existing ID (masked) so the user can update it, and an
-// optional Cancel action returns to the previous view.
-function MoesifRuntimeConfigCard({ onSave, saving, error, currentAppId, onCancel }: { onSave: (collectorAppId: string) => void; saving: boolean; error: unknown; currentAppId?: string; onCancel?: () => void }): JSX.Element {
-  const isEdit = !!currentAppId;
-  const [appId, setAppId] = useState(currentAppId ?? '');
-  const [instructionsOpen, setInstructionsOpen] = useState(false);
-  const trimmedAppId = appId.trim();
-  const unchanged = isEdit && trimmedAppId === (currentAppId ?? '').trim();
-  const effectiveAppId = trimmedAppId || '<MOESIF_COLLECTOR_APPLICATION_ID>';
-  return (
-    <Card variant="outlined" sx={{ maxWidth: 720, mx: 'auto', mt: 2 }}>
-      <CardContent>
-        <Typography variant="h6" sx={{ mb: 1 }}>
-          {isEdit ? 'Update Collector Application ID' : 'Configure Moesif Metrics'}
-        </Typography>
-        <Typography color="text.secondary" sx={{ mb: 2 }}>
-          Provide your Moesif <strong>Collector Application ID</strong> and configure your Ballerina runtime to publish metrics to Moesif. You can find the Collector Application ID in the Moesif portal under{' '}
-          <strong>Account → Settings → API Keys → Collector Application ID</strong>.
-        </Typography>
-
-        <TextField
-          label="Collector Application ID"
-          placeholder="Paste your Moesif Collector Application ID"
-          value={appId}
-          onChange={(e) => setAppId(e.target.value)}
-          type={isEdit ? 'password' : 'text'}
-          fullWidth
-          size="small"
-          autoComplete="off"
-          helperText={isEdit ? 'The current ID is hidden. Replace it to update, or cancel to keep it.' : undefined}
-          sx={{ mb: 2 }}
-        />
-
-        <Alert severity="info" sx={{ mb: 2 }}>
-          After saving, apply the configuration instructions to your runtime and <strong>restart the runtime</strong> so it starts publishing metrics to Moesif.
-        </Alert>
-
-        {!!error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {(error as Error).message || 'Failed to save the Moesif configuration.'}
-          </Alert>
-        )}
-
-        <Stack direction="row" gap={1}>
-          <Button variant="outlined" onClick={() => setInstructionsOpen(true)}>
-            View configuration instructions
-          </Button>
-          {isEdit && onCancel && (
-            <Button variant="text" onClick={onCancel} disabled={saving}>
-              Cancel
-            </Button>
-          )}
-          <Button variant="contained" disabled={!trimmedAppId || saving || unchanged} onClick={() => onSave(trimmedAppId)}>
-            {isEdit ? (saving ? 'Updating…' : 'Update configuration') : saving ? 'Saving…' : 'Save configuration'}
-          </Button>
-        </Stack>
-      </CardContent>
-
-      <MoesifInstructionsDialog applicationId={effectiveAppId} open={instructionsOpen} onClose={() => setInstructionsOpen(false)} />
-    </Card>
-  );
-}
-
-// Step 2: Link the metrics dashboard. The user downloads the ICP metrics
-// template, imports it into Moesif (creating the "Application Metrics" dashboard
-// and its workspace), sets that workspace's sharing to Public, then provides a
-// Moesif Management API Key. The token + Application ID are sent to the backend,
-// which discovers the imported dashboard's workspace id and persists it against
-// the integration (setting the `dashboardsCreated` flag). Workspaces can't be
+// Set up the Moesif metrics dashboard for an integration. Renders the runtime
+// configuration instructions (so the runtime publishes metrics to Moesif) and
+// the steps to import + link the metrics dashboard. The user downloads the ICP
+// metrics template, imports it into Moesif (creating the "Application Metrics"
+// dashboard and its workspace), sets that workspace's sharing to Public, then
+// provides a Moesif Management API Key and selects the application to link. The
+// token + Application ID are sent to the backend, which discovers the imported
+// dashboard's workspace id and persists it against the integration (setting the
+// `dashboardsCreated` flag). The Collector Application ID itself is not stored —
+// it is used only transiently for workspace discovery. Workspaces can't be
 // created via the API with public sharing, hence the manual import + Public step.
 //
 // When `isEdit` is set the card is in update mode for an already-linked
-// dashboard: the template download + import instructions stay available (so the
-// user can re-download the template or re-check the steps at any time) and the
-// user supplies a new Management API Key + Moesif Application ID to re-link (the
-// backend re-discovers the workspace and overwrites the stored credentials). An
-// optional Cancel action returns to the metrics view.
+// dashboard: the user supplies a new Management API Key + Moesif Application ID
+// to re-link (the backend re-discovers the workspace and overwrites the stored
+// credentials). An optional Cancel action returns to the metrics view.
 function MoesifDashboardCard({
   componentId,
-  applicationId,
   onCreate,
   creating,
   error,
-  onEditAppId,
   isEdit,
   onCancel,
 }: {
   componentId: string;
-  applicationId: string;
   onCreate: (token: string, moesifAppId: string) => void;
   creating: boolean;
   error: unknown;
-  onEditAppId?: () => void;
   isEdit?: boolean;
   onCancel?: () => void;
 }): JSX.Element {
   const [token, setToken] = useState('');
   const [moesifAppId, setMoesifAppId] = useState('');
-  const [instructionsOpen, setInstructionsOpen] = useState(false);
-  const effectiveAppId = applicationId.trim() || '<MOESIF_COLLECTOR_APPLICATION_ID>';
+
+  // The selected Moesif application is the integration's Collector Application
+  // ID, so reflect it into the runtime Config.toml snippet once chosen. Falls
+  // back to a placeholder until an application is selected.
+  const effectiveAppId = moesifAppId.trim() || '<MOESIF_COLLECTOR_APPLICATION_ID>';
 
   // Fetch the Moesif applications the entered Management API Key can access
   const listApps = useMoesifApplications();
@@ -207,121 +149,110 @@ function MoesifDashboardCard({
     );
   };
   return (
-    <Card variant="outlined" sx={{ maxWidth: 720, mx: 'auto', mt: 2 }}>
-      <CardContent>
-        {!isEdit && onEditAppId && (
-          <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} sx={{ mb: 2 }} flexWrap="wrap">
-            <Typography variant="body2" color="text.secondary">
-              Collector Application ID: <strong>••••••••</strong>
-            </Typography>
-            <Button size="small" onClick={onEditAppId}>
-              Change
-            </Button>
-          </Stack>
-        )}
-
+    <Stack sx={{ mt: 2 }}>
+      {isEdit && (
         <Typography variant="h6" sx={{ mb: 1 }}>
-          {isEdit ? 'Update dashboard credentials' : 'Set up the metrics dashboard'}
+          Update dashboard credentials
         </Typography>
-        <Typography color="text.secondary" sx={{ mb: 2 }}>
-          {isEdit
-            ? 'If you have not imported the metrics dashboard into Moesif yet, follow the steps below. Then provide a new Management API Key and Moesif Application ID to re-link the dashboard.'
-            : 'Import the metrics dashboard template into Moesif, make its workspace public, then link it here.'}
-        </Typography>
+      )}
 
-        <Stack component="ol" sx={{ pl: 2.5, mb: 2, '& li': { mb: 1 } }} gap={0.5}>
-          <li>
-            <Typography variant="body2">Download the metrics dashboard template.</Typography>
-            <Button size="small" variant="outlined" startIcon={<Download size={16} />} onClick={downloadMoesifMetricsTemplate} sx={{ mt: 1 }}>
-              Download template
-            </Button>
-          </li>
-          <li>
-            <Typography variant="body2">
-              In Moesif, go to <strong>Dashboards → Import</strong> and import the downloaded file. This creates the <strong>Application Metrics</strong> dashboard and its <strong>{MOESIF_METRICS_WORKSPACE_NAME}</strong> workspace.
-            </Typography>
-          </li>
-          <li>
-            <Typography variant="body2">
-              Open the <strong>{MOESIF_METRICS_WORKSPACE_NAME}</strong> workspace, click <strong>Share</strong>, and set its sharing to <strong>Public</strong>. This is required for the embedded chart to load.
-            </Typography>
-          </li>
-          <li>
-            <Typography variant="body2">
-              Provide a Moesif <strong>Management API Key</strong> (with the read scopes below), <strong>fetch your applications</strong> and select the one to use, then {isEdit ? 'update the credentials' : 'link the dashboard'}.
-            </Typography>
-          </li>
-        </Stack>
+      {/* Step 1: configure the runtime to publish metrics to Moesif. */}
+      <MoesifInstructionsContent applicationId={effectiveAppId} />
 
-        <Stack gap={1.5} sx={{ mb: 2 }}>
-          {REQUIRED_ENTITY_SCOPES.map(({ entity, actions }) => (
-            <Stack key={entity} direction="row" alignItems="center" gap={1} flexWrap="wrap">
-              <Typography variant="body2" sx={{ minWidth: 90, fontWeight: 600 }}>
-                {entity}
-              </Typography>
-              {actions.map((a) => (
-                <Chip key={a} label={a} size="small" variant="outlined" />
-              ))}
-            </Stack>
-          ))}
-        </Stack>
+      <Divider sx={{ my: 3 }} />
 
-        <Divider sx={{ my: 2 }} />
+      {/* Step 2: import the dashboard template + link its workspace. */}
+      <Typography color="text.secondary" sx={{ mb: 2 }}>
+        {isEdit
+          ? 'If you have not imported the metrics dashboard into Moesif yet, follow the steps below. Then provide a new Management API Key and Moesif Application ID to re-link the dashboard.'
+          : 'Import the metrics dashboard template into Moesif, make its workspace public, then link it here.'}
+      </Typography>
 
-        <Stack direction="row" gap={1} alignItems="flex-start" sx={{ mb: 2 }}>
-          <TextField label="Management API Key" placeholder="Paste your Moesif Management API Key" value={token} onChange={(e) => handleTokenChange(e.target.value)} type="password" fullWidth size="small" autoComplete="off" />
-          <Button variant="outlined" onClick={handleFetchApps} disabled={!trimmedToken || listApps.isPending} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-            {listApps.isPending ? 'Fetching…' : 'Fetch applications'}
+      <Stack component="ol" sx={{ pl: 2.5, mb: 2, '& li': { mb: 1 } }} gap={0.5}>
+        <li>
+          <Typography variant="body2">Download the metrics dashboard template.</Typography>
+          <Button size="small" variant="outlined" startIcon={<Download size={16} />} onClick={downloadMoesifMetricsTemplate} sx={{ mt: 1 }}>
+            Download template
           </Button>
-        </Stack>
+        </li>
+        <li>
+          <Typography variant="body2">
+            In Moesif, go to <strong>Dashboard Templates → Import Json Template</strong> and import the downloaded file. This creates the <strong>Application Metrics</strong> dashboard.
+          </Typography>
+        </li>
+        <li>
+          <Typography variant="body2">
+            Open the <strong>{MOESIF_METRICS_WORKSPACE_NAME}</strong> workspace, click <strong>Share</strong>, and set its sharing to <strong>Public</strong>. This is required for the embedded chart to load.
+          </Typography>
+        </li>
+        <li>
+          <Typography variant="body2">
+            Provide a Moesif <strong>Management API Key</strong> (with the read scopes below), <strong>fetch your applications</strong> and select the one to use, then {isEdit ? 'update the credentials' : 'link the dashboard'}.
+          </Typography>
+        </li>
+      </Stack>
 
-        {/* The application list is populated from the entered key. Only shown
-            after a successful fetch so the user selects an application rather
-            than pasting its id. */}
-        {listApps.isSuccess &&
-          (apps.length > 0 ? (
-            <TextField select label="Moesif Application" value={moesifAppId} onChange={(e) => setMoesifAppId(e.target.value)} fullWidth size="small" sx={{ mb: 2 }} helperText="Select the Moesif application to link.">
-              {apps.map((app) => (
-                <MenuItem key={app.id} value={app.id}>
-                  {app.name} ({app.id})
-                </MenuItem>
-              ))}
-            </TextField>
-          ) : (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              No Moesif applications were found for this Management API Key.
-            </Alert>
-          ))}
+      <Stack gap={1.5} sx={{ mb: 2 }}>
+        {REQUIRED_ENTITY_SCOPES.map(({ entity, actions }) => (
+          <Stack key={entity} direction="row" alignItems="center" gap={1} flexWrap="wrap">
+            <Typography variant="body2" sx={{ minWidth: 90, fontWeight: 600 }}>
+              {entity}
+            </Typography>
+            {actions.map((a) => (
+              <Chip key={a} label={a} size="small" variant="outlined" />
+            ))}
+          </Stack>
+        ))}
+      </Stack>
 
-        {!!listApps.error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {(listApps.error as Error).message || 'Failed to fetch Moesif applications.'}
+      <Stack direction="row" gap={1} alignItems="flex-start" sx={{ mb: 2 }}>
+        <TextField label="Management API Key" placeholder="Paste your Moesif Management API Key" value={token} onChange={(e) => handleTokenChange(e.target.value)} type="password" fullWidth size="small" autoComplete="off" />
+        <Button variant="outlined" onClick={handleFetchApps} disabled={!trimmedToken || listApps.isPending} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+          {listApps.isPending ? 'Fetching…' : 'Fetch applications'}
+        </Button>
+      </Stack>
+
+      {/* The application list is populated from the entered key. Only shown
+          after a successful fetch so the user selects an application rather
+          than pasting its id. */}
+      {listApps.isSuccess &&
+        (apps.length > 0 ? (
+          <TextField select label="Moesif Application" value={moesifAppId} onChange={(e) => setMoesifAppId(e.target.value)} fullWidth size="small" sx={{ mb: 2 }} helperText="Select the Moesif application to link.">
+            {apps.map((app) => (
+              <MenuItem key={app.id} value={app.id}>
+                {app.name} ({app.id})
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            No Moesif applications were found for this Management API Key.
           </Alert>
-        )}
+        ))}
 
-        {!!error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {(error as Error).message || 'Failed to link the Moesif dashboard.'}
-          </Alert>
-        )}
+      {!!listApps.error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {(listApps.error as Error).message || 'Failed to fetch Moesif applications.'}
+        </Alert>
+      )}
 
-        <Stack direction="row" gap={1}>
-          <Button variant="outlined" onClick={() => setInstructionsOpen(true)}>
-            View configuration instructions
+      {!!error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {(error as Error).message || 'Failed to link the Moesif dashboard.'}
+        </Alert>
+      )}
+
+      <Stack direction="row" gap={1}>
+        {isEdit && onCancel && (
+          <Button variant="text" onClick={onCancel} disabled={creating}>
+            Cancel
           </Button>
-          {isEdit && onCancel && (
-            <Button variant="text" onClick={onCancel} disabled={creating}>
-              Cancel
-            </Button>
-          )}
-          <Button variant="contained" disabled={!trimmedToken || !moesifAppId || creating} onClick={() => onCreate(trimmedToken, moesifAppId)}>
-            {isEdit ? (creating ? 'Updating…' : 'Update credentials') : creating ? 'Linking…' : 'Link dashboard'}
-          </Button>
-        </Stack>
-      </CardContent>
-
-      <MoesifInstructionsDialog applicationId={effectiveAppId} open={instructionsOpen} onClose={() => setInstructionsOpen(false)} />
-    </Card>
+        )}
+        <Button variant="contained" disabled={!trimmedToken || !moesifAppId || creating} onClick={() => onCreate(trimmedToken, moesifAppId)}>
+          {isEdit ? (creating ? 'Updating…' : 'Update credentials') : creating ? 'Linking…' : 'Link dashboard'}
+        </Button>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -335,9 +266,6 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
   const biComponents = components.filter((component) => component.componentType === 'BI');
 
   const [integrationFilter, setIntegrationFilter] = useState('all');
-  // When set, the Collector Application ID edit form is shown for an already
-  // configured integration so the user can update the stored ID.
-  const [editingAppId, setEditingAppId] = useState(false);
   // When set, the dashboard-credentials edit form is shown for an already-linked
   // integration so the user can update the stored Management API Key + Moesif
   // Application ID (re-linking the dashboard via the backend discovery flow).
@@ -353,15 +281,11 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
   const selectedBiComponentId = biComponents.some((component) => component.id === integrationFilter) ? integrationFilter : '';
   const targetComponentId = isComponent ? componentId : selectedBiComponentId;
 
-  // Whether this integration is already configured for Moesif metrics (a
-  // Collector Application ID has been stored against it) and whether its Moesif
-  // dashboards have been created. Both flags come from the backend and drive the
-  // wizard steps.
+  // Whether this integration's Moesif metrics dashboard has been created/linked.
+  // This single flag comes from the backend and drives the setup vs. dashboard
+  // views below.
   const { data: moesifConfig, isLoading: loadingMoesifConfig } = useMoesifMetricsConfig(targetComponentId || undefined);
-  const configureMoesif = useConfigureMoesifMetrics();
   const createDashboards = useCreateMoesifDashboards();
-  const configured = !!moesifConfig?.configured;
-  const configuredAppId = moesifConfig?.applicationId ?? '';
   const dashboardsCreated = !!moesifConfig?.dashboardsCreated;
 
   // Once the dashboards exist, mint a short-lived workspace access token and
@@ -449,60 +373,37 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
     );
   }
 
-  // Not configured: default to the configure instructions. Persists the
-  // Collector Application ID against the integration on save.
-  if (!configured) {
-    return (
-      <PageContent>
-        {header}
-        <MoesifRuntimeConfigCard saving={configureMoesif.isPending} error={configureMoesif.error} onSave={(appId) => configureMoesif.mutate({ componentId: targetComponentId, applicationId: appId })} />
-      </PageContent>
-    );
-  }
-
-  // Configured, but the user chose to update the stored Collector Application
-  // ID. Pre-fills the (masked) existing ID; saving persists the new value and
-  // returns to the previous view.
-  if (editingAppId) {
-    return (
-      <PageContent>
-        {header}
-        <MoesifRuntimeConfigCard
-          currentAppId={configuredAppId}
-          saving={configureMoesif.isPending}
-          error={configureMoesif.error}
-          onCancel={() => setEditingAppId(false)}
-          onSave={(appId) => configureMoesif.mutate({ componentId: targetComponentId, applicationId: appId }, { onSuccess: () => setEditingAppId(false) })}
-        />
-      </PageContent>
-    );
-  }
-
-  // Configured but the dashboard isn't linked yet: offer the "set up / link
-  // dashboard" step. The user imports the template into Moesif and makes its
-  // workspace public; the entered Management API Key is then sent to the backend,
-  // which discovers the imported workspace id and persists it (setting the
-  // `dashboardsCreated` flag). On success the config query is invalidated and the
-  // metrics view below is shown.
+  // Dashboard not linked yet: show the Moesif intro and the setup flow. The user
+  // configures their runtime to publish metrics, imports the dashboard template
+  // into Moesif and makes its workspace public; the entered Management API Key +
+  // selected Moesif Application ID are then sent to the backend, which discovers
+  // the imported workspace id and persists it (setting the `dashboardsCreated`
+  // flag). The Collector Application ID itself is not stored. On success the
+  // config query is invalidated and the metrics view below is shown.
   if (!dashboardsCreated) {
     return (
       <PageContent>
         {header}
+        <Typography variant="h4" sx={{ mt: 5, mb: 3, color: 'warning.main' }}>
+          Configure metrics with Moesif
+        </Typography>
+        <Typography color="text.secondary">
+          <strong>Moesif</strong>
+          {MOESIF_DESCRIPTION}
+        </Typography>
         <MoesifDashboardCard
           componentId={targetComponentId}
-          applicationId={configuredAppId}
           creating={createDashboards.isPending}
           error={createDashboards.error}
           onCreate={(token, moesifAppId) => createDashboards.mutate({ componentId: targetComponentId, managementApiKey: token, moesifAppId })}
-          onEditAppId={() => setEditingAppId(true)}
         />
       </PageContent>
     );
   }
 
-  // Configured and linked, but the user chose to update the stored Management API
-  // Key + Moesif Application ID. Re-links the dashboard via the backend discovery
-  // flow (overwriting the stored credentials and workspace id) and, on success,
+  // Linked, but the user chose to update the stored Management API Key + Moesif
+  // Application ID. Re-links the dashboard via the backend discovery flow
+  // (overwriting the stored credentials and workspace id) and, on success,
   // returns to the metrics view with a freshly-minted embed token.
   if (editingDashboard) {
     return (
@@ -510,7 +411,6 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
         {header}
         <MoesifDashboardCard
           componentId={targetComponentId}
-          applicationId={configuredAppId}
           isEdit
           creating={createDashboards.isPending}
           error={createDashboards.error}
@@ -535,21 +435,13 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
               </MenuItem>
             ))}
           </Select>
-          <Stack direction="row" gap={1} sx={{ ml: 'auto' }}>
-            <Button variant="outlined" size="small" onClick={() => setEditingAppId(true)}>
-              Edit Application ID
-            </Button>
-            <Button variant="outlined" size="small" onClick={() => setEditingDashboard(true)}>
-              Edit dashboard credentials
-            </Button>
-          </Stack>
+          <Button variant="outlined" size="small" sx={{ ml: 'auto' }} onClick={() => setEditingDashboard(true)}>
+            Edit dashboard credentials
+          </Button>
         </Stack>
       )}
       {isComponent && (
         <Stack direction="row" gap={1} sx={{ mb: 3 }} justifyContent="flex-end">
-          <Button variant="outlined" size="small" onClick={() => setEditingAppId(true)}>
-            Edit Application ID
-          </Button>
           <Button variant="outlined" size="small" onClick={() => setEditingDashboard(true)}>
             Edit dashboard credentials
           </Button>

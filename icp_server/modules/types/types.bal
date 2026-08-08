@@ -2677,14 +2677,18 @@ public type SystemInfo record {|
     string version;
 |};
 
-// Reports whether an integration (project + component combo) is configured for
-// Moesif metrics. `configured` is true when a Collector Application ID has been
-// stored against the component; `applicationId` carries that id when present.
-// `dashboardsCreated` is true once the Moesif workspace/dashboard has been
-// successfully created for the integration.
-public type MoesifMetricsConfigStatus record {|
+// Reports whether the OpenSearch-backed observability metrics backend is
+// configured and reachable. The UI uses this to decide the default metrics
+// provider (falling back to Moesif when OpenSearch is not configured).
+public type ObservabilityMetricsConfigStatus record {|
     boolean configured;
-    string? applicationId?;
+|};
+
+// Reports whether an integration (project + component combo) has had its Moesif
+// metrics dashboard created/linked. `dashboardsCreated` is true once the Moesif
+// workspace/dashboard has been successfully discovered and recorded for the
+// integration; this single flag drives the UI (setup vs. embedded dashboard).
+public type MoesifMetricsConfigStatus record {|
     boolean dashboardsCreated;
 |};
 

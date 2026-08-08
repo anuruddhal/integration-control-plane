@@ -370,68 +370,6 @@ public isolated function getComponentByProjectAndHandler(string projectId, strin
     return mapToComponent(componentRecords[0]);
 }
 
-// Persist the Moesif Collector Application ID against a component (project + integration combo).
-// Upserts into component_moesif_config. Returns the number of affected rows.
-public isolated function updateComponentMoesifApplicationId(string componentId, string applicationId) returns int|error {
-    sql:ExecutionResult result;
-    if dbType == MSSQL {
-        result = check dbClient->execute(`
-            MERGE INTO component_moesif_config AS target
-            USING (VALUES (${componentId}, ${applicationId}))
-                   AS source (component_id, application_id)
-            ON (target.component_id = source.component_id)
-            WHEN MATCHED THEN
-                UPDATE SET application_id = source.application_id, updated_at = GETDATE()
-            WHEN NOT MATCHED THEN
-                INSERT (component_id, application_id)
-                VALUES (source.component_id, source.application_id);
-        `);
-    } else if dbType == ORACLE {
-        result = check dbClient->execute(`
-            MERGE INTO component_moesif_config target
-            USING (SELECT ${componentId} AS component_id, ${applicationId} AS application_id FROM dual) source
-            ON (target.component_id = source.component_id)
-            WHEN MATCHED THEN
-                UPDATE SET application_id = source.application_id, updated_at = CURRENT_TIMESTAMP
-            WHEN NOT MATCHED THEN
-                INSERT (component_id, application_id)
-                VALUES (source.component_id, source.application_id)
-        `);
-    } else if dbType == POSTGRESQL {
-        result = check dbClient->execute(`
-            INSERT INTO component_moesif_config (component_id, application_id)
-            VALUES (${componentId}, ${applicationId})
-            ON CONFLICT (component_id) DO UPDATE SET
-                application_id = EXCLUDED.application_id,
-                updated_at = CURRENT_TIMESTAMP
-        `);
-    } else {
-        result = check dbClient->execute(`
-            INSERT INTO component_moesif_config (component_id, application_id)
-            VALUES (${componentId}, ${applicationId})
-            ON DUPLICATE KEY UPDATE
-                application_id = VALUES(application_id),
-                updated_at = CURRENT_TIMESTAMP
-        `);
-    }
-    return result.affectedRowCount ?: 0;
-}
-
-// Retrieve the Moesif Collector Application ID stored against a component.
-// Returns () when the component is not configured for Moesif metrics.
-public isolated function getComponentMoesifApplicationId(string componentId) returns string?|error {
-    sql:ParameterizedQuery selectQuery =
-        `SELECT application_id FROM component_moesif_config WHERE component_id = ${componentId}`;
-    record {|string? application_id;|}|sql:Error result = dbClient->queryRow(selectQuery);
-    if result is sql:NoRowsError {
-        return ();
-    }
-    if result is sql:Error {
-        return result;
-    }
-    return result.application_id;
-}
-
 // Retrieve whether the Moesif metrics dashboards have been created for a
 // component. Returns false when the component does not exist or the flag is unset.
 public isolated function getComponentMoesifDashboardsCreated(string componentId) returns boolean|error {

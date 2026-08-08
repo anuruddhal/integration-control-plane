@@ -71,6 +71,19 @@ public type MoesifWorkspaceEmbed record {|
     string embedUrl;
 |};
 
+// Normalizes a pasted Moesif Management API key by stripping a leading
+// "Bearer " prefix (case-insensitive) if present, so users can paste the key
+// either with or without the prefix. The Bearer prefix is added back when the
+// Authorization header is constructed, so leaving it here would produce a
+// malformed "Bearer Bearer <key>" header and fail authentication.
+public isolated function stripBearerPrefix(string apiKey) returns string {
+    string trimmed = apiKey.trim();
+    if trimmed.toLowerAscii().startsWith("bearer ") {
+        return trimmed.substring("bearer ".length()).trim();
+    }
+    return trimmed;
+}
+
 // Discovers the id of the workspace embedded by the ICP metrics dashboard, by
 // listing the org's Moesif dashboards and locating the one the user imported from
 // the ICP metrics template (named MOESIF_DASHBOARD_NAME). The workspace id is

@@ -18,7 +18,7 @@
 import { Button, Card, CardContent, Checkbox, CircularProgress, Grid, IconButton, ListItemText, MenuItem, PageContent, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, Typography } from '@wso2/oxygen-ui';
 import { LineChart } from '@wso2/oxygen-ui-charts-react';
 import { BarChart3, RefreshCw } from '@wso2/oxygen-ui-icons-react';
-import { useCallback, useMemo, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import { useProjectByHandler, useComponentByHandler, useComponents, useEnvironments, useProjectRuntimes } from '../api/queries';
 import { useMetrics, type MetricEntry, type MetricsRequest } from '../api/metrics';
 import EmptyListing from '../components/EmptyListing';
@@ -29,6 +29,12 @@ export interface MetricsPageProps {
   scope: ProjectScope | ComponentScope;
   /** Backend selector control rendered in the page header (OpenSearch/Moesif toggle). */
   backendSelector?: JSX.Element;
+  /**
+   * Called when the OpenSearch metrics request reports the backend as
+   * unavailable at query time, letting the dispatcher fall back to Moesif and
+   * surface its setup instructions instead of a dead-end error.
+   */
+  onUnavailable?: () => void;
 }
 
 const TIME_RANGES: Record<string, number> = { 'Past 1 hour': 1, 'Past 6 hours': 6, 'Past 24 hours': 24, 'Past 7 days': 168 };
@@ -338,7 +344,7 @@ function StatCard({ title, value, color }: { title: string; value: string; color
   );
 }
 
-export default function MetricsOpenSearch({ scope, backendSelector }: MetricsPageProps): JSX.Element {
+export default function MetricsOpenSearch({ scope, backendSelector, onUnavailable }: MetricsPageProps): JSX.Element {
   const isComponent = hasComponent(scope);
   const { data: project, isLoading: loadingProject } = useProjectByHandler(scope.project);
   const projectId = project?.id ?? '';
@@ -414,6 +420,13 @@ export default function MetricsOpenSearch({ scope, backendSelector }: MetricsPag
 
   const inboundMetrics = allInboundMetrics;
   const filtersDisabled = isUnavailable(error);
+
+  // When the metrics request reports OpenSearch as unavailable, let the
+  // dispatcher fall back to Moesif so its setup instructions are shown instead
+  // of a dead-end error here.
+  useEffect(() => {
+    if (isUnavailable(error)) onUnavailable?.();
+  }, [error, onUnavailable]);
 
   const { requestsData, latencyData, totalRequests, errorCount, errorPercentage, latestP95 } = useMemo(() => aggregate(inboundMetrics), [inboundMetrics]);
   const apis = useMemo(() => deriveApis(inboundMetrics, runtimeComponentMap), [inboundMetrics, runtimeComponentMap]);

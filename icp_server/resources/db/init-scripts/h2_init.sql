@@ -127,7 +127,6 @@ CREATE INDEX idx_components_project_id ON components (project_id);
 -- component; removed automatically when the component is deleted.
 CREATE TABLE component_moesif_config (
     component_id CHAR(36) PRIMARY KEY,
-    application_id VARCHAR(512),
     dashboards_created BOOLEAN NOT NULL DEFAULT FALSE,
     workspace_id VARCHAR(512),
     management_key VARCHAR(4096),

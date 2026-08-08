@@ -16,9 +16,10 @@
  * under the License.
  */
 import { ToggleButton, ToggleButtonGroup } from '@wso2/oxygen-ui';
-import { useState, type JSX } from 'react';
+import { useCallback, useState, type JSX } from 'react';
 import { hasComponent, type ProjectScope, type ComponentScope } from '../nav';
 import { useProjectByHandler, useComponentByHandler } from '../api/queries';
+import { useObservabilityMetricsConfig } from '../api/metrics';
 import MetricsOpenSearch from './MetricsOpenSearch';
 import MetricsMoesif from './MetricsMoesif';
 
@@ -32,17 +33,45 @@ type MetricsBackend = 'opensearch' | 'moesif';
  * toggle control is passed down so each page renders it consistently in its
  * header row.
  *
+ * OpenSearch is the primary provider when it is configured and reachable: it
+ * stays the default selection and the first toggle option. When OpenSearch is
+ * not configured, Moesif becomes the default provider (so its setup
+ * instructions render directly on the landing page) and OpenSearch is shown as
+ * the secondary option.
+ *
  * Moesif metrics are currently only offered for BI runtimes. At component scope
  * the Moesif backend is only exposed when the component's technology is BI; at
  * project scope the toggle stays available and the Moesif page filters its
  * integration picker to BI integrations.
  */
 export default function Metrics(scope: ProjectScope | ComponentScope): JSX.Element {
-  const [backend, setBackend] = useState<MetricsBackend>('opensearch');
+  // Null until the user explicitly picks a backend, so the default can follow
+  // the OpenSearch availability check below without overriding a user choice.
+  const [selectedBackend, setSelectedBackend] = useState<MetricsBackend | null>(null);
 
   const isComponent = hasComponent(scope);
   const { data: project } = useProjectByHandler(scope.project);
   const { data: component, isLoading: componentLoading } = useComponentByHandler(project?.id ?? '', isComponent ? scope.component : undefined);
+
+  // One-way latch set when an OpenSearch metrics request reports the backend as
+  // unavailable at query time. The config probe can lag behind an outage (it is
+  // cached and may pass on a shallow health check while queries still fail), so
+  // this ensures we treat OpenSearch as not configured once a real query fails
+  // and surface the Moesif setup instructions instead of a dead-end error.
+  const [opensearchUnavailable, setOpensearchUnavailable] = useState(false);
+  const handleOpenSearchUnavailable = useCallback(() => setOpensearchUnavailable(true), []);
+
+  // Whether OpenSearch is configured/reachable. Assume configured until the
+  // check resolves to keep OpenSearch as the default and avoid a flip for the
+  // common (configured) case, but treat a query-time unavailability as not
+  // configured.
+  const { data: observabilityConfig } = useObservabilityMetricsConfig();
+  const opensearchConfigured = (observabilityConfig?.configured ?? true) && !opensearchUnavailable;
+
+  // When OpenSearch isn't configured, default to Moesif so its setup
+  // instructions surface on the landing page.
+  const defaultBackend: MetricsBackend = opensearchConfigured ? 'opensearch' : 'moesif';
+  const backend = selectedBackend ?? defaultBackend;
 
   // While the component query is still resolving we don't yet know its
   // technology, so keep the backend selector mounted to avoid it disappearing
@@ -55,6 +84,21 @@ export default function Metrics(scope: ProjectScope | ComponentScope): JSX.Eleme
   // needed.
   const effectiveBackend: MetricsBackend = moesifAllowed ? backend : 'opensearch';
 
+  // Order the toggle options so the default provider comes first: OpenSearch
+  // first when configured, otherwise Moesif first with OpenSearch as secondary.
+  // Passed as a keyed array (not a Fragment) so ToggleButtonGroup can clone each
+  // ToggleButton to apply its grouped styling.
+  const opensearchOption = (
+    <ToggleButton key="opensearch" value="opensearch" aria-label="OpenSearch metrics">
+      OpenSearch
+    </ToggleButton>
+  );
+  const moesifOption = (
+    <ToggleButton key="moesif" value="moesif" aria-label="Moesif metrics">
+      Moesif
+    </ToggleButton>
+  );
+
   const backendSelector =
     moesifAllowed || componentResolving ? (
       <ToggleButtonGroup
@@ -62,17 +106,12 @@ export default function Metrics(scope: ProjectScope | ComponentScope): JSX.Eleme
         exclusive
         size="small"
         onChange={(_e, value: MetricsBackend | null) => {
-          if (value) setBackend(value);
+          if (value) setSelectedBackend(value);
         }}
         aria-label="Metrics backend">
-        <ToggleButton value="opensearch" aria-label="OpenSearch metrics">
-          OpenSearch
-        </ToggleButton>
-        <ToggleButton value="moesif" aria-label="Moesif metrics">
-          Moesif
-        </ToggleButton>
+        {opensearchConfigured ? [opensearchOption, moesifOption] : [moesifOption, opensearchOption]}
       </ToggleButtonGroup>
     ) : undefined;
 
-  return effectiveBackend === 'moesif' ? <MetricsMoesif scope={scope} backendSelector={backendSelector} /> : <MetricsOpenSearch scope={scope} backendSelector={backendSelector} />;
+  return effectiveBackend === 'moesif' ? <MetricsMoesif scope={scope} backendSelector={backendSelector} /> : <MetricsOpenSearch scope={scope} backendSelector={backendSelector} onUnavailable={handleOpenSearchUnavailable} />;
 }
