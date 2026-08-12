@@ -251,7 +251,7 @@
       },
       "view": "segment",
       "funnel_query": {},
-      "urlQuery": "?seg[groups][0][field]=metadata.failure&seg[groups][0][func]=terms&seg[groups][0][by]=metric&seg[metrics][0][metricName]=count%28event_id%29&seg[metrics][0][customName]=Success%20Rate&seg[chartType]=pie"
+      "urlQuery": "?seg[groups][0][field]=metadata.failure&seg[groups][0][func]=terms&seg[groups][0][by]=metric&seg[metrics][0][metricName]=count%28event_id%29&seg[metrics][0][customName]=Failure%20Rate&seg[chartType]=pie"
     },
     {
       "_id": "69411745b7927846fd87377e",

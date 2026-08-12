@@ -31,7 +31,10 @@
 // https://mi.docs.wso2.com/en/latest/observe-and-manage/classic-observability-metrics/moesif-metrics/setup/
 
 // deployment.toml: enable Synapse statistics collection and the analytics log
-// publisher. Added under <MI_HOME>/conf/deployment.toml.
+// publisher. Added under <MI_HOME>/conf/deployment.toml. The `id` is a
+// placeholder that the user must replace with a unique identifier per MI server;
+// servers publishing to the same Moesif application must each use a distinct id
+// so their metrics can be told apart.
 export const MI_DEPLOYMENT_TOML_SNIPPET = `[mediation]
 flow.statistics.enable=true
 flow.statistics.capture_all=true
@@ -39,7 +42,7 @@ flow.statistics.capture_all=true
 [analytics]
 enabled=true
 publisher="log"
-id="wso2mi_server_1234"
+id="<UNIQUE_MI_SERVER_ID>"
 prefix="SYNAPSE_ANALYTICS_DATA"
 api_analytics.enabled=true
 proxy_service_analytics.enabled=true
@@ -82,6 +85,7 @@ const FLUENT_BIT_CONF = `[SERVICE]
     Log_Level    info
     Parsers_File metrics-parsers.conf
     HTTP_Server  On
+    Health_Check On
 
 [INPUT]
     Name              tail
@@ -230,11 +234,9 @@ const DOCKER_COMPOSE_YAML = `services:
     ports:
       - "2020:2020"
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:2020/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    # The fluent/fluent-bit image ships no shell/curl, so container health is
+    # monitored externally via Fluent Bit's built-in health endpoint
+    # (Health_Check On), e.g. GET http://<host>:2020/api/v1/health.
 
 volumes:
   fluent-bit-db:

@@ -126,7 +126,7 @@ function MoesifMiRuntimeInstructions({ applicationId }: { applicationId: string 
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         <br />
-        Add the following to <strong>&lt;MI_HOME&gt;/conf/deployment.toml</strong>:
+        Add the following to <strong>&lt;MI_HOME&gt;/conf/deployment.toml</strong>, replacing <strong>&lt;UNIQUE_MI_SERVER_ID&gt;</strong> with a unique id for this server (each MI server publishing to the same Moesif application must use a distinct id):
       </Typography>
       <CodeBoxWithCopy code={MI_DEPLOYMENT_TOML_SNIPPET} />
 

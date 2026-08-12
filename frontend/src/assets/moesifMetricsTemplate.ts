@@ -21,7 +21,7 @@ import metricsTemplate from './moesifMetricsTemplate.json';
 // Moesif dashboards import template for the ICP runtime metrics chart when the
 // linked integration is a Ballerina Integration (BI). The user downloads this and
 // imports it into Moesif (Dashboards → Import), which creates the "Application
-// Metrics" dashboard and its "Response time metrics" workspace. The workspace must
+// Metrics" dashboard and its "Total Request Summary" workspace. The workspace must
 // then be set to Public sharing so the backend can mint embed access tokens for it.
 // The JSON payload is kept as a separate asset and imported here so the download
 // filename and callers stay consistent with the MI template module.
