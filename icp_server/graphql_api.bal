@@ -2777,7 +2777,8 @@ service /graphql on graphqlListener {
         // Management API (the user imports the template + sets it Public first).
         // The Collector Application ID is used only transiently here for
         // discovery; it is not persisted against the integration.
-        string|error workspaceId = discoverMoesifMetricsWorkspaceId(trimmedToken, trimmedAppId);
+        string|error workspaceId = discoverMoesifMetricsWorkspaceId(trimmedToken, trimmedAppId,
+                isMI = component.componentType == types:MI);
         if workspaceId is error {
             log:printError("Failed to link Moesif dashboards", 'error = workspaceId, componentId = componentId);
             return error(string `Failed to link Moesif dashboards: ${workspaceId.message()}`);

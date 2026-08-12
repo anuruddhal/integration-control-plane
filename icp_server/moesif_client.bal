@@ -51,7 +51,14 @@ const string MOESIF_DASHBOARD_NAME = "Application Metrics";
 
 // Name of the workspace inside the imported dashboard. Used as a fallback lookup
 // when the dashboard's workspace link cannot be resolved directly.
-const string MOESIF_WORKSPACE_NAME = "Response time metrics";
+const string MOESIF_WORKSPACE_NAME = "Total Request Summary";
+
+// Name of the workspace embedded for Micro Integrator (MI) integrations. The MI
+// template imports the Synapse observability dashboards (Overall, APIs, Proxy
+// Services, ...); ICP embeds a single workspace, so discovery targets this named
+// chart from the "Overall" dashboard by name (its name is unique across the
+// template).
+const string MOESIF_MI_WORKSPACE_NAME = "Overall Message Count Over Time";
 
 // Page size for the "list dashboards" call used to discover the imported
 // dashboard. The Moesif list endpoint requires a `take` parameter; this is set
@@ -95,13 +102,26 @@ public isolated function stripBearerPrefix(string apiKey) returns string {
 // Moesif UI instead. The `moesifAppId` is used in the `app_id` query parameter.
 // Returns the workspace id, or an error if the dashboard/workspace can't be found
 // (usually because the template hasn't been imported yet).
-public isolated function discoverMoesifMetricsWorkspaceId(string managementApiKey, string moesifAppId)
+public isolated function discoverMoesifMetricsWorkspaceId(string managementApiKey, string moesifAppId, boolean isMI = false)
         returns string|error {
     map<string|string[]> headers = {"Authorization": string `Bearer ${managementApiKey}`};
 
     string encodedAppId = check url:encode(moesifAppId, "UTF-8");
     json dashboards = check getFromMoesif(moesifClient,
             string `/~/dashboards?app_id=${encodedAppId}&take=${MOESIF_DASHBOARD_LIST_TAKE}`, headers, "dashboards");
+
+    if isMI {
+        // The MI template's "Overall" dashboard holds many chart workspaces, so
+        // there is no single dashboard-to-workspace link to follow. Instead,
+        // target the uniquely-named chart ICP embeds for MI directly by name.
+        string? miWorkspaceId = findMoesifIdByName(dashboards, MOESIF_MI_WORKSPACE_NAME);
+        if miWorkspaceId is string {
+            log:printInfo("Discovered Moesif MI metrics workspace", workspaceId = miWorkspaceId);
+            return miWorkspaceId;
+        }
+        return error(string `Could not find the imported Moesif "${MOESIF_MI_WORKSPACE_NAME}" workspace for app_id ${moesifAppId}. ` +
+                string `Import the MI metrics template into Moesif and set the "${MOESIF_MI_WORKSPACE_NAME}" workspace sharing to Public, then try again.`);
+    }
 
     string? workspaceId = findMoesifWorkspaceIdForDashboard(dashboards, MOESIF_DASHBOARD_NAME);
     if workspaceId is () {

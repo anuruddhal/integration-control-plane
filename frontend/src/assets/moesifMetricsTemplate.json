@@ -1,0 +1,357 @@
+{
+  "dashboards": [
+    {
+      "_id": "6a75da0487769f027193c0dc",
+      "name": "Application Metrics",
+      "dashboard_ids": [],
+      "workspace_ids": [
+        [
+          "6a7af59c87769f027193ea87",
+          "6a75da044006641071c07b9a",
+          "6a7aed5c87769f027193ea3c"
+        ]
+      ],
+      "parent": null,
+      "sort_order": 1
+    }
+  ],
+  "workspaces": [
+    {
+      "_id": "6a7af59c87769f027193ea87",
+      "type": "events",
+      "name": "Total Request Summary",
+      "args": "",
+      "es_query": {
+        "post_filter": {
+          "bool": {
+            "must": [
+              {
+                "terms": {
+                  "metadata.metric_name.raw": [
+                    "requests_total"
+                  ]
+                }
+              },
+              {
+                "bool": {
+                  "must_not": {
+                    "terms": {
+                      "metadata.metric_tags.error.raw": [
+                        "true"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "bool": {
+                  "must_not": {
+                    "terms": {
+                      "metadata.metric_tags.entrypoint_function_module.raw": [
+                        "wso2/icp.runtime.bridge:0.1.9"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "bool": {
+                  "must_not": {
+                    "terms": {
+                      "metadata.metric_tags.entrypoint_function_name.raw": [
+                        "interceptResponseError"
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "size": 0,
+        "aggs": {
+          "entTmSrs": {
+            "filter": {
+              "bool": {
+                "must": [
+                  {
+                    "terms": {
+                      "metadata.metric_name.raw": [
+                        "requests_total"
+                      ]
+                    }
+                  },
+                  {
+                    "bool": {
+                      "must_not": {
+                        "terms": {
+                          "metadata.metric_tags.error.raw": [
+                            "true"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "bool": {
+                      "must_not": {
+                        "terms": {
+                          "metadata.metric_tags.entrypoint_function_module.raw": [
+                            "wso2/icp.runtime.bridge:0.1.9"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "bool": {
+                      "must_not": {
+                        "terms": {
+                          "metadata.metric_tags.entrypoint_function_name.raw": [
+                            "interceptResponseError"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "aggs": {
+              "metadata.metric_tags.entrypoint_function_name.raw": {
+                "terms": {
+                  "field": "metadata.metric_tags.entrypoint_function_name.raw",
+                  "size": "5",
+                  "min_doc_count": 1,
+                  "order": {
+                    "metadata__metric_value|weighted_sum": "desc"
+                  },
+                  "missing": "(none)"
+                },
+                "aggs": {
+                  "request.time": {
+                    "date_histogram": {
+                      "field": "request.time",
+                      "interval": "1s",
+                      "time_zone": "Asia/Colombo"
+                    },
+                    "aggs": {
+                      "metadata__metric_value|weighted_sum": {
+                        "sum": {
+                          "script": {
+                            "field_script": "[metadata.metric_value]*[weight|1]"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "metadata__metric_value|weighted_sum": {
+                    "sum": {
+                      "script": {
+                        "field_script": "[metadata.metric_value]*[weight|1]"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "dateRange": {
+        "from": "-1h",
+        "to": "now"
+      },
+      "view": "time",
+      "funnel_query": {},
+      "urlQuery": "?evtcf[filtersGroups][0][filters][0][field]=metadata.metric_name.raw&evtcf[filtersGroups][0][filters][0][op]=contains&evtcf[filtersGroups][0][filters][0][value][0]=requests_total&evtcf[filtersGroups][0][filters][1][field]=metadata.metric_tags.error.raw&evtcf[filtersGroups][0][filters][1][op]=not_contain&evtcf[filtersGroups][0][filters][1][value][0]=true&evtcf[filtersGroups][0][filters][2][field]=metadata.metric_tags.entrypoint_function_module.raw&evtcf[filtersGroups][0][filters][2][op]=not_contain&evtcf[filtersGroups][0][filters][2][value][0]=wso2%2Ficp.runtime.bridge%3A0.1.9&evtcf[filtersGroups][0][filters][3][field]=metadata.metric_tags.entrypoint_function_name.raw&evtcf[filtersGroups][0][filters][3][op]=not_contain&evtcf[filtersGroups][0][filters][3][value][0]=interceptResponseError&evt_ts[groups][0][field]=metadata.metric_tags.entrypoint_function_name.raw&evt_ts[groups][0][func]=terms&evt_ts[groups][0][buckets]=5&evt_ts[groups][0][by]=metric&evt_ts[metrics][0][id]=dde52dcf&evt_ts[metrics][0][field]=metadata.metric_value&evt_ts[metrics][0][func]=weighted_sum&evt_ts[interval]=1s&evt_ts[logScale]=true&evt_ts[stacked]=true"
+    },
+    {
+      "_id": "6a75da044006641071c07b9a",
+      "type": "events",
+      "name": "Response time metrics",
+      "args": "",
+      "es_query": {
+        "post_filter": {
+          "terms": {
+            "event_type.raw": [
+              "user_action"
+            ]
+          }
+        },
+        "size": 50,
+        "_source": [
+          "id",
+          "_id",
+          "org_id",
+          "app_id",
+          "user_id",
+          "user.created",
+          "company_id",
+          "company.created",
+          "anonymous_id",
+          "identified_user_id",
+          "event_type",
+          "action_name",
+          "weight",
+          "direction",
+          "duration_ms",
+          "request.time",
+          "request.uri",
+          "request.route",
+          "request.verb",
+          "request.ip_address",
+          "request.user_agent.name",
+          "response.status",
+          "response.time",
+          "insights.anomaly",
+          "insights.event_anomaly",
+          "request.graphql.operation_name",
+          "request.graphql.definitions",
+          "jsonrpc.request.method",
+          "jsonrpc.request.params.call__method",
+          "jsonrpc.response.error",
+          "vtype_ids",
+          "blocked_by",
+          "span.id",
+          "span.status",
+          "span.parent_id",
+          "trace_id",
+          "log.severity",
+          "resource",
+          "metadata.timestamp",
+          "metadata.metric_type",
+          "metadata.metric_name",
+          "metadata.metric_value"
+        ],
+        "sort": [
+          {
+            "request.time": {
+              "order": "desc",
+              "unmapped_type": "long"
+            }
+          }
+        ]
+      },
+      "dateRange": {
+        "from": "-7d",
+        "to": "now"
+      },
+      "view": "events",
+      "funnel_query": {},
+      "urlQuery": "?evtcf[filtersGroups][0][filters][0][field]=event_type.raw&evtcf[filtersGroups][0][filters][0][op]=contains&evtcf[filtersGroups][0][filters][0][value][0]=user_action&shown_fields[0]=metadata.timestamp&shown_fields[1]=metadata.metric_type&shown_fields[2]=metadata.metric_name&shown_fields[3]=metadata.metric_value"
+    },
+    {
+      "_id": "6a7aed5c87769f027193ea3c",
+      "type": "events",
+      "name": "Total Request Count",
+      "args": "",
+      "es_query": {
+        "post_filter": {
+          "bool": {
+            "must": [
+              {
+                "terms": {
+                  "metadata.metric_name.raw": [
+                    "requests_total"
+                  ]
+                }
+              },
+              {
+                "bool": {
+                  "must_not": {
+                    "terms": {
+                      "metadata.metric_tags.error.raw": [
+                        "true"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "bool": {
+                  "must_not": {
+                    "terms": {
+                      "metadata.metric_tags.entrypoint_function_module.raw": [
+                        "wso2/icp.runtime.bridge:0.1.9"
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "size": 0,
+        "aggs": {
+          "entTmSrs": {
+            "filter": {
+              "bool": {
+                "must": [
+                  {
+                    "terms": {
+                      "metadata.metric_name.raw": [
+                        "requests_total"
+                      ]
+                    }
+                  },
+                  {
+                    "bool": {
+                      "must_not": {
+                        "terms": {
+                          "metadata.metric_tags.error.raw": [
+                            "true"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "bool": {
+                      "must_not": {
+                        "terms": {
+                          "metadata.metric_tags.entrypoint_function_module.raw": [
+                            "wso2/icp.runtime.bridge:0.1.9"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "aggs": {
+              "request.time": {
+                "date_histogram": {
+                  "field": "request.time",
+                  "interval": "1s",
+                  "time_zone": "Asia/Colombo"
+                },
+                "aggs": {
+                  "metadata__metric_value|weighted_avg": {
+                    "weighted_avg": {
+                      "value": {
+                        "field": "metadata.metric_value"
+                      },
+                      "weight": {
+                        "field": "weight",
+                        "missing": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "dateRange": {
+        "from": "-1h",
+        "to": "now"
+      },
+      "view": "time",
+      "funnel_query": {},
+      "urlQuery": "?evtcf[filtersGroups][0][filters][0][field]=metadata.metric_name.raw&evtcf[filtersGroups][0][filters][0][op]=contains&evtcf[filtersGroups][0][filters][0][value][0]=requests_total&evtcf[filtersGroups][0][filters][1][field]=metadata.metric_tags.error.raw&evtcf[filtersGroups][0][filters][1][op]=not_contain&evtcf[filtersGroups][0][filters][1][value][0]=true&evtcf[filtersGroups][0][filters][2][field]=metadata.metric_tags.entrypoint_function_module.raw&evtcf[filtersGroups][0][filters][2][op]=not_contain&evtcf[filtersGroups][0][filters][2][value][0]=wso2%2Ficp.runtime.bridge%3A0.1.9&evt_ts[metrics][0][field]=metadata.metric_value&evt_ts[metrics][0][func]=weighted_avg&evt_ts[interval]=1s"
+    }
+  ]
+}
