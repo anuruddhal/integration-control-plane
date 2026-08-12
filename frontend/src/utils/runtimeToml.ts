@@ -46,7 +46,7 @@ export function runtimeImports(workflowMgt: boolean): string {
 }
 
 /**
- * TOML the "Enable Workflow Management" toggle adds to a BI runtime: the workflow engine block,
+ * TOML a workflow-enabled BI runtime carries: the workflow engine block,
  * then the management API block keyed by the org secret. `integration` becomes the workflow task
  * queue and should be whatever the `integration` key of the bridge config above holds, so the two
  * always agree — the real handle on the component runtime page, the same fill-in placeholder on the
