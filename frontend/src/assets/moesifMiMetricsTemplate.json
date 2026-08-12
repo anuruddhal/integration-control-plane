@@ -5,25 +5,10 @@
       "name": "Overall",
       "dashboard_ids": [],
       "workspace_ids": [
-        [
-          "6943e426d3d2c00ae55ac962",
-          "6941174287aa28566b8b97f1",
-          "69411744b7927846fd87377b"
-        ],
-        [
-          "69411744b7927846fd873779",
-          "6941174587aa28566b8b97fc",
-          "6941174387aa28566b8b97f8"
-        ],
-        [
-          "69411745b7927846fd87377e",
-          "69411746d3d2c00ae559a7a7",
-          "6941174687aa28566b8b97ff"
-        ],
-        [
-          "69411747d3d2c00ae559a7aa",
-          "69411747b7927846fd873781"
-        ]
+        ["6943e426d3d2c00ae55ac962", "6941174287aa28566b8b97f1", "69411744b7927846fd87377b"],
+        ["69411744b7927846fd873779", "6941174587aa28566b8b97fc", "6941174387aa28566b8b97f8"],
+        ["69411745b7927846fd87377e", "69411746d3d2c00ae559a7a7", "6941174687aa28566b8b97ff"],
+        ["69411747d3d2c00ae559a7aa", "69411747b7927846fd873781"]
       ],
       "parent": null,
       "sort_order": 5
@@ -116,9 +101,7 @@
       "es_query": {
         "post_filter": {
           "terms": {
-            "metadata.faultResponse": [
-              "true"
-            ]
+            "metadata.faultResponse": ["true"]
           }
         },
         "size": 0,
@@ -126,9 +109,7 @@
           "seg": {
             "filter": {
               "terms": {
-                "metadata.faultResponse": [
-                  "true"
-                ]
+                "metadata.faultResponse": ["true"]
               }
             },
             "aggs": {
@@ -196,9 +177,7 @@
       "es_query": {
         "post_filter": {
           "terms": {
-            "metadata.failure": [
-              "false"
-            ]
+            "metadata.failure": ["false"]
           }
         },
         "size": 0,
@@ -206,9 +185,7 @@
           "seg": {
             "filter": {
               "terms": {
-                "metadata.failure": [
-                  "false"
-                ]
+                "metadata.failure": ["false"]
               }
             },
             "aggs": {
@@ -515,9 +492,7 @@
       "es_query": {
         "post_filter": {
           "terms": {
-            "metadata.entityType.raw": [
-              "Endpoint"
-            ]
+            "metadata.entityType.raw": ["Endpoint"]
           }
         },
         "size": 0,
@@ -525,9 +500,7 @@
           "seg": {
             "filter": {
               "terms": {
-                "metadata.entityType.raw": [
-                  "Endpoint"
-                ]
+                "metadata.entityType.raw": ["Endpoint"]
               }
             },
             "aggs": {
@@ -574,9 +547,7 @@
       "es_query": {
         "post_filter": {
           "terms": {
-            "metadata.entityType.raw": [
-              "InboundEndpoint"
-            ]
+            "metadata.entityType.raw": ["InboundEndpoint"]
           }
         },
         "size": 0,
@@ -584,9 +555,7 @@
           "seg": {
             "filter": {
               "terms": {
-                "metadata.entityType.raw": [
-                  "InboundEndpoint"
-                ]
+                "metadata.entityType.raw": ["InboundEndpoint"]
               }
             },
             "aggs": {

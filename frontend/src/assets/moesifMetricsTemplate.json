@@ -4,13 +4,7 @@
       "_id": "6a75da0487769f027193c0dc",
       "name": "Application Metrics",
       "dashboard_ids": [],
-      "workspace_ids": [
-        [
-          "6a7af59c87769f027193ea87",
-          "6a75da044006641071c07b9a",
-          "6a7aed5c87769f027193ea3c"
-        ]
-      ],
+      "workspace_ids": [["6a7af59c87769f027193ea87", "6a75da044006641071c07b9a", "6a7aed5c87769f027193ea3c"]],
       "parent": null,
       "sort_order": 1
     }
@@ -27,18 +21,14 @@
             "must": [
               {
                 "terms": {
-                  "metadata.metric_name.raw": [
-                    "requests_total"
-                  ]
+                  "metadata.metric_name.raw": ["requests_total"]
                 }
               },
               {
                 "bool": {
                   "must_not": {
                     "terms": {
-                      "metadata.metric_tags.error.raw": [
-                        "true"
-                      ]
+                      "metadata.metric_tags.error.raw": ["true"]
                     }
                   }
                 }
@@ -47,9 +37,7 @@
                 "bool": {
                   "must_not": {
                     "terms": {
-                      "metadata.metric_tags.entrypoint_function_module.raw": [
-                        "wso2/icp.runtime.bridge:0.1.9"
-                      ]
+                      "metadata.metric_tags.entrypoint_function_module.raw": ["wso2/icp.runtime.bridge:0.1.9"]
                     }
                   }
                 }
@@ -58,9 +46,7 @@
                 "bool": {
                   "must_not": {
                     "terms": {
-                      "metadata.metric_tags.entrypoint_function_name.raw": [
-                        "interceptResponseError"
-                      ]
+                      "metadata.metric_tags.entrypoint_function_name.raw": ["interceptResponseError"]
                     }
                   }
                 }
@@ -76,18 +62,14 @@
                 "must": [
                   {
                     "terms": {
-                      "metadata.metric_name.raw": [
-                        "requests_total"
-                      ]
+                      "metadata.metric_name.raw": ["requests_total"]
                     }
                   },
                   {
                     "bool": {
                       "must_not": {
                         "terms": {
-                          "metadata.metric_tags.error.raw": [
-                            "true"
-                          ]
+                          "metadata.metric_tags.error.raw": ["true"]
                         }
                       }
                     }
@@ -96,9 +78,7 @@
                     "bool": {
                       "must_not": {
                         "terms": {
-                          "metadata.metric_tags.entrypoint_function_module.raw": [
-                            "wso2/icp.runtime.bridge:0.1.9"
-                          ]
+                          "metadata.metric_tags.entrypoint_function_module.raw": ["wso2/icp.runtime.bridge:0.1.9"]
                         }
                       }
                     }
@@ -107,9 +87,7 @@
                     "bool": {
                       "must_not": {
                         "terms": {
-                          "metadata.metric_tags.entrypoint_function_name.raw": [
-                            "interceptResponseError"
-                          ]
+                          "metadata.metric_tags.entrypoint_function_name.raw": ["interceptResponseError"]
                         }
                       }
                     }
@@ -174,9 +152,7 @@
       "es_query": {
         "post_filter": {
           "terms": {
-            "event_type.raw": [
-              "user_action"
-            ]
+            "event_type.raw": ["user_action"]
           }
         },
         "size": 50,
@@ -252,18 +228,14 @@
             "must": [
               {
                 "terms": {
-                  "metadata.metric_name.raw": [
-                    "requests_total"
-                  ]
+                  "metadata.metric_name.raw": ["requests_total"]
                 }
               },
               {
                 "bool": {
                   "must_not": {
                     "terms": {
-                      "metadata.metric_tags.error.raw": [
-                        "true"
-                      ]
+                      "metadata.metric_tags.error.raw": ["true"]
                     }
                   }
                 }
@@ -272,9 +244,7 @@
                 "bool": {
                   "must_not": {
                     "terms": {
-                      "metadata.metric_tags.entrypoint_function_module.raw": [
-                        "wso2/icp.runtime.bridge:0.1.9"
-                      ]
+                      "metadata.metric_tags.entrypoint_function_module.raw": ["wso2/icp.runtime.bridge:0.1.9"]
                     }
                   }
                 }
@@ -290,18 +260,14 @@
                 "must": [
                   {
                     "terms": {
-                      "metadata.metric_name.raw": [
-                        "requests_total"
-                      ]
+                      "metadata.metric_name.raw": ["requests_total"]
                     }
                   },
                   {
                     "bool": {
                       "must_not": {
                         "terms": {
-                          "metadata.metric_tags.error.raw": [
-                            "true"
-                          ]
+                          "metadata.metric_tags.error.raw": ["true"]
                         }
                       }
                     }
@@ -310,9 +276,7 @@
                     "bool": {
                       "must_not": {
                         "terms": {
-                          "metadata.metric_tags.entrypoint_function_module.raw": [
-                            "wso2/icp.runtime.bridge:0.1.9"
-                          ]
+                          "metadata.metric_tags.entrypoint_function_module.raw": ["wso2/icp.runtime.bridge:0.1.9"]
                         }
                       }
                     }
