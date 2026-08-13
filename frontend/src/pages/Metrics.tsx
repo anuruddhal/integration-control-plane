@@ -39,10 +39,10 @@ type MetricsBackend = 'opensearch' | 'moesif';
  * instructions render directly on the landing page) and OpenSearch is shown as
  * the secondary option.
  *
- * Moesif metrics are currently only offered for BI runtimes. At component scope
- * the Moesif backend is only exposed when the component's technology is BI; at
+ * Moesif metrics are offered for BI and MI runtimes. At component scope the
+ * Moesif backend is only exposed when the component's technology is BI or MI; at
  * project scope the toggle stays available and the Moesif page filters its
- * integration picker to BI integrations.
+ * integration picker to BI/MI integrations.
  */
 export default function Metrics(scope: ProjectScope | ComponentScope): JSX.Element {
   // Null until the user explicitly picks a backend, so the default can follow
@@ -77,17 +77,20 @@ export default function Metrics(scope: ProjectScope | ComponentScope): JSX.Eleme
   // technology, so keep the backend selector mounted to avoid it disappearing
   // during loading.
   const componentResolving = isComponent && componentLoading;
-  const moesifAllowed = isComponent ? component?.componentType === 'BI' : true;
+  const moesifAllowed = isComponent ? component?.componentType === 'BI' || component?.componentType === 'MI' : true;
 
   // Derive the effective backend, falling back to OpenSearch whenever Moesif is
-  // unavailable (e.g. a non-BI component) so no corrective state update is
-  // needed.
+  // unavailable (e.g. an unsupported component technology) so no corrective
+  // state update is needed.
   const effectiveBackend: MetricsBackend = moesifAllowed ? backend : 'opensearch';
 
   // Order the toggle options so the default provider comes first: OpenSearch
   // first when configured, otherwise Moesif first with OpenSearch as secondary.
   // Passed as a keyed array (not a Fragment) so ToggleButtonGroup can clone each
-  // ToggleButton to apply its grouped styling.
+  // ToggleButton to apply its grouped styling. Each page decides whether to
+  // actually render this control: it is only shown when BOTH backends are
+  // configured for the targeted integration (OpenSearch globally + that
+  // integration's Moesif dashboard), so a single-backend setup has no toggle.
   const opensearchOption = (
     <ToggleButton key="opensearch" value="opensearch" aria-label="OpenSearch metrics">
       OpenSearch
@@ -113,5 +116,9 @@ export default function Metrics(scope: ProjectScope | ComponentScope): JSX.Eleme
       </ToggleButtonGroup>
     ) : undefined;
 
-  return effectiveBackend === 'moesif' ? <MetricsMoesif scope={scope} backendSelector={backendSelector} /> : <MetricsOpenSearch scope={scope} backendSelector={backendSelector} onUnavailable={handleOpenSearchUnavailable} />;
+  return effectiveBackend === 'moesif' ? (
+    <MetricsMoesif scope={scope} backendSelector={backendSelector} opensearchConfigured={opensearchConfigured} />
+  ) : (
+    <MetricsOpenSearch scope={scope} backendSelector={backendSelector} opensearchConfigured={opensearchConfigured} onUnavailable={handleOpenSearchUnavailable} />
+  );
 }

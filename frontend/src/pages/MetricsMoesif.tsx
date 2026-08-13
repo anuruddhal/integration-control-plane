@@ -21,6 +21,8 @@ import { useState, type JSX } from 'react';
 import { useProjectByHandler, useComponentByHandler, useComponents, useEnvironments } from '../api/queries';
 import { useMoesifMetricsConfig, useCreateMoesifDashboards, useMoesifDashboardEmbed, useMoesifApplications } from '../api/metricsMoesif';
 import { downloadMoesifMetricsTemplate, MOESIF_METRICS_WORKSPACE_NAME } from '../assets/moesifMetricsTemplate';
+import { downloadMoesifMiMetricsTemplate, MOESIF_MI_DASHBOARD_NAMES, MOESIF_MI_METRICS_WORKSPACE_NAME } from '../assets/moesifMiMetricsTemplate';
+import { MI_DEPLOYMENT_TOML_SNIPPET, MI_LOG4J2_SNIPPET, miFluentBitEnv, downloadMoesifMiFluentBitFiles } from '../assets/moesifMiMetrics';
 import CodeBoxWithCopy from '../components/CodeBoxWithCopy';
 import EmptyListing from '../components/EmptyListing';
 import NotFound from '../components/NotFound';
@@ -42,6 +44,17 @@ const MOESIF_MAIN_BAL_IMPORT = 'import ballerinax/moesif as _;';
 // The leading "Moesif" is rendered in bold at the call site.
 const MOESIF_DESCRIPTION = ' (a WSO2 company) allows you to observe your service integrations with real-time monitoring, behavioral analytics, and AI-powered insights into API adoption and usage.';
 
+// Documentation guide for setting up Moesif-backed observability, referenced from
+// the Moesif intro on the landing/config view.
+const MOESIF_SETUP_GUIDE = 'https://wso2.com/integration-platform/docs/manage/icp/observability-setup';
+
+// Documentation guides for setting up OpenSearch-backed observability, offered
+// as an alternative when nothing is configured yet. The guide differs by runtime
+// technology: MI (Micro Integrator) has its own docs, while other runtimes (BI)
+// use the general ICP observability setup guide.
+const OPENSEARCH_SETUP_GUIDE_DEFAULT = 'https://wso2.com/integration-platform/docs/manage/icp/observability-setup';
+const OPENSEARCH_SETUP_GUIDE_MI = 'https://mi.docs.wso2.com/en/latest/install-and-setup/install/adding-observability-for-icp/';
+
 // Build the metrics-only Config.toml snippet for publishing metrics to Moesif.
 // Based on https://ballerina.io/learn/supported-observability-tools-and-platforms/moesif/
 function moesifConfigToml(applicationId: string): string {
@@ -57,8 +70,12 @@ metricsReporterClientTimeout = 10000        # Optional. Default: 10000 (ms)`;
 }
 
 // Runtime configuration instructions for publishing metrics to Moesif. Rendered
-// inline (directly on the page) so it can be shown without a popup.
-function MoesifInstructionsContent({ applicationId }: { applicationId: string }): JSX.Element {
+// inline (directly on the page) so it can be shown without a popup. The
+// instructions differ by runtime technology: BI (Ballerina) has a built-in
+// Moesif reporter configured via main.bal + Config.toml, whereas MI (Micro
+// Integrator) publishes analytics to a log that a Fluent Bit sidecar ships to
+// Moesif.
+function MoesifInstructionsContent({ applicationId, isMI }: { applicationId: string; isMI?: boolean }): JSX.Element {
   return (
     <>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -69,6 +86,20 @@ function MoesifInstructionsContent({ applicationId }: { applicationId: string })
         account, create an application for the integration you want to track and copy its <strong>Collector Application ID</strong>. Otherwise, sign up for Moesif with your organization and application details to obtain a Collector Application ID.
       </Typography>
 
+      {isMI ? <MoesifMiRuntimeInstructions applicationId={applicationId} /> : <MoesifBiRuntimeInstructions applicationId={applicationId} />}
+
+      <Alert severity="info" sx={{ mt: 2 }}>
+        After applying this configuration you need to <strong>restart the runtime</strong> for it to start publishing metrics to Moesif.
+      </Alert>
+    </>
+  );
+}
+
+// BI (Ballerina) runtime configuration: add the Moesif import to main.bal and
+// the observability config to Config.toml.
+function MoesifBiRuntimeInstructions({ applicationId }: { applicationId: string }): JSX.Element {
+  return (
+    <>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         Add the following import to your runtime's <strong>main.bal</strong> file:
       </Typography>
@@ -78,10 +109,51 @@ function MoesifInstructionsContent({ applicationId }: { applicationId: string })
         Add the following configuration to your runtime's <strong>Config.toml</strong> file:
       </Typography>
       <CodeBoxWithCopy code={moesifConfigToml(applicationId)} />
+    </>
+  );
+}
 
-      <Alert severity="info" sx={{ mt: 2 }}>
-        After applying this configuration you need to <strong>restart the runtime</strong> for it to start publishing metrics to Moesif.
-      </Alert>
+// MI (Micro Integrator) runtime configuration. MI has no built-in Moesif
+// reporter, so it writes analytics to a log which a Fluent Bit sidecar tails and
+// forwards to Moesif. Three parts: enable statistics/analytics in
+// deployment.toml, add the analytics appender/logger to log4j2.properties, then
+// run the Fluent Bit sidecar with the Collector Application ID.
+function MoesifMiRuntimeInstructions({ applicationId }: { applicationId: string }): JSX.Element {
+  return (
+    <>
+      <Typography variant="subtitle2" sx={{ mt: 2 }}>
+        1. Enable statistics and analytics
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        <br />
+        Add the following to <strong>&lt;MI_HOME&gt;/conf/deployment.toml</strong>, replacing <strong>&lt;UNIQUE_MI_SERVER_ID&gt;</strong> with a unique id for this server (each MI server publishing to the same Moesif application must use a distinct id):
+      </Typography>
+      <CodeBoxWithCopy code={MI_DEPLOYMENT_TOML_SNIPPET} />
+
+      <Typography variant="subtitle2" sx={{ mt: 2 }}>
+        2. Route analytics to a log file
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        <br />
+        Update <strong>&lt;MI_HOME&gt;/conf/log4j2.properties</strong> as described below (add the appender/logger names to the existing <strong>appenders</strong> and <strong>loggers</strong> lists, then add the definitions):
+      </Typography>
+      <CodeBoxWithCopy code={MI_LOG4J2_SNIPPET} />
+
+      <Typography variant="subtitle2" sx={{ mt: 2 }}>
+        3. Run the Fluent Bit sidecar
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        <br />
+        Download the Fluent Bit configuration bundle and unzip it first. In the generated <strong>.env</strong> file, set <strong>MI_HOME</strong> to your MI installation path. Set the <strong>Collector Application ID</strong> to the one you obtained from
+        Moesif. Then, run <strong>docker compose up -d</strong> to start Fluent Bit to publish metrics to Moesif.
+      </Typography>
+      <Button size="small" variant="outlined" startIcon={<Download size={14} />} onClick={() => downloadMoesifMiFluentBitFiles(applicationId)} sx={{ mb: 1, alignSelf: 'flex-start', py: 0.25, px: 1, fontSize: 12 }}>
+        Download Fluent Bit config
+      </Button>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1, mt: 1 }}>
+        The generated <strong>.env</strong> looks like this:
+      </Typography>
+      <CodeBoxWithCopy code={miFluentBitEnv(applicationId)} />
     </>
   );
 }
@@ -108,6 +180,7 @@ function MoesifDashboardCard({
   creating,
   error,
   isEdit,
+  isMI,
   onCancel,
 }: {
   componentId: string;
@@ -115,6 +188,7 @@ function MoesifDashboardCard({
   creating: boolean;
   error: unknown;
   isEdit?: boolean;
+  isMI?: boolean;
   onCancel?: () => void;
 }): JSX.Element {
   const [token, setToken] = useState('');
@@ -157,7 +231,7 @@ function MoesifDashboardCard({
       )}
 
       {/* Step 1: configure the runtime to publish metrics to Moesif. */}
-      <MoesifInstructionsContent applicationId={effectiveAppId} />
+      <MoesifInstructionsContent applicationId={effectiveAppId} isMI={isMI} />
 
       <Divider sx={{ my: 3 }} />
 
@@ -171,18 +245,28 @@ function MoesifDashboardCard({
       <Stack component="ol" sx={{ pl: 2.5, mb: 2, '& li': { mb: 1 } }} gap={0.5}>
         <li>
           <Typography variant="body2">Download the metrics dashboard template.</Typography>
-          <Button size="small" variant="outlined" startIcon={<Download size={16} />} onClick={downloadMoesifMetricsTemplate} sx={{ mt: 1 }}>
+          <Button size="small" variant="outlined" startIcon={<Download size={16} />} onClick={isMI ? downloadMoesifMiMetricsTemplate : downloadMoesifMetricsTemplate} sx={{ mt: 1 }}>
             Download template
           </Button>
         </li>
         <li>
           <Typography variant="body2">
-            In Moesif, go to <strong>Dashboard Templates → Import Json Template</strong> and import the downloaded file. This creates the <strong>Application Metrics</strong> dashboard.
+            In Moesif, go to <strong>Dashboard Templates → Import Json Template</strong> and import the downloaded file.{' '}
+            {isMI ? (
+              <>
+                This creates the <strong>{MOESIF_MI_DASHBOARD_NAMES.join(', ')}</strong> dashboard.
+              </>
+            ) : (
+              <>
+                This creates the <strong>Application Metrics</strong> dashboard.
+              </>
+            )}
           </Typography>
         </li>
         <li>
           <Typography variant="body2">
-            Open the <strong>{MOESIF_METRICS_WORKSPACE_NAME}</strong> workspace, click <strong>Share</strong>, and set its sharing to <strong>Public</strong>. This is required for the embedded chart to load.
+            Open the <strong>{isMI ? MOESIF_MI_METRICS_WORKSPACE_NAME : MOESIF_METRICS_WORKSPACE_NAME}</strong> workspace{isMI ? ' (in the Overall dashboard)' : ''}, click <strong>Share</strong>, and set its sharing to <strong>Public</strong>. This is required
+            for the embedded chart to load.
           </Typography>
         </li>
         <li>
@@ -256,14 +340,17 @@ function MoesifDashboardCard({
   );
 }
 
-export default function MetricsMoesif({ scope, backendSelector }: MetricsPageProps): JSX.Element {
+export default function MetricsMoesif({ scope, backendSelector, opensearchConfigured }: MetricsPageProps): JSX.Element {
   const isComponent = hasComponent(scope);
   const { data: project, isLoading: loadingProject } = useProjectByHandler(scope.project);
   const projectId = project?.id ?? '';
   const { data: singleComponent, isLoading: loadingComponent } = useComponentByHandler(projectId, isComponent ? scope.component : undefined);
   const { data: components = [], isLoading: loadingComponents } = useComponents(scope.org, projectId);
   const { data: environments = [], isLoading: loadingEnvironments } = useEnvironments(projectId);
-  const biComponents = components.filter((component) => component.componentType === 'BI');
+  // Moesif metrics are offered for BI (Ballerina) and MI (Micro Integrator)
+  // integrations; each has its own runtime setup instructions (see
+  // MoesifInstructionsContent).
+  const moesifComponents = components.filter((component) => component.componentType === 'BI' || component.componentType === 'MI');
 
   const [integrationFilter, setIntegrationFilter] = useState('all');
   // When set, the dashboard-credentials edit form is shown for an already-linked
@@ -275,11 +362,18 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
 
   // The integration (project + component combo) whose Moesif configuration is
   // being viewed/configured. Component scope targets the single component;
-  // project scope targets a BI integration chosen via the integration filter.
+  // project scope targets a Moesif-capable integration chosen via the filter.
   // Re-check the selected ID against the filtered list so a stale or manually
-  // supplied non-BI value can never be used for Moesif requests.
-  const selectedBiComponentId = biComponents.some((component) => component.id === integrationFilter) ? integrationFilter : '';
-  const targetComponentId = isComponent ? componentId : selectedBiComponentId;
+  // supplied unsupported value can never be used for Moesif requests.
+  const selectedProjectComponentId = moesifComponents.some((component) => component.id === integrationFilter) ? integrationFilter : '';
+  const targetComponentId = isComponent ? componentId : selectedProjectComponentId;
+
+  // The technology of the targeted integration drives which runtime setup
+  // instructions are shown (MI uses the Fluent Bit sidecar flow; BI uses the
+  // built-in reporter). Resolved from the single component at component scope, or
+  // the selected integration at project scope.
+  const targetComponent = isComponent ? singleComponent : moesifComponents.find((component) => component.id === targetComponentId);
+  const isMI = targetComponent?.componentType === 'MI';
 
   // Whether this integration's Moesif metrics dashboard has been created/linked.
   // This single flag comes from the backend and drives the setup vs. dashboard
@@ -296,7 +390,10 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
       <Typography variant="h1">Metrics</Typography>
       <Stack direction="row" alignItems="center" gap={1}>
-        {backendSelector}
+        {/* Only offer the backend toggle when BOTH backends are configured for
+            this integration: OpenSearch globally and this integration's Moesif
+            dashboard (dashboardsCreated). */}
+        {opensearchConfigured && dashboardsCreated && backendSelector}
         {dashboardsCreated && (
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => refetchEmbed()} disabled={fetchingEmbed}>
@@ -346,17 +443,17 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
             <Typography color="text.secondary" sx={{ mb: 2 }}>
               Moesif metrics are configured per integration. Select an integration to configure or view its metrics.
             </Typography>
-            {biComponents.length > 0 ? (
+            {moesifComponents.length > 0 ? (
               <Select value={integrationFilter} onChange={(e) => setIntegrationFilter(e.target.value as string)} size="small" sx={{ minWidth: 240 }} inputProps={{ 'aria-label': 'Integration' }}>
                 <MenuItem value="all">Select an integration…</MenuItem>
-                {biComponents.map((c) => (
+                {moesifComponents.map((c) => (
                   <MenuItem key={c.id} value={c.id}>
                     {c.displayName}
                   </MenuItem>
                 ))}
               </Select>
             ) : (
-              <EmptyListing icon={<BarChart3 size={48} />} title="No BI integrations" description="Create a BI integration to configure Moesif metrics." />
+              <EmptyListing icon={<BarChart3 size={48} />} title="No integrations" description="Create a BI or MI integration to configure Moesif metrics." />
             )}
           </CardContent>
         </Card>
@@ -384,19 +481,54 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
     return (
       <PageContent>
         {header}
+        {/* Neither backend configured for this integration (no OpenSearch and no
+            linked Moesif dashboard): explain that observability must be set up
+            with either provider before the metrics view is available. */}
+        {!opensearchConfigured && (
+          <Typography color="text.secondary" sx={{ mb: 2 }}>
+            To enable the metrics view you need to setup observability with either Moesif or OpenSearch. Refer the documentation{' '}
+            <a href={OPENSEARCH_SETUP_GUIDE_DEFAULT} target="_blank" rel="noreferrer">
+              {OPENSEARCH_SETUP_GUIDE_DEFAULT}
+            </a>{' '}
+            for details.
+          </Typography>
+        )}
         <Typography variant="h4" sx={{ mt: 5, mb: 3, color: 'warning.main' }}>
           Configure metrics with Moesif
         </Typography>
         <Typography color="text.secondary">
           <strong>Moesif</strong>
-          {MOESIF_DESCRIPTION}
+          {MOESIF_DESCRIPTION} Refer the documentation{' '}
+          <a href={MOESIF_SETUP_GUIDE} target="_blank" rel="noreferrer">
+            {MOESIF_SETUP_GUIDE}
+          </a>{' '}
+          for details.
         </Typography>
         <MoesifDashboardCard
           componentId={targetComponentId}
+          isMI={isMI}
           creating={createDashboards.isPending}
           error={createDashboards.error}
           onCreate={(token, moesifAppId) => createDashboards.mutate({ componentId: targetComponentId, managementApiKey: token, moesifAppId })}
         />
+
+        {/* Nothing configured yet (no OpenSearch backend and no Moesif dashboard
+            linked): offer OpenSearch as an alternative. The setup guide depends
+            on the integration's runtime technology (MI vs. other runtimes). */}
+        {!opensearchConfigured && (
+          <>
+            <Divider sx={{ my: 4 }} />
+            <Typography variant="h4" sx={{ mb: 2, color: 'warning.main' }}>
+              Configure metrics with OpenSearch
+            </Typography>
+            <Typography color="text.secondary">
+              Follow the guide to setup observability with OpenSearch :{' '}
+              <a href={isMI ? OPENSEARCH_SETUP_GUIDE_MI : OPENSEARCH_SETUP_GUIDE_DEFAULT} target="_blank" rel="noreferrer">
+                {isMI ? OPENSEARCH_SETUP_GUIDE_MI : OPENSEARCH_SETUP_GUIDE_DEFAULT}
+              </a>
+            </Typography>
+          </>
+        )}
       </PageContent>
     );
   }
@@ -412,6 +544,7 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
         <MoesifDashboardCard
           componentId={targetComponentId}
           isEdit
+          isMI={isMI}
           creating={createDashboards.isPending}
           error={createDashboards.error}
           onCancel={() => setEditingDashboard(false)}
@@ -425,11 +558,11 @@ export default function MetricsMoesif({ scope, backendSelector }: MetricsPagePro
     <PageContent>
       {header}
 
-      {!isComponent && biComponents.length > 0 && (
+      {!isComponent && moesifComponents.length > 0 && (
         <Stack direction="row" gap={2} sx={{ mb: 3 }} flexWrap="wrap" alignItems="center">
           <Select value={integrationFilter} onChange={(e) => setIntegrationFilter(e.target.value as string)} size="small" sx={{ minWidth: 160 }} inputProps={{ 'aria-label': 'Integration' }}>
             <MenuItem value="all">Select an integration…</MenuItem>
-            {biComponents.map((c) => (
+            {moesifComponents.map((c) => (
               <MenuItem key={c.id} value={c.id}>
                 {c.displayName}
               </MenuItem>

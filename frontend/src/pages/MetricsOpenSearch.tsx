@@ -21,6 +21,7 @@ import { BarChart3, RefreshCw } from '@wso2/oxygen-ui-icons-react';
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import { useProjectByHandler, useComponentByHandler, useComponents, useEnvironments, useProjectRuntimes } from '../api/queries';
 import { useMetrics, type MetricEntry, type MetricsRequest } from '../api/metrics';
+import { useMoesifMetricsConfig } from '../api/metricsMoesif';
 import EmptyListing from '../components/EmptyListing';
 import NotFound from '../components/NotFound';
 import { resourceUrl, broaden, hasComponent, type ProjectScope, type ComponentScope } from '../nav';
@@ -29,6 +30,12 @@ export interface MetricsPageProps {
   scope: ProjectScope | ComponentScope;
   /** Backend selector control rendered in the page header (OpenSearch/Moesif toggle). */
   backendSelector?: JSX.Element;
+  /**
+   * Whether the OpenSearch observability backend is configured globally. Used
+   * together with the targeted integration's Moesif configuration to decide
+   * whether the backend toggle is shown (only when BOTH are configured).
+   */
+  opensearchConfigured?: boolean;
   /**
    * Called when the OpenSearch metrics request reports the backend as
    * unavailable at query time, letting the dispatcher fall back to Moesif and
@@ -344,7 +351,7 @@ function StatCard({ title, value, color }: { title: string; value: string; color
   );
 }
 
-export default function MetricsOpenSearch({ scope, backendSelector, onUnavailable }: MetricsPageProps): JSX.Element {
+export default function MetricsOpenSearch({ scope, backendSelector, opensearchConfigured, onUnavailable }: MetricsPageProps): JSX.Element {
   const isComponent = hasComponent(scope);
   const { data: project, isLoading: loadingProject } = useProjectByHandler(scope.project);
   const projectId = project?.id ?? '';
@@ -379,6 +386,15 @@ export default function MetricsOpenSearch({ scope, backendSelector, onUnavailabl
 
   const effectiveEnvId = envFilter || environments[0]?.id || '';
   const componentId = isComponent ? (singleComponent?.id ?? '') : '';
+
+  // The integration whose Moesif configuration decides whether the backend
+  // toggle is offered: the single component at component scope, or the selected
+  // integration at project scope ('all' resolves to none). The toggle only
+  // appears when OpenSearch is configured AND this integration's Moesif
+  // dashboard is linked, so a single-backend setup shows no toggle.
+  const toggleTargetComponentId = isComponent ? componentId : integrationFilter !== 'all' ? integrationFilter : '';
+  const { data: moesifConfig } = useMoesifMetricsConfig(toggleTargetComponentId || undefined);
+  const showBackendToggle = !!opensearchConfigured && !!moesifConfig?.dashboardsCreated;
 
   // Fetch all runtimes for the project to build runtimeId → integration name map
   const { data: projectRuntimes = [] } = useProjectRuntimes(effectiveEnvId, projectId);
@@ -478,7 +494,7 @@ export default function MetricsOpenSearch({ scope, backendSelector, onUnavailabl
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
         <Typography variant="h1">Metrics</Typography>
         <Stack direction="row" alignItems="center" gap={1}>
-          {backendSelector}
+          {showBackendToggle && backendSelector}
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => refetch()} disabled={filtersDisabled || !metricsRequest}>
               <RefreshCw size={18} />
