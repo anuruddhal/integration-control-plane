@@ -40,6 +40,9 @@ isolated function secureRandomNextLong(handle randomObj) returns int = @java:Met
 # + numBytes - the number of random bytes to return
 # + return - a byte array of exactly `numBytes` cryptographically secure random bytes
 public isolated function secureRandomBytes(int numBytes) returns byte[] {
+    if numBytes < 0 {
+        panic error(string `numBytes must be non-negative, found ${numBytes}`);
+    }
     handle randomObj = newSecureRandom();
     byte[] result = [];
     int longsNeeded = (numBytes + 7) / 8;
