@@ -621,6 +621,16 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
           onCancel={() => setEditingDashboard(false)}
           onCreate={(managementApiKey) => createDashboards.mutate({ componentId: targetComponentId, environmentId: effectiveEnvId, managementApiKey }, { onSuccess: () => setEditingDashboard(false) })}
         />
+        <Divider sx={{ my: 4 }} />
+        <Typography variant="h4" sx={{ mb: 2, color: 'warning.main' }}>
+          Configure metrics with OpenSearch
+        </Typography>
+        <Typography color="text.secondary">
+          Follow the guide to setup observability with OpenSearch :{' '}
+          <a href={isMI ? OPENSEARCH_SETUP_GUIDE_MI : OPENSEARCH_SETUP_GUIDE_DEFAULT} target="_blank" rel="noreferrer">
+            {isMI ? OPENSEARCH_SETUP_GUIDE_MI : OPENSEARCH_SETUP_GUIDE_DEFAULT}
+          </a>
+        </Typography>
       </PageContent>
     );
   }

@@ -113,7 +113,7 @@ export default function Metrics(scope: ProjectScope | ComponentScope): JSX.Eleme
   );
 
   const backendSelector =
-    moesifAllowed || (componentResolving && moesifEnabled) ? (
+    observabilityConfig?.configured && (moesifAllowed || (componentResolving && moesifEnabled)) ? (
       <ToggleButtonGroup
         value={effectiveBackend}
         exclusive
