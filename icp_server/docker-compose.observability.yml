@@ -67,6 +67,10 @@ services:
   fluent-bit:
     image: fluent/fluent-bit:4.2.2
     container_name: fluent-bit
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     ports:
       - "2020:2020"
     env_file:
@@ -75,7 +79,7 @@ services:
       - ./resources/observability/opensearch-observability-dashboard/config/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
       - ./resources/observability/opensearch-observability-dashboard/config/fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf
       - ./resources/observability/opensearch-observability-dashboard/config/fluent-bit/scripts:/fluent-bit/scripts
-      # Uncomment and set BI_LOG_FILE_PATH in .env to monitor BI logs
+      # To monitor BI logs, set BI_LOG_FILE_PATH and uncomment this bind mount.
       # - ${BI_LOG_FILE_PATH}:/var/log/bi:ro
       # Uncomment and set MI_LOG_FILE_PATH in .env to monitor MI logs
       # - ${MI_LOG_FILE_PATH}:/var/log/mi:ro
