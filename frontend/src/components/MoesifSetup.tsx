@@ -41,12 +41,11 @@ export const MOESIF_SETUP_GUIDE = 'https://wso2.com/integration-platform/docs/ma
 export const OPENSEARCH_SETUP_GUIDE_DEFAULT = 'https://wso2.com/integration-platform/docs/manage/icp/observability-setup';
 export const OPENSEARCH_SETUP_GUIDE_MI = 'https://mi.docs.wso2.com/en/latest/install-and-setup/install/adding-observability-for-icp/';
 
-// A collapsible step section. Each main step from the observability user story is
-// rendered as an accordion so the setup flow stays compact; the first step is
-// expanded by default.
-export function MoesifStep({ title, defaultExpanded, children }: { title: string; defaultExpanded?: boolean; children: React.ReactNode }): JSX.Element {
+// A collapsible step section. All steps start collapsed so users explicitly
+// choose which instructions to reveal.
+export function MoesifStep({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
   return (
-    <Accordion defaultExpanded={defaultExpanded} disableGutters sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, mb: 1.5, '&:before': { display: 'none' } }}>
+    <Accordion disableGutters sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, mb: 1.5, '&:before': { display: 'none' } }}>
       <AccordionSummary expandIcon={<ChevronDown size={18} />} sx={{ bgcolor: 'action.hover', '&:hover': { bgcolor: 'action.selected' } }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
           {title}

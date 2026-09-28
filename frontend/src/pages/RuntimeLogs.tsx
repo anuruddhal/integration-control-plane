@@ -175,7 +175,7 @@ function LogsSetupInstructions({
       {moesifEnabled && (
         <>
           <Typography variant="h4" sx={{ mb: 1, color: 'warning.main' }}>
-            {configured ? 'Moesif logs configurations' : 'Configure logs with Moesif'}
+            Configure logs with Moesif
           </Typography>
           {configured && (
             <Typography color="text.secondary" sx={{ mb: 2 }}>
@@ -193,7 +193,7 @@ function LogsSetupInstructions({
           </Typography>
 
           {/* Step 1: prepare Moesif for the environment. */}
-          <MoesifStep title="Step 01: Prepare Moesif" defaultExpanded={!configured}>
+          <MoesifStep title="Step 01: Prepare Moesif">
             <Typography variant="body2" color="text.secondary">
               Using{' '}
               <a href="https://www.moesif.com/wrap/basic" target="_blank" rel="noreferrer">
@@ -206,7 +206,7 @@ function LogsSetupInstructions({
           {/* Step 2: configure the runtime to write + publish logs to Moesif.
               BI writes JSON logs to a file shipped by Fluent Bit; MI ships its
               default wso2carbon.log via a Fluent Bit sidecar. */}
-          <MoesifStep title="Step 02: Publish logs from your runtime" defaultExpanded={configured}>
+          <MoesifStep title="Step 02: Publish logs from your runtime">
             {showBothTechnologies ? (
               /* All integrations in view and the project mixes technologies, so
                  both sidecar flows are shown rather than guessing one. */
@@ -782,7 +782,13 @@ export default function RuntimeLogs(scope: ProjectScope | ComponentScope): JSX.E
   // unavailable, the Moesif logs canvas' runtime filter — so it is only disabled
   // when neither backend can use it.
   const integrationSelector = !hasComponent(scope) ? (
-    <Select value={integrationFilter} onChange={(e) => setIntegrationFilter(e.target.value as string)} size="small" sx={{ minWidth: 200 }} inputProps={{ 'aria-label': 'Integration' }} disabled={filtersDisabled && !moesifEnabled}>
+    <Select
+      value={integrationFilter}
+      onChange={(e) => setIntegrationFilter(e.target.value as string)}
+      size="small"
+      sx={{ minWidth: 200 }}
+      inputProps={{ 'aria-label': 'Integration' }}
+      disabled={filtersDisabled && !moesifEnabled && availableEnvironments.length > 0}>
       <MenuItem value="all">All Integrations</MenuItem>
       {allComponents.map((c) => (
         <MenuItem key={c.id} value={c.id}>
@@ -821,7 +827,7 @@ export default function RuntimeLogs(scope: ProjectScope | ComponentScope): JSX.E
   }, [handleScroll]);
 
   const loadingContext = hasComponent(scope) ? loadingComponent : loadingComponents;
-  if (loadingProject || loadingContext || loadingEnvironments) {
+  if (loadingProject || loadingContext || loadingEnvironments || (envCheckActive && loadingEnvRuntimes)) {
     return (
       <PageContent sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
         <CircularProgress />
@@ -842,6 +848,30 @@ export default function RuntimeLogs(scope: ProjectScope | ComponentScope): JSX.E
     return (
       <PageContent>
         <EmptyListing icon={<ScrollText size={48} />} title="No environments" description="Configure an environment to view runtime logs." />
+      </PageContent>
+    );
+  }
+
+  // Keep publishing instructions available before runtimes are registered.
+  // There is no deployed environment to target for credential linking yet.
+  if (envCheckActive && !loadingEnvRuntimes && !envRuntimesError && availableEnvironments.length === 0) {
+    return (
+      <PageContent>
+        <Typography variant="h1" sx={{ mb: 2 }}>
+          Runtime Logs
+        </Typography>
+        {integrationSelector && (
+          <Stack direction="row" gap={2} sx={{ mb: 3 }} flexWrap="wrap" alignItems="center">
+            {integrationSelector}
+          </Stack>
+        )}
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {allIntegrationsSelected ? 'No runtimes are registered for this project in any environment, so there are no logs to show.' : 'No runtimes are registered for this integration in any environment, so there are no logs to show.'}
+        </Alert>
+        <LogsSetupInstructions
+          isMI={runtimeLinkComponent?.componentType === 'MI' || (allIntegrationsSelected && projectTechnologies.length === 1 && projectTechnologies[0] === 'MI')}
+          showBothTechnologies={allIntegrationsSelected && projectTechnologies.length > 1}
+        />
       </PageContent>
     );
   }
@@ -888,15 +918,6 @@ export default function RuntimeLogs(scope: ProjectScope | ComponentScope): JSX.E
             </Button>
           }>
           Could not verify which environments have registered runtimes. Showing all environments — logs may cover environments nothing is deployed to.
-        </Alert>
-      )}
-
-      {/* The lookup succeeded and returned no environments, so the selection is
-          genuinely empty rather than unknown: no logs are queried, so say why
-          instead of leaving an empty environment selector. */}
-      {envCheckActive && !loadingEnvRuntimes && !envRuntimesError && availableEnvironments.length === 0 && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          No runtimes are registered for this integration in any environment, so there are no logs to show.
         </Alert>
       )}
 
