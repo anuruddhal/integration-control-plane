@@ -399,14 +399,14 @@ export default function MetricsOpenSearch({ scope, backendSelector, opensearchCo
 
   // The integration whose Moesif configuration decides whether the backend
   // toggle is offered: the single component at component scope, or the selected
-  // integration at project scope ('all' resolves to none). The toggle only
+  // integration at project scope (the first supported integration for 'all'). The toggle only
   // appears when OpenSearch is configured AND this integration's Moesif
   // dashboard is linked, so a single-backend setup shows no toggle.
   // The backend toggle only exists when the Moesif backend is enabled globally.
   // When it is disabled we skip the Moesif config query entirely so no Moesif
   // request is made and no toggle is offered.
   const moesifEnabled = isMoesifEnabled();
-  const toggleTargetComponentId = isComponent ? componentId : integrationFilter !== 'all' ? integrationFilter : '';
+  const toggleTargetComponentId = isComponent ? componentId : integrationFilter !== 'all' ? integrationFilter : (components.find((component) => component.componentType === 'BI' || component.componentType === 'MI')?.id ?? '');
   const { data: moesifConfig } = useMoesifMetricsConfig(moesifEnabled ? toggleTargetComponentId || undefined : undefined, moesifEnabled ? effectiveEnvId || undefined : undefined);
   const showBackendToggle = moesifEnabled && !!opensearchConfigured && !!moesifConfig?.dashboardsCreated;
 

@@ -160,7 +160,23 @@ function MoesifMiRuntimeInstructions({ applicationId }: { applicationId: string 
 // instructions, so the runtime configuration can be checked after the fact —
 // and it doubles as the update path for the stored Management API Key. An
 // optional Cancel action returns to the metrics view.
-function MoesifDashboardCard({ onCreate, creating, error, isEdit, isMI, onCancel }: { onCreate: (managementApiKey: string) => void; creating: boolean; error: unknown; isEdit?: boolean; isMI?: boolean; onCancel?: () => void }): JSX.Element {
+function MoesifDashboardCard({
+  onCreate,
+  creating,
+  error,
+  isEdit,
+  isMI,
+  onCancel,
+  canLink = true,
+}: {
+  onCreate: (managementApiKey: string) => void;
+  creating: boolean;
+  error: unknown;
+  isEdit?: boolean;
+  isMI?: boolean;
+  onCancel?: () => void;
+  canLink?: boolean;
+}): JSX.Element {
   const [managementApiKey, setManagementApiKey] = useState('');
 
   // The Collector Application ID is derived on the backend from the Management
@@ -174,8 +190,8 @@ function MoesifDashboardCard({ onCreate, creating, error, isEdit, isMI, onCancel
     <Stack sx={{ mt: 2 }}>
       {isEdit && (
         <>
-          <Typography variant="h6" sx={{ mb: 1 }}>
-            Moesif metrics configurations
+          <Typography variant="h4" sx={{ mb: 1, color: 'warning.main' }}>
+            Configure metrics with Moesif
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             The Moesif canvas is linked for this environment and is shared by every integration in it, so the dashboard loads even for an integration that was never configured to publish metrics. Follow the steps below to configure this integration's runtime,
@@ -185,7 +201,7 @@ function MoesifDashboardCard({ onCreate, creating, error, isEdit, isMI, onCancel
       )}
 
       {/* Step 1: prepare Moesif for the environment. */}
-      <MoesifStep title="Step 01: Prepare Moesif" defaultExpanded={!isEdit}>
+      <MoesifStep title="Step 01: Prepare Moesif">
         <Typography variant="body2" color="text.secondary">
           Using{' '}
           <a href="https://www.moesif.com/wrap/basic" target="_blank" rel="noreferrer">
@@ -198,36 +214,38 @@ function MoesifDashboardCard({ onCreate, creating, error, isEdit, isMI, onCancel
       {/* Step 2: configure the runtime to publish metrics to Moesif. This is
           what is usually missing when the canvas loads but shows no data, so it
           opens expanded in the "View configurations" state. */}
-      <MoesifStep title="Step 02: Publish metrics from your runtime" defaultExpanded={isEdit}>
+      <MoesifStep title="Step 02: Publish metrics from your runtime">
         <MoesifInstructionsContent applicationId={effectiveAppId} isMI={isMI} />
       </MoesifStep>
 
       {/* Step 3: link the canvas with a Management API Key. */}
-      <MoesifStep title={isEdit ? 'Step 03: Update the dashboard credentials' : 'Step 03: Load the dashboard'}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Once metrics are flowing to Moesif, create a <strong>Management API Key</strong> with the <strong>access_tokens: create</strong> and <strong>events: read</strong> scopes, then paste it below to load the metrics dashboard. The Organization ID,
-          Application ID and a short-lived canvas token are derived from it. Treated as a secret; never stored in the browser.
-        </Typography>
+      {canLink && (
+        <MoesifStep title={isEdit ? 'Step 03: Update the dashboard credentials' : 'Step 03: Load the dashboard'}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Once metrics are flowing to Moesif, create a <strong>Management API Key</strong> with the <strong>access_tokens: create</strong> and <strong>events: read</strong> scopes, then paste it below to load the metrics dashboard. The Organization ID,
+            Application ID and a short-lived canvas token are derived from it. Treated as a secret; never stored in the browser.
+          </Typography>
 
-        <TextField label="Management API Key" placeholder="Paste your Moesif Management API Key" value={managementApiKey} onChange={(e) => setManagementApiKey(e.target.value)} type="password" fullWidth size="small" sx={{ mb: 2 }} autoComplete="off" />
+          <TextField label="Management API Key" placeholder="Paste your Moesif Management API Key" value={managementApiKey} onChange={(e) => setManagementApiKey(e.target.value)} type="password" fullWidth size="small" sx={{ mb: 2 }} autoComplete="off" />
 
-        {!!error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {(error as Error).message || 'Failed to link the Moesif dashboard.'}
-          </Alert>
-        )}
-
-        <Stack direction="row" gap={1}>
-          {isEdit && onCancel && (
-            <Button variant="text" onClick={onCancel} disabled={creating}>
-              Cancel
-            </Button>
+          {!!error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {(error as Error).message || 'Failed to link the Moesif dashboard.'}
+            </Alert>
           )}
-          <Button variant="contained" disabled={!trimmedManagementApiKey || creating} onClick={() => onCreate(trimmedManagementApiKey)}>
-            {isEdit ? (creating ? 'Updating…' : 'Update credentials') : creating ? 'Linking…' : 'Link canvas'}
-          </Button>
-        </Stack>
-      </MoesifStep>
+
+          <Stack direction="row" gap={1}>
+            {isEdit && onCancel && (
+              <Button variant="text" onClick={onCancel} disabled={creating}>
+                Cancel
+              </Button>
+            )}
+            <Button variant="contained" disabled={!trimmedManagementApiKey || creating} onClick={() => onCreate(trimmedManagementApiKey)}>
+              {isEdit ? (creating ? 'Updating…' : 'Update credentials') : creating ? 'Linking…' : 'Link canvas'}
+            </Button>
+          </Stack>
+        </MoesifStep>
+      )}
     </Stack>
   );
 }
@@ -327,6 +345,7 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
   const runtimesByEnvError = isAggregate ? projectRuntimesByEnvError : componentRuntimesByEnvError;
   const refetchRuntimesByEnv = isAggregate ? refetchProjectRuntimesByEnv : refetchComponentRuntimesByEnv;
   const availableEnvironments = environments.filter((e) => (isAggregate ? (aggregateRuntimesByEnv[e.id]?.length ?? 0) > 0 : envsWithRuntimes.has(e.id)));
+  const noRuntimes = availableEnvironments.length === 0;
 
   // Default to the first environment that has runtimes; ignore a stale/explicit
   // selection that no longer has runtimes so we never load config/dashboards for
@@ -350,7 +369,7 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
 
   // Once the dashboards exist, mint a short-lived workspace access token and
   // build the iframe embed URL. The hook refetches before the token expires.
-  const { data: embed, isLoading: loadingEmbed, isFetching: fetchingEmbed, error: embedError, refetch: refetchEmbed } = useMoesifDashboardEmbed(targetComponentId || undefined, effectiveEnvId || undefined, dashboardsCreated);
+  const { data: embed, isLoading: loadingEmbed, isFetching: fetchingEmbed, error: embedError, refetch: refetchEmbed } = useMoesifDashboardEmbed(targetComponentId || undefined, effectiveEnvId || undefined, dashboardsCreated && !noRuntimes);
 
   // The canvas is scoped to the runtimes in view: their ids are passed to the
   // canvas as the `runtimeId` context filter (see MoesifCanvas CANVAS_INIT) so
@@ -358,7 +377,7 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
   // dashboard is linked and an integration + environment are selected; in
   // aggregate mode the runtimes already come from the per-environment project
   // queries, so no extra request is made.
-  const { data: runtimes = [] } = useComponentRuntimes(effectiveEnvId, projectId, targetComponentId, dashboardsCreated && !isAggregate);
+  const { data: runtimes = [] } = useComponentRuntimes(effectiveEnvId, projectId, targetComponentId, dashboardsCreated && !noRuntimes && !isAggregate);
   // Runtime filter options for the canvas' `runtimeId` context filter: `value` is
   // the actual runtime id (matched against the metric tag) and `label` names the
   // owning integration alongside the runtime — "integration1 (runtime1)" — in
@@ -370,11 +389,11 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
       <Typography variant="h1">Metrics</Typography>
       <Stack direction="row" alignItems="center" gap={1}>
-        {/* Only offer the backend toggle when BOTH backends are configured for
-            this integration: OpenSearch globally and this integration's Moesif
-            dashboard (dashboardsCreated). */}
-        {opensearchConfigured && dashboardsCreated && backendSelector}
-        {dashboardsCreated && (
+        {/* A linked dashboard normally gates the backend toggle. In the
+            no-runtimes state, keep the toggle solely as a route back to
+            OpenSearch without loading the Moesif dashboard. */}
+        {opensearchConfigured && (dashboardsCreated || noRuntimes) && backendSelector}
+        {dashboardsCreated && !noRuntimes && (
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => refetchEmbed()} disabled={fetchingEmbed}>
               <RefreshCw size={18} />
@@ -490,32 +509,6 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
     );
   }
 
-  // Nothing in view has runtimes in any environment: there is nothing publishing
-  // metrics to Moesif, so we don't offer any environment or load a dashboard.
-  // Keep the integration selector (project scope) so another integration or
-  // technology can be chosen.
-  if (availableEnvironments.length === 0) {
-    return (
-      <PageContent>
-        {header}
-        {integrationSelector && (
-          <Stack direction="row" gap={2} sx={{ mb: 3 }} flexWrap="wrap" alignItems="center">
-            {integrationSelector}
-          </Stack>
-        )}
-        <EmptyListing
-          icon={<BarChart3 size={48} />}
-          title="No runtimes"
-          description={
-            isAggregate
-              ? `No ${aggregateTechnology} integration in this project has runtimes in any environment. Deploy an integration to a runtime to view its Moesif metrics.`
-              : 'This integration has no runtimes in any environment. Deploy the integration to a runtime to view its Moesif metrics.'
-          }
-        />
-      </PageContent>
-    );
-  }
-
   // Resolving whether this integration is configured for Moesif metrics.
   if (loadingMoesifConfig) {
     return (
@@ -525,14 +518,10 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
     );
   }
 
-  // Dashboard not linked yet: show the Moesif intro and the setup flow. The user
-  // configures their runtime to publish metrics, imports the dashboard template
-  // into Moesif and makes its workspace public; the entered Management API Key +
-  // selected Moesif Application ID are then sent to the backend, which discovers
-  // the imported workspace id and persists it (setting the `dashboardsCreated`
-  // flag). The Collector Application ID itself is not stored. On success the
-  // config query is invalidated and the metrics view below is shown.
-  if (!dashboardsCreated) {
+  // When the dashboard is not linked, or there is no runtime to scope it to,
+  // show the publishing/setup guidance. Without runtimes the linking step stays
+  // hidden and the embed queries above remain disabled.
+  if (!dashboardsCreated || noRuntimes) {
     return (
       <PageContent>
         {envSelector && (
@@ -547,6 +536,13 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
           <Stack direction="row" gap={2} sx={{ mb: 3 }} flexWrap="wrap" alignItems="center">
             {integrationSelector}
           </Stack>
+        )}
+        {noRuntimes && (
+          <EmptyListing
+            icon={<BarChart3 size={48} />}
+            title="No runtimes"
+            description={isAggregate ? `No runtimes are registered for ${aggregateTechnology} integrations in this project in any environment.` : 'No runtimes are registered for this integration in any environment.'}
+          />
         )}
         {/* Neither backend configured for this integration (no OpenSearch and no
             linked Moesif dashboard): explain that observability must be set up
@@ -571,7 +567,13 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
           </a>{' '}
           for details.
         </Typography>
-        <MoesifDashboardCard isMI={isMI} creating={createDashboards.isPending} error={createDashboards.error} onCreate={(managementApiKey) => createDashboards.mutate({ componentId: targetComponentId, environmentId: effectiveEnvId, managementApiKey })} />
+        <MoesifDashboardCard
+          canLink={!noRuntimes && !!targetComponentId && !!effectiveEnvId}
+          isMI={isMI}
+          creating={createDashboards.isPending}
+          error={createDashboards.error}
+          onCreate={(managementApiKey) => createDashboards.mutate({ componentId: targetComponentId, environmentId: effectiveEnvId, managementApiKey })}
+        />
 
         {/* Nothing configured yet (no OpenSearch backend and no Moesif dashboard
             linked): offer OpenSearch as an alternative. The setup guide depends
@@ -621,6 +623,16 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
           onCancel={() => setEditingDashboard(false)}
           onCreate={(managementApiKey) => createDashboards.mutate({ componentId: targetComponentId, environmentId: effectiveEnvId, managementApiKey }, { onSuccess: () => setEditingDashboard(false) })}
         />
+        <Divider sx={{ my: 4 }} />
+        <Typography variant="h4" sx={{ mb: 2, color: 'warning.main' }}>
+          Configure metrics with OpenSearch
+        </Typography>
+        <Typography color="text.secondary">
+          Follow the guide to setup observability with OpenSearch :{' '}
+          <a href={isMI ? OPENSEARCH_SETUP_GUIDE_MI : OPENSEARCH_SETUP_GUIDE_DEFAULT} target="_blank" rel="noreferrer">
+            {isMI ? OPENSEARCH_SETUP_GUIDE_MI : OPENSEARCH_SETUP_GUIDE_DEFAULT}
+          </a>
+        </Typography>
       </PageContent>
     );
   }
