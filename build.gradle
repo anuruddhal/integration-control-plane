@@ -491,5 +491,5 @@ defaultTasks 'helpICP'
 
 // Wrapper configuration
 wrapper {
-    gradleVersion = '8.5'
+    gradleVersion = '9.8.0'
 }
