@@ -509,26 +509,6 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
     );
   }
 
-  // Without runtimes there is no safe dashboard scope. Show a dedicated empty
-  // state and keep only the backend navigation control in the header.
-  if (noRuntimes) {
-    return (
-      <PageContent>
-        {header}
-        {integrationSelector && (
-          <Stack direction="row" gap={2} sx={{ mb: 3 }} flexWrap="wrap" alignItems="center">
-            {integrationSelector}
-          </Stack>
-        )}
-        <EmptyListing
-          icon={<BarChart3 size={48} />}
-          title="No runtimes"
-          description={isAggregate ? `No runtimes are registered for ${aggregateTechnology} integrations in this project in any environment.` : 'No runtimes are registered for this integration in any environment.'}
-        />
-      </PageContent>
-    );
-  }
-
   // Resolving whether this integration is configured for Moesif metrics.
   if (loadingMoesifConfig) {
     return (
@@ -538,14 +518,10 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
     );
   }
 
-  // Dashboard not linked yet: show the Moesif intro and the setup flow. The user
-  // configures their runtime to publish metrics, imports the dashboard template
-  // into Moesif and makes its workspace public; the entered Management API Key +
-  // selected Moesif Application ID are then sent to the backend, which discovers
-  // the imported workspace id and persists it (setting the `dashboardsCreated`
-  // flag). The Collector Application ID itself is not stored. On success the
-  // config query is invalidated and the metrics view below is shown.
-  if (!dashboardsCreated) {
+  // When the dashboard is not linked, or there is no runtime to scope it to,
+  // show the publishing/setup guidance. Without runtimes the linking step stays
+  // hidden and the embed queries above remain disabled.
+  if (!dashboardsCreated || noRuntimes) {
     return (
       <PageContent>
         {envSelector && (
@@ -560,6 +536,13 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
           <Stack direction="row" gap={2} sx={{ mb: 3 }} flexWrap="wrap" alignItems="center">
             {integrationSelector}
           </Stack>
+        )}
+        {noRuntimes && (
+          <EmptyListing
+            icon={<BarChart3 size={48} />}
+            title="No runtimes"
+            description={isAggregate ? `No runtimes are registered for ${aggregateTechnology} integrations in this project in any environment.` : 'No runtimes are registered for this integration in any environment.'}
+          />
         )}
         {/* Neither backend configured for this integration (no OpenSearch and no
             linked Moesif dashboard): explain that observability must be set up
@@ -585,7 +568,7 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
           for details.
         </Typography>
         <MoesifDashboardCard
-          canLink={!!targetComponentId && !!effectiveEnvId}
+          canLink={!noRuntimes && !!targetComponentId && !!effectiveEnvId}
           isMI={isMI}
           creating={createDashboards.isPending}
           error={createDashboards.error}
