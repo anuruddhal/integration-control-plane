@@ -42,9 +42,10 @@ import ballerina/uuid;
 // a claim does not have to be exclusive across ICP nodes — two nodes handing out the same
 // row causes a replay, not a second execution.
 
-// A read whose command was claimed but produced no result within this many seconds is
-// offered again. It bounds the loss when a heartbeat response is dropped in transit,
-// without a delivery-acknowledgement round trip.
+// A read or mutation whose command was claimed but produced no result within this many
+// seconds is offered again. It bounds the loss when a heartbeat response is dropped in
+// transit, or a runtime skips a batch while still running the last one, without a
+// delivery-acknowledgement round trip.
 const int CACHE_REDELIVER_AFTER_SECONDS = 20;
 
 # Current epoch seconds, the unit every time column in these two tables uses.
@@ -428,18 +429,28 @@ public isolated function getCacheOperation(string operationId)
 # rows are filtered out here as well as swept, so a mutation whose deadline has passed is
 # never delivered.
 #
+# A mutation delivered but still unanswered after `CACHE_REDELIVER_AFTER_SECONDS` is offered
+# again, as a read is. Delivery is not execution: the heartbeat response can be lost in
+# transit, and an MI agent still running its previous batch skips the new one on the
+# understanding that it will be re-offered. Without this, either left the row DELIVERED until
+# its deadline expired it unconfirmed — a write nobody ever ran, reported as one that may or
+# may not have been applied. Offering it again is safe because the runtime replays a command
+# id it has already executed rather than running it twice.
+#
 # + runtimeId - The runtime whose heartbeat is being answered
 # + count - Hard cap on how many mutations one heartbeat may carry
+# + now - The current epoch second; a parameter only so tests can move the clock
 # + return - The mutations to send, or an error
-public isolated function claimCacheOperations(string runtimeId, int count)
+public isolated function claimCacheOperations(string runtimeId, int count, int now = cacheNowEpoch())
         returns types:CacheOperation[]|error {
-    int now = cacheNowEpoch();
+    int redeliverBefore = now - CACHE_REDELIVER_AFTER_SECONDS;
     sql:ParameterizedQuery query = `
         SELECT operation_id, target, owner, kind, status, issued_at, deadline,
                delivered_at, completed_at, data, result
         FROM cache_operation_outbox
         WHERE target = ${runtimeId}
-          AND status = ${types:CACHE_OP_PENDING}
+          AND (status = ${types:CACHE_OP_PENDING}
+               OR (status = ${types:CACHE_OP_DELIVERED} AND delivered_at < ${redeliverBefore}))
           AND deadline > ${now}
         ORDER BY issued_at
     `;
@@ -460,7 +471,9 @@ public isolated function claimCacheOperations(string runtimeId, int count)
         sql:ExecutionResult|sql:Error marked = dbClient->execute(`
             UPDATE cache_operation_outbox
             SET status = ${types:CACHE_OP_DELIVERED}, delivered_at = ${now}
-            WHERE operation_id = ${operation.operationId} AND status = ${types:CACHE_OP_PENDING}
+            WHERE operation_id = ${operation.operationId}
+              AND (status = ${types:CACHE_OP_PENDING}
+                   OR (status = ${types:CACHE_OP_DELIVERED} AND delivered_at < ${redeliverBefore}))
         `);
         if marked is sql:Error {
             log:printWarn("Failed to mark a cached operation delivered; it stays queued", marked,

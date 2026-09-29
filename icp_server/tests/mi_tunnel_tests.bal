@@ -384,3 +384,42 @@ function testArtifactControlsTakeTheRegisteredRouteNotTheManagementPort() {
         body: {name: "fault", statistics: "enable"}
     }]);
 }
+
+@test:Config {groups: ["mi_tunnel"]}
+function testAnUnansweredWriteIsOfferedAgainNotLost() returns error? {
+    // Delivery is not execution. An MI agent still running its previous batch skips the next
+    // one, expecting it to be re-offered; a heartbeat response can also be lost in transit.
+    // A write left DELIVERED would otherwise expire unconfirmed without ever having run.
+    int now = storage:cacheNowEpoch();
+    string target = "mi-redeliver-" + now.toString();
+    string operationId = miOperationId(target, "redeliver");
+    _ = check storage:enqueueCacheOperation({
+        operationId: operationId,
+        target: target,
+        kind: CACHE_KIND_MI_OPERATION,
+        owner: miReadOwner(target),
+        status: types:CACHE_OP_PENDING,
+        issuedAt: now,
+        deadline: now + 120,
+        data: miRequestDocument("POST", "/management/apis", {name: "HelloApi", trace: "enable"}, "alice")
+    });
+
+    test:assertEquals((check storage:claimCacheOperations(target, 10, now)).length(), 1);
+    test:assertEquals((check storage:claimCacheOperations(target, 10, now + 5)).length(), 0,
+            "A write just handed out must not be sent again on the next heartbeat");
+
+    types:CacheOperation[] again = check storage:claimCacheOperations(target, 10, now + 21);
+    test:assertEquals(again.length(), 1, "A write nobody answered must be offered again");
+    test:assertEquals(again[0].operationId, operationId,
+            "Under the same id, so a runtime that did run it replays the result instead of running it twice");
+
+    test:assertTrue(recordTunneledCommandResult({
+        runtimeId: target,
+        commandId: operationId,
+        status: "COMPLETED",
+        httpStatus: 200,
+        body: {message: "ok"}
+    }));
+    test:assertEquals((check storage:claimCacheOperations(target, 10, now + 60)).length(), 0,
+            "An answered write is never offered again");
+}
