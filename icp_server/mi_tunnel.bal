@@ -20,6 +20,7 @@ import icp_server.types;
 import ballerina/crypto;
 import ballerina/log;
 import ballerina/url;
+import ballerina/uuid;
 
 // ============================================================================
 // MI MANAGEMENT OVER THE HEARTBEAT COMMAND TUNNEL
@@ -352,6 +353,12 @@ isolated function recordMIOperationResult(string operationId, types:WorkflowComm
                 operationId = operationId);
         return false;
     }
+    if recorded && !succeeded {
+        // The console may have moved on (an artifact toggle is fire-and-forget), so the
+        // refusal is said here in the runtime's own words rather than only stored.
+        log:printWarn("An MI management write was refused by the runtime", operationId = operationId,
+                runtimeId = row.target, httpStatus = result.httpStatus, response = result.body.toJsonString());
+    }
     if recorded && succeeded {
         auditMIOperation(row, result);
         int|error staled = storage:staleCacheOwner(miReadOwner(row.target),
@@ -388,4 +395,34 @@ isolated function reportExpiredMIOperation(types:CacheOperation row) {
                 runtimeId: row.target,
                 issuedAt: row.issuedAt
             }.toJsonString());
+}
+
+# Who an artifact control write is recorded as. Artifact controls reach the runtime through
+# reconcile, which acts on desired state rather than on one user's request, so the queued
+# write names the reconciler; the user who changed the desired state is in the ICP audit.
+final readonly & types:UserContextV2 MI_RECONCILE_CALLER = {
+    userId: "icp-reconcile",
+    username: "icp-reconcile",
+    displayName: "ICP reconcile",
+    permissions: []
+};
+
+# Queues an artifact control write (enable/disable, tracing, statistics, task trigger) for
+# the runtime's next heartbeat. Registered with the storage module at startup when
+# `miTunnelEnabled` is on, which is how those controls — built in storage and dispatched by
+# reconcile — reach a runtime the ICP cannot dial.
+#
+# Each call is its own operation: reconcile decides when to try again, from the state the
+# runtime reports, so there is no caller-supplied requestId to coalesce on.
+isolated function tunnelMIControlWrite(string runtimeId, string method, string path, json body)
+        returns error? {
+    types:Runtime? runtime = check storage:getRuntimeById(runtimeId);
+    if runtime is () {
+        return error(string `Runtime ${runtimeId} not found`);
+    }
+    if !miTargetAvailable(runtime) {
+        return error(MI_OFFLINE_MESSAGE);
+    }
+    _ = check enqueueMIMutation(runtime, method, path, body, MI_RECONCILE_CALLER,
+            miOperationId(runtimeId, uuid:createType4AsString()));
 }

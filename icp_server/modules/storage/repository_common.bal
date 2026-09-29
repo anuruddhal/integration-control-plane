@@ -146,9 +146,127 @@ type ArtifactInfoRecord record {|
     string artifact_type;
 |};
 
+# Where MI management writes go instead of the runtime's management port, when set.
+#
+# The heartbeat tunnel lives in the root module, which this module cannot call, so the root
+# registers its queue here at startup when `miTunnelEnabled` is on. The artifact controls —
+# enable/disable, tracing, statistics and task trigger — then ride the heartbeat like every
+# other MI management call, rather than dialling an address that behind a load balancer
+# nothing routes to.
+public type MIManagementWriter isolated function (string runtimeId, string method, string path, json body)
+        returns error?;
+
+isolated MIManagementWriter? miManagementWriter = ();
+
+# Routes MI management writes through `writer`, or back to the management port when `()`.
+public isolated function routeMIManagementWrites(MIManagementWriter? writer) {
+    lock {
+        miManagementWriter = writer;
+    }
+}
+
+isolated function currentMIManagementWriter() returns MIManagementWriter? {
+    lock {
+        return miManagementWriter;
+    }
+}
+
+# The management call that carries out one MI control action, as `[path, body]`, or `()`
+# when the artifact type does not support it.
+public isolated function miControlRequest(string artifactType, string artifactName, string action)
+        returns [string, json]? {
+    string artifactPath;
+    json payload;
+
+    // Determine API endpoint and payload based on action type
+    if action == types:ARTIFACT_ENABLE || action == types:ARTIFACT_DISABLE || action == types:ARTIFACT_TRIGGER {
+        // Status change: use artifact-specific management API paths
+        string status;
+        if action == types:ARTIFACT_ENABLE {
+            status = STATE_ACTIVE;
+        } else if action == types:ARTIFACT_DISABLE {
+            status = STATE_INACTIVE;
+        } else {
+            status = STATE_TRIGGER;
+        }
+
+        string? managementPath = getManagementPath(artifactType, true);
+        if managementPath is () {
+            return ();
+        }
+
+        payload = {
+            "name": artifactName,
+            "status": status
+        };
+        artifactPath = managementPath;
+    } else if action == types:ARTIFACT_ENABLE_TRACING || action == types:ARTIFACT_DISABLE_TRACING {
+        // Tracing change: enable/disable - use artifact-specific management API paths
+        string tracing = action == types:ARTIFACT_ENABLE_TRACING ? TOGGLE_ENABLE : TOGGLE_DISABLE;
+
+        string? managementPath = getManagementPath(artifactType);
+        if managementPath is () {
+            return ();
+        }
+
+        payload = {
+            "name": artifactName,
+            "trace": tracing
+        };
+        artifactPath = managementPath;
+    } else if action == types:ARTIFACT_ENABLE_STATISTICS || action == types:ARTIFACT_DISABLE_STATISTICS {
+        // Statistics change: enable/disable - use artifact-specific management API paths
+        string statistics = action == types:ARTIFACT_ENABLE_STATISTICS ? TOGGLE_ENABLE : TOGGLE_DISABLE;
+
+        // Map artifact type to the correct management API path
+        string? managementPath = getManagementPath(artifactType);
+        if managementPath is () {
+            return ();
+        }
+
+        // Build payload based on artifact type
+        if artifactType == ARTIFACT_TYPE_TEMPLATE {
+            // Templates require a 'type' field (sequence or endpoint)
+            payload = {
+                "name": artifactName,
+                "type": ARTIFACT_TYPE_SEQUENCE, // Default to sequence template
+                "statistics": statistics
+            };
+        } else {
+            payload = {
+                "name": artifactName,
+                "statistics": statistics
+            };
+        }
+
+        artifactPath = managementPath;
+    } else {
+        return ();
+    }
+    return [artifactPath, payload];
+}
+
 // Async worker function to send MI control command (fire-and-forget)
 public isolated function sendMIControlCommandAsync(string runtimeId, string artifactType, string artifactName, string action) {
     do {
+        [string, json]? request = miControlRequest(artifactType, artifactName, action);
+        if request is () {
+            log:printWarn("MI control action not sent", runtimeId = runtimeId, artifactType = artifactType,
+                    action = action);
+            return;
+        }
+        [string, json] [artifactPath, payload] = request;
+
+        MIManagementWriter? writer = currentMIManagementWriter();
+        if writer is MIManagementWriter {
+            // Queued for the runtime's next heartbeat. The outcome comes back on the tunnel,
+            // and reconcile learns whether it took from the state the runtime reports next.
+            check writer(runtimeId, http:POST, artifactPath, payload);
+            log:printDebug("MI control command queued for the heartbeat tunnel", runtimeId = runtimeId,
+                    path = artifactPath, artifactType = artifactType, artifactName = artifactName, action = action);
+            return;
+        }
+
         // Get runtime details
         types:Runtime? runtime = check getRuntimeById(runtimeId);
         if runtime is () {
@@ -169,79 +287,6 @@ public isolated function sendMIControlCommandAsync(string runtimeId, string arti
 
         http:Client mgmtClient = mgmtClientResult;
         string hmacToken = check issueRuntimeHmacToken(runtimeId);
-
-        string artifactPath;
-        json payload;
-
-        // Determine API endpoint and payload based on action type
-        if action == types:ARTIFACT_ENABLE || action == types:ARTIFACT_DISABLE || action == types:ARTIFACT_TRIGGER {
-            // Status change: use artifact-specific management API paths
-            string status;
-            if action == types:ARTIFACT_ENABLE {
-                status = STATE_ACTIVE;
-            } else if action == types:ARTIFACT_DISABLE {
-                status = STATE_INACTIVE;
-            } else {
-                status = STATE_TRIGGER;
-            }
-
-            string? managementPath = getManagementPath(artifactType, true);
-            if managementPath is () {
-                log:printWarn(string `Status change not supported for artifact type: ${artifactType}`, runtimeId = runtimeId);
-                return;
-            }
-
-            payload = {
-                "name": artifactName,
-                "status": status
-            };
-            artifactPath = managementPath;
-        } else if action == types:ARTIFACT_ENABLE_TRACING || action == types:ARTIFACT_DISABLE_TRACING {
-            // Tracing change: enable/disable - use artifact-specific management API paths
-            string tracing = action == types:ARTIFACT_ENABLE_TRACING ? TOGGLE_ENABLE : TOGGLE_DISABLE;
-
-            string? managementPath = getManagementPath(artifactType);
-            if managementPath is () {
-                log:printWarn(string `Tracing not supported for artifact type: ${artifactType}`, runtimeId = runtimeId);
-                return;
-            }
-
-            payload = {
-                "name": artifactName,
-                "trace": tracing
-            };
-            artifactPath = managementPath;
-        } else if action == types:ARTIFACT_ENABLE_STATISTICS || action == types:ARTIFACT_DISABLE_STATISTICS {
-            // Statistics change: enable/disable - use artifact-specific management API paths
-            string statistics = action == types:ARTIFACT_ENABLE_STATISTICS ? TOGGLE_ENABLE : TOGGLE_DISABLE;
-
-            // Map artifact type to the correct management API path
-            string? managementPath = getManagementPath(artifactType);
-            if managementPath is () {
-                log:printWarn(string `Statistics not supported for artifact type: ${artifactType}`, runtimeId = runtimeId);
-                return;
-            }
-
-            // Build payload based on artifact type
-            if artifactType == ARTIFACT_TYPE_TEMPLATE {
-                // Templates require a 'type' field (sequence or endpoint)
-                payload = {
-                    "name": artifactName,
-                    "type": ARTIFACT_TYPE_SEQUENCE, // Default to sequence template
-                    "statistics": statistics
-                };
-            } else {
-                payload = {
-                    "name": artifactName,
-                    "statistics": statistics
-                };
-            }
-
-            artifactPath = managementPath;
-        } else {
-            log:printWarn(string `Unknown MI control action: ${action}`, runtimeId = runtimeId);
-            return;
-        }
 
         log:printDebug("Sending MI control command (fire and forget)",
                 runtimeId = runtimeId,

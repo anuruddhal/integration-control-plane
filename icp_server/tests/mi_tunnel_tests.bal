@@ -338,3 +338,49 @@ function testAResultFromAnotherRuntimeCannotCompleteThisOne() returns error? {
         body: {message: "ok"}
     }), "and its own answer still settles it");
 }
+
+// ── Artifact controls over the tunnel ────────────────────────────────────────
+
+@test:Config {groups: ["mi_tunnel"]}
+function testArtifactControlsAreManagementWrites() {
+    // What reconcile asks of MI is a plain management write, so the tunnel can carry it.
+    test:assertEquals(storage:miControlRequest("sequence", "fault", types:ARTIFACT_ENABLE_STATISTICS),
+            ["/management/sequences", {name: "fault", statistics: "enable"}]);
+    test:assertEquals(storage:miControlRequest("api", "HelloApi", types:ARTIFACT_DISABLE_TRACING),
+            ["/management/apis", {name: "HelloApi", trace: "disable"}]);
+    test:assertEquals(storage:miControlRequest("proxy-service", "p1", types:ARTIFACT_DISABLE),
+            ["/management/proxy-services", {name: "p1", status: "inactive"}]);
+    test:assertEquals(storage:miControlRequest("task", "t1", types:ARTIFACT_TRIGGER),
+            ["/management/tasks", {name: "t1", status: "trigger"}]);
+    test:assertTrue(storage:miControlRequest("local-entry", "e1", types:ARTIFACT_ENABLE_STATISTICS) is (),
+            "An artifact type without the control must not become a write to some other path");
+}
+
+isolated json[] routedControlWrites = [];
+
+isolated function captureControlWrite(string runtimeId, string method, string path, json body)
+        returns error? {
+    lock {
+        routedControlWrites.push({runtimeId, method, path, body: body.clone()});
+    }
+}
+
+@test:Config {groups: ["mi_tunnel"]}
+function testArtifactControlsTakeTheRegisteredRouteNotTheManagementPort() {
+    // With a writer registered the control never dials: the runtime id below does not exist,
+    // so reaching the management-port path would only log "not found" and send nothing.
+    storage:routeMIManagementWrites(captureControlWrite);
+    storage:sendMIControlCommandAsync("no-such-runtime", "sequence", "fault", types:ARTIFACT_ENABLE_STATISTICS);
+    storage:routeMIManagementWrites(());
+
+    json[] captured;
+    lock {
+        captured = routedControlWrites.clone();
+    }
+    test:assertEquals(captured, [{
+        runtimeId: "no-such-runtime",
+        method: "POST",
+        path: "/management/sequences",
+        body: {name: "fault", statistics: "enable"}
+    }]);
+}
