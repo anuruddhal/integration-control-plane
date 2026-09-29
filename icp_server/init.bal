@@ -86,6 +86,11 @@ function init() returns error? {
     check initRuntimeScheduler();
 
     logMIAccessMode();
+    if miTunnelEnabled {
+        // Artifact controls are built and dispatched in the storage and sync modules, which
+        // cannot reach the tunnel; hand them its queue.
+        storage:routeMIManagementWrites(tunnelMIControlWrite);
+    }
 
     log:printInfo("ICP server initialization completed successfully");
 }

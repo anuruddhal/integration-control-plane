@@ -338,3 +338,122 @@ function testAResultFromAnotherRuntimeCannotCompleteThisOne() returns error? {
         body: {message: "ok"}
     }), "and its own answer still settles it");
 }
+
+// ── Artifact controls over the tunnel ────────────────────────────────────────
+
+@test:Config {groups: ["mi_tunnel"]}
+function testArtifactControlsAreManagementWrites() {
+    // What reconcile asks of MI is a plain management write, so the tunnel can carry it.
+    test:assertEquals(storage:miControlRequest("sequence", "fault", types:ARTIFACT_ENABLE_STATISTICS),
+            ["/management/sequences", {name: "fault", statistics: "enable"}]);
+    test:assertEquals(storage:miControlRequest("api", "HelloApi", types:ARTIFACT_DISABLE_TRACING),
+            ["/management/apis", {name: "HelloApi", trace: "disable"}]);
+    test:assertEquals(storage:miControlRequest("proxy-service", "p1", types:ARTIFACT_DISABLE),
+            ["/management/proxy-services", {name: "p1", status: "inactive"}]);
+    test:assertEquals(storage:miControlRequest("task", "t1", types:ARTIFACT_TRIGGER),
+            ["/management/tasks", {name: "t1", status: "trigger"}]);
+    // The template body needs its `type`, however the artifact type was spelled: the path is
+    // resolved case- and space-insensitively, so the body must be too.
+    test:assertEquals(storage:miControlRequest(" Template ", "t1", types:ARTIFACT_ENABLE_STATISTICS),
+            ["/management/templates", {name: "t1", "type": "sequence", statistics: "enable"}]);
+    test:assertTrue(storage:miControlRequest("local-entry", "e1", types:ARTIFACT_ENABLE_STATISTICS) is (),
+            "An artifact type without the control must not become a write to some other path");
+}
+
+isolated json[] routedControlWrites = [];
+
+isolated function captureControlWrite(string runtimeId, string method, string path, json body)
+        returns error? {
+    lock {
+        routedControlWrites.push({runtimeId, method, path, body: body.clone()});
+    }
+}
+
+@test:Config {groups: ["mi_tunnel"]}
+function testArtifactControlsTakeTheRegisteredRouteNotTheManagementPort() {
+    // With a writer registered the control never dials: the runtime id below does not exist,
+    // so reaching the management-port path would only log "not found" and send nothing.
+    storage:routeMIManagementWrites(captureControlWrite);
+    storage:sendMIControlCommandAsync("no-such-runtime", "sequence", "fault", types:ARTIFACT_ENABLE_STATISTICS);
+    storage:routeMIManagementWrites(());
+
+    json[] captured;
+    lock {
+        captured = routedControlWrites.clone();
+    }
+    test:assertEquals(captured, [{
+        runtimeId: "no-such-runtime",
+        method: "POST",
+        path: "/management/sequences",
+        body: {name: "fault", statistics: "enable"}
+    }]);
+}
+
+@test:Config {groups: ["mi_tunnel"]}
+function testAnUnansweredWriteIsOfferedAgainNotLost() returns error? {
+    // Delivery is not execution. An MI agent still running its previous batch skips the next
+    // one, expecting it to be re-offered; a heartbeat response can also be lost in transit.
+    // A write left DELIVERED would otherwise expire unconfirmed without ever having run.
+    int now = storage:cacheNowEpoch();
+    string target = "mi-redeliver-" + now.toString();
+    string operationId = miOperationId(target, "redeliver");
+    _ = check storage:enqueueCacheOperation({
+        operationId: operationId,
+        target: target,
+        kind: CACHE_KIND_MI_OPERATION,
+        owner: miReadOwner(target),
+        status: types:CACHE_OP_PENDING,
+        issuedAt: now,
+        deadline: now + 120,
+        data: miRequestDocument("POST", "/management/apis", {name: "HelloApi", trace: "enable"}, "alice")
+    });
+
+    test:assertEquals((check storage:claimCacheOperations(target, 10, now)).length(), 1);
+    test:assertEquals((check storage:claimCacheOperations(target, 10, now + 5)).length(), 0,
+            "A write just handed out must not be sent again on the next heartbeat");
+
+    types:CacheOperation[] again = check storage:claimCacheOperations(target, 10, now + 21);
+    test:assertEquals(again.length(), 1, "A write nobody answered must be offered again");
+    test:assertEquals(again[0].operationId, operationId,
+            "Under the same id, so a runtime that did run it replays the result instead of running it twice");
+
+    test:assertTrue(recordTunneledCommandResult({
+        runtimeId: target,
+        commandId: operationId,
+        status: "COMPLETED",
+        httpStatus: 200,
+        body: {message: "ok"}
+    }));
+    test:assertEquals((check storage:claimCacheOperations(target, 10, now + 60)).length(), 0,
+            "An answered write is never offered again");
+}
+
+@test:Config {groups: ["mi_tunnel"]}
+function testNothingIsDeliveredInAResponseTheRuntimeWillReplace() returns error? {
+    // A delta heartbeat whose hash does not match is answered with fullHeartbeatRequired, and
+    // the runtime then sends a full heartbeat and acts on that response instead. Commands put
+    // in the first would be marked delivered and never run — which is exactly what happens on
+    // the delta after an artifact toggle, because the toggle is what changed the hash.
+    int now = storage:cacheNowEpoch();
+    string target = "mi-replaced-" + now.toString();
+    string operationId = miOperationId(target, "replaced");
+    _ = check storage:enqueueCacheOperation({
+        operationId: operationId,
+        target: target,
+        kind: CACHE_KIND_MI_OPERATION,
+        owner: miReadOwner(target),
+        status: types:CACHE_OP_PENDING,
+        issuedAt: now,
+        deadline: now + 120,
+        data: miRequestDocument("POST", "/management/sequences", {name: "fault", statistics: "enable"}, "alice")
+    });
+
+    types:HeartbeatResponse replaced = {acknowledged: true, fullHeartbeatRequired: true, commands: []};
+    deliverTunneledCommands(target, replaced);
+    test:assertEquals((replaced.commands ?: []).length(), 0,
+            "A response the runtime will replace must carry no tunneled work");
+
+    types:CacheOperation? row = check storage:getCacheOperation(operationId);
+    test:assertTrue(row is types:CacheOperation && row.status == types:CACHE_OP_PENDING,
+            "The write must still be waiting for the full heartbeat that follows");
+}
