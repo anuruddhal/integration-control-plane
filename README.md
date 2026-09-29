@@ -14,7 +14,7 @@ The Integration Control Plane consists of:
 
 ### Prerequisites
 
-- **Java 17+** (for Gradle)
+- **Java 25** (Ballerina 2201.14 emits Java 25 bytecode; older JDKs fail at startup)
 - **Ballerina** (latest stable version)
 - **Node.js 20+** and **pnpm 10+**
 - **Docker & Docker Compose** (recommended for local development)
