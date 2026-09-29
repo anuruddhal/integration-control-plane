@@ -423,3 +423,33 @@ function testAnUnansweredWriteIsOfferedAgainNotLost() returns error? {
     test:assertEquals((check storage:claimCacheOperations(target, 10, now + 60)).length(), 0,
             "An answered write is never offered again");
 }
+
+@test:Config {groups: ["mi_tunnel"]}
+function testNothingIsDeliveredInAResponseTheRuntimeWillReplace() returns error? {
+    // A delta heartbeat whose hash does not match is answered with fullHeartbeatRequired, and
+    // the runtime then sends a full heartbeat and acts on that response instead. Commands put
+    // in the first would be marked delivered and never run — which is exactly what happens on
+    // the delta after an artifact toggle, because the toggle is what changed the hash.
+    int now = storage:cacheNowEpoch();
+    string target = "mi-replaced-" + now.toString();
+    string operationId = miOperationId(target, "replaced");
+    _ = check storage:enqueueCacheOperation({
+        operationId: operationId,
+        target: target,
+        kind: CACHE_KIND_MI_OPERATION,
+        owner: miReadOwner(target),
+        status: types:CACHE_OP_PENDING,
+        issuedAt: now,
+        deadline: now + 120,
+        data: miRequestDocument("POST", "/management/sequences", {name: "fault", statistics: "enable"}, "alice")
+    });
+
+    types:HeartbeatResponse replaced = {acknowledged: true, fullHeartbeatRequired: true, commands: []};
+    deliverTunneledCommands(target, replaced);
+    test:assertEquals((replaced.commands ?: []).length(), 0,
+            "A response the runtime will replace must carry no tunneled work");
+
+    types:CacheOperation? row = check storage:getCacheOperation(operationId);
+    test:assertTrue(row is types:CacheOperation && row.status == types:CACHE_OP_PENDING,
+            "The write must still be waiting for the full heartbeat that follows");
+}

@@ -440,10 +440,14 @@ isolated function isTerminalInstanceBody(json body) returns boolean {
 # + heartbeatResponse - The response being built; commands and cadence are added in place
 isolated function deliverTunneledCommands(string runtimeId,
         types:HeartbeatResponse heartbeatResponse) {
-    // Delivery drains the queue, so only an acknowledged response may carry anything: the
-    // runtime discards an unacknowledged response without processing commands, and the work
-    // taken for it would be lost while its callers are still polling.
-    if !heartbeatResponse.acknowledged {
+    // Delivery drains the queue, so only a response the runtime will act on may carry
+    // anything: the runtime discards an unacknowledged response without processing
+    // commands, and one that demands a full heartbeat is replaced by the full heartbeat's
+    // own response. Work taken for either would be marked delivered and never run, while its
+    // callers are still polling. A response demanding a full heartbeat is acknowledged — the
+    // runtime is known, only its artifacts are not — and the full heartbeat follows at once,
+    // so its commands wait a moment, not a heartbeat interval.
+    if !heartbeatResponse.acknowledged || (heartbeatResponse.fullHeartbeatRequired ?: false) {
         return;
     }
     [string, string, int, string]?|error scope = storage:getRuntimeCacheOwner(runtimeId);
