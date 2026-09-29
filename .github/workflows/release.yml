@@ -69,14 +69,14 @@ jobs:
           java-version: "17"
 
       # setup-ballerina downloads from dist.ballerina.io, which does not carry pre-release
-      # builds — it answers 403 for 2201.14.0-alpha2 — so the action cannot install this
+      # builds — it answers 403 for 2201.14.0-alpha3 — so the action cannot install this
       # version. Install the .deb from the GitHub release instead. Note the asset is named
-      # for the base version, without the -alpha2 the tag carries. The package puts `bal`
+      # for the base version, without the -alpha3 the tag carries. The package puts `bal`
       # on PATH itself (/usr/bin/bal), so nothing needs exporting. Restore the action once
       # a non-pre-release build is published.
       - name: Setup Ballerina
         env:
-          BALLERINA_TAG: v2201.14.0-alpha2
+          BALLERINA_TAG: v2201.14.0-alpha3
           BALLERINA_DEB: ballerina-2201.14.0-swan-lake-linux-x64.deb
         run: |
           set -euo pipefail
