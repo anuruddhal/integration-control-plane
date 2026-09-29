@@ -21,8 +21,17 @@ plugins {
 }
 
 import java.util.logging.Logger
+import javax.inject.Inject
+import org.gradle.process.ExecOperations
 
 def logger = Logger.getLogger('ICPBuild')
+
+// Gradle 9 removed Project.exec(). ExecOperations is the supported replacement, and it is only
+// available by injection, so a throwaway interface carries it into the script's task actions.
+interface InjectedExecOps {
+    @Inject ExecOperations getExecOps()
+}
+def execOps = project.objects.newInstance(InjectedExecOps).execOps
 
 group = 'wso2'
 // Read version from gradle.properties
@@ -54,7 +63,7 @@ task cleanICP {
     description = 'Clean build artifacts'
     doLast {
         logger.info('Cleaning Integration Control Plane...')
-        exec {
+        execOps.exec {
             commandLine 'rm', '-rf', 'icp_server/target'
         }
         logger.info('Clean complete')
@@ -66,7 +75,7 @@ task buildICP {
     dependsOn cleanICP
     doLast {
         logger.info('Building Integration Control Plane...')
-        exec {
+        execOps.exec {
             workingDir 'icp_server'
             commandLine 'bal', 'build'
         }
@@ -82,7 +91,7 @@ task run {
     dependsOn buildICP
     doLast {
         logger.info('Starting ICP Server...')
-        exec {
+        execOps.exec {
             workingDir 'icp_server'
             commandLine 'bal', 'run'
         }
@@ -97,7 +106,7 @@ task testICP {
     mustRunAfter buildICP
     doLast {
         logger.info('Running tests...')
-        exec {
+        execOps.exec {
             workingDir 'icp_server'
             // -PnoCoverage speeds up local iterations; the combined coverage report then self-skips.
             commandLine(['bal', 'test'] + (project.hasProperty('noCoverage') ? [] : ['--code-coverage']))
@@ -111,11 +120,11 @@ task testFrontend {
 
     doLast {
         logger.info('Running frontend tests...')
-        exec {
+        execOps.exec {
             workingDir 'frontend'
             commandLine 'pnpm', 'install'
         }
-        exec {
+        execOps.exec {
             workingDir 'frontend'
             commandLine 'pnpm', 'test'
         }
@@ -136,11 +145,11 @@ task buildFrontend {
 
     doLast {
         logger.info('Building frontend...')
-        exec {
+        execOps.exec {
             workingDir 'frontend'
             commandLine 'pnpm', 'install'
         }
-        exec {
+        execOps.exec {
             workingDir 'frontend'
             commandLine 'pnpm', 'build'
         }
@@ -386,7 +395,7 @@ task packageICP {
             // the distribution forever — and a consumer can end up serving whichever index.html
             // survived. The archive is rebuilt from scratch, never appended.
             delete zipFile
-            exec {
+            execOps.exec {
                 workingDir 'build/temp-package'
                 commandLine 'zip', '-r', zipFile.absolutePath, '.'
             }
@@ -396,7 +405,7 @@ task packageICP {
             
             logger.info("Package created: ${zipFile.absolutePath}")
             logger.info("Archive contents:")
-            exec {
+            execOps.exec {
                 commandLine 'unzip', '-l', zipFile.absolutePath
             }
         } else {

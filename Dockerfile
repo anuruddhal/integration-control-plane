@@ -31,7 +31,7 @@ RUN npm install -g pnpm@9 && \
     pnpm build
 
 # Stage 2: Build stage with Ballerina and Gradle
-FROM ballerina/ballerina:2201.13.4 AS builder
+FROM ballerina/ballerina:2201.14.0-alpha3 AS builder
 
 # Install required dependencies (using apk for Alpine-based image)
 USER root
@@ -70,7 +70,7 @@ COPY --from=frontend-builder /app/frontend/dist/ ./frontend/dist/
 RUN ./gradlew clean build -x buildFrontend -x check
 
 # Stage 3: Runtime stage
-FROM eclipse-temurin:21-jdk
+FROM eclipse-temurin:25-jdk
 
 # Define build argument for ICP version
 ARG ICP_VERSION=2.0.0-SNAPSHOT

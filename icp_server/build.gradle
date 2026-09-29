@@ -13,12 +13,22 @@ buildscript {
     }
 }
 
+import javax.inject.Inject
+import org.gradle.process.ExecOperations
+
+// Gradle 9 removed Project.exec(). ExecOperations is the supported replacement, and it is only
+// available by injection, so a throwaway interface carries it into the script's task actions.
+interface InjectedExecOps {
+    @Inject ExecOperations getExecOps()
+}
+def execOps = project.objects.newInstance(InjectedExecOps).execOps
+
 // Ballerina project tasks
 task ballerinaClean {
     description = 'Clean Ballerina build artifacts'
     doLast {
         logger.lifecycle('Cleaning Ballerina artifacts...')
-        exec {
+        execOps.exec {
             commandLine 'bal', 'clean'
         }
     }
@@ -29,7 +39,7 @@ task ballerinaBuild {
     dependsOn ballerinaClean
     doLast {
         logger.lifecycle('Building Ballerina project...')
-        exec {
+        execOps.exec {
             commandLine 'bal', 'build'
         }
         logger.lifecycle('Ballerina build complete')
@@ -40,7 +50,7 @@ task ballerinaTest {
     description = 'Run Ballerina tests'
     doLast {
         logger.lifecycle('Running Ballerina tests...')
-        exec {
+        execOps.exec {
             commandLine 'bal', 'test'
         }
         logger.lifecycle('Ballerina tests complete')
@@ -52,7 +62,7 @@ task ballerinaRun {
     dependsOn ballerinaBuild
     doLast {
         logger.lifecycle('Starting Ballerina application...')
-        exec {
+        execOps.exec {
             commandLine 'bal', 'run'
         }
     }
@@ -62,7 +72,7 @@ task ballerinaFormat {
     description = 'Format Ballerina code'
     doLast {
         logger.lifecycle('Formatting Ballerina code...')
-        exec {
+        execOps.exec {
             commandLine 'bal', 'format'
         }
     }
@@ -73,7 +83,7 @@ task dockerBuild {
     description = 'Build Docker image locally'
     doLast {
         logger.lifecycle('Building Docker image with docker-compose...')
-        exec {
+        execOps.exec {
             commandLine 'docker-compose', '-f', 'docker-compose.local.yml', 'build'
         }
     }
@@ -84,7 +94,7 @@ task dockerUp {
     dependsOn dockerBuild
     doLast {
         logger.lifecycle('Starting Docker containers...')
-        exec {
+        execOps.exec {
             commandLine 'docker-compose', '-f', 'docker-compose.local.yml', 'up', '-d'
         }
         logger.quiet("""
@@ -107,7 +117,7 @@ task dockerDown {
     description = 'Stop Docker containers'
     doLast {
         logger.lifecycle('Stopping Docker containers...')
-        exec {
+        execOps.exec {
             commandLine 'docker-compose', '-f', 'docker-compose.local.yml', 'down'
         }
         logger.lifecycle('Docker containers stopped')
@@ -118,7 +128,7 @@ task dockerLogs {
     description = 'View Docker logs'
     doLast {
         logger.lifecycle('Showing Docker logs (press Ctrl+C to exit)...')
-        exec {
+        execOps.exec {
             commandLine 'docker-compose', '-f', 'docker-compose.local.yml', 'logs', '-f'
         }
     }
@@ -129,7 +139,7 @@ task observabilityUp {
     description = 'Start observability stack (Prometheus, Grafana, etc.)'
     doLast {
         logger.lifecycle('Starting observability stack...')
-        exec {
+        execOps.exec {
             commandLine 'docker-compose', '-f', 'docker-compose.observability.yml', 'up', '-d'
         }
         logger.quiet("""
@@ -144,7 +154,7 @@ task observabilityDown {
     description = 'Stop observability stack'
     doLast {
         logger.lifecycle('Stopping observability stack...')
-        exec {
+        execOps.exec {
             commandLine 'docker-compose', '-f', 'docker-compose.observability.yml', 'down'
         }
     }
@@ -155,7 +165,7 @@ task dbUp {
     description = 'Start MySQL database'
     doLast {
         logger.lifecycle('Starting MySQL database...')
-        exec {
+        execOps.exec {
             commandLine 'docker-compose', '-f', 'docker-compose.mysql.yml', 'up', '-d'
         }
         logger.lifecycle('MySQL database started on localhost:3307')
@@ -166,7 +176,7 @@ task dbDown {
     description = 'Stop MySQL database'
     doLast {
         logger.lifecycle('Stopping MySQL database...')
-        exec {
+        execOps.exec {
             commandLine 'docker-compose', '-f', 'docker-compose.mysql.yml', 'down'
         }
     }

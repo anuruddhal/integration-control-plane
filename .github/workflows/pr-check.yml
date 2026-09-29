@@ -35,11 +35,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "21"
+          java-version: "25"
 
       # setup-ballerina downloads from dist.ballerina.io, which does not carry pre-release
       # builds — it answers 403 for 2201.14.0-alpha3 — so the action cannot install this

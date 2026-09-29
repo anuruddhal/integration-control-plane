@@ -2,12 +2,25 @@ plugins {
     id 'java'
 }
 
+import javax.inject.Inject
+import org.gradle.process.ExecOperations
+
 group = 'org.wso2.icp'
 version = '1.0.0-SNAPSHOT'
 
+// Gradle 9 removed Project.exec(). ExecOperations is the supported replacement, and it is only
+// available by injection, so a throwaway interface carries it into the script's task actions.
+interface InjectedExecOps {
+    @Inject ExecOperations getExecOps()
+}
+def execOps = project.objects.newInstance(InjectedExecOps).execOps
+
+// Ballerina 2201.14 emits Java 25 bytecode, so the ICP process these suites launch needs a 25
+// runtime; keeping the toolchain on the same version avoids provisioning a second JDK for the
+// test code alone.
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
@@ -33,7 +46,7 @@ def dockerContextHost() {
 def commandOutput(String... args) {
     def output = new ByteArrayOutputStream()
     try {
-        def result = exec {
+        def result = execOps.exec {
             commandLine args
             standardOutput = output
             errorOutput = new ByteArrayOutputStream()
@@ -83,7 +96,7 @@ tasks.register('buildBiE2eArtifact') {
             from 'src/test/resources/bi/hello-world'
             into workDir
         }
-        exec {
+        execOps.exec {
             workingDir workDir
             commandLine 'bal', 'build'
         }

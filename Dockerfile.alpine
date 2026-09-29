@@ -36,16 +36,18 @@ RUN apk add --no-cache bash unzip curl
 COPY --from=libgcc-provider /libgcc_s.so.1 \
      /usr/glibc-compat/lib/libgcc_s.so.1
 
-# Download glibc-compiled Eclipse Temurin 21 JRE (Linux aarch64, not alpine/musl).
+# Download glibc-compiled Eclipse Temurin 25 JRE (Linux aarch64, not alpine/musl).
+# 25, not 21: Ballerina 2201.14 emits Java 25 bytecode, so an older JRE fails at startup with
+# UnsupportedClassVersionError on io/ballerina/runtime/internal/values/ValueCreator.
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "aarch64" ]; then \
-        JRE_FILE="OpenJDK21U-jre_aarch64_linux_hotspot_21.0.11_10.tar.gz"; \
-        JRE_SHA256="fa23d9d9945053e67bcc7638410eabf1e17a7672c7c95a24f70cd08b8407d36e"; \
+        JRE_FILE="OpenJDK25U-jre_aarch64_linux_hotspot_25.0.4.1_1.tar.gz"; \
+        JRE_SHA256="34828cbb93ed31c281c84ecb31ddab655d11a802f263c1fc019d42e9e0230fed"; \
     else \
-        JRE_FILE="OpenJDK21U-jre_x64_linux_hotspot_21.0.11_10.tar.gz"; \
-        JRE_SHA256="e5038aae3ca9ff670bc696496b0728dbd23d280026bad30291cb919221ecfdcb"; \
+        JRE_FILE="OpenJDK25U-jre_x64_linux_hotspot_25.0.4.1_1.tar.gz"; \
+        JRE_SHA256="1731a34baadec5479258ea0202e4d5d865d2efeee60cb0c7d7eb056fe96ca219"; \
     fi && \
-    curl -fL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.11%2B10/${JRE_FILE}" \
+    curl -fL "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/${JRE_FILE}" \
         -o /tmp/jre.tar.gz && \
     echo "${JRE_SHA256}  /tmp/jre.tar.gz" | sha256sum -c - && \
     mkdir -p /opt/java && \
