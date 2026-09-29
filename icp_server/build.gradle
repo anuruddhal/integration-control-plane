@@ -78,6 +78,17 @@ task ballerinaFormat {
     }
 }
 
+// Ballerina 2201.14 no longer bundles the graphql tool; install it once with `bal tool pull graphql`.
+task generateGraphqlSchema {
+    description = 'Regenerate schema_graphql.graphql from the GraphQL service in graphql_api.bal'
+    doLast {
+        logger.lifecycle('Generating GraphQL schema...')
+        execOps.exec {
+            commandLine 'bal', 'graphql', '-i', 'graphql_api.bal', '-o', '.'
+        }
+    }
+}
+
 // Docker tasks for ICP Server
 task dockerBuild {
     description = 'Build Docker image locally'
