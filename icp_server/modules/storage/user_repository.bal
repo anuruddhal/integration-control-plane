@@ -54,6 +54,11 @@ public isolated function getUserDetailsById(string userId) returns types:User|er
              FROM users
              WHERE user_id = ${userId}`
             );
+        // No row is the expected answer for a first login, which then creates the user.
+        if row is sql:NoRowsError {
+            log:printDebug(string `No user record for ${userId}`);
+            return row;
+        }
         if row is sql:Error {
             log:printError(string `Failed to get user details for ${userId}`, row);
             return row;
@@ -66,6 +71,11 @@ public isolated function getUserDetailsById(string userId) returns types:User|er
          WHERE user_id = ${userId}`
         );
 
+    // No row is the expected answer for a first login, which then creates the user.
+    if user is sql:NoRowsError {
+        log:printDebug(string `No user record for ${userId}`);
+        return user;
+    }
     if user is sql:Error {
         log:printError(string `Failed to get user details for ${userId}`, user);
         return user;
