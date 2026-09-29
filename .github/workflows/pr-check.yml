@@ -82,6 +82,16 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      # schema_graphql.graphql is read as the API reference, but nothing in the build uses it,
+      # so it drifted from the service. Regenerate it from graphql_api.bal and fail if the
+      # committed copy differs. 2201.14 no longer bundles the graphql tool, so pull it first.
+      - name: Check GraphQL schema is up to date
+        run: |
+          set -euo pipefail
+          bal tool pull graphql:0.14.0
+          ./gradlew --no-daemon :icp_server:generateGraphqlSchema
+          git diff --exit-code -- icp_server/schema_graphql.graphql
+
       # OpenSearch (E2E observability) needs a higher mmap count than the runner default.
       - name: Raise vm.max_map_count for OpenSearch
         run: sudo sysctl -w vm.max_map_count=262144

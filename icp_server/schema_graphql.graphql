@@ -1,321 +1,83 @@
-# ============================================
-# Query Type - Read Operations
-# ============================================
 type Query {
-  # Runtime Queries
-  runtimes(
-    status: String
-    runtimeType: String
-    environmentId: String
-    projectId: String
-    componentId: String
-    pagination: PaginationInput
-  ): RuntimesPage!
+  runtimes(status: String, runtimeType: String, environmentId: String, projectId: String, componentId: String, pagination: PaginationInput): RuntimesPage!
   runtime(runtimeId: String!): Runtime
+  componentDeployment(orgHandler: String!, orgUuid: String!, componentId: String!, versionId: String!, environmentId: String!): ComponentDeployment
   services(runtimeId: String!, pagination: PaginationInput): ServicesPage!
+  openApiDefinitionsByRuntime(runtimeId: String!): [OpenApiDefinitionRecord!]!
+  servicesByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): ServicesPage!
   listeners(runtimeId: String!, pagination: PaginationInput): ListenersPage!
-  openApiDefinitionsByRuntime(runtimeId: String!): [OpenApiDefinition!]!
-
-  # Org Secret Queries
-  orgSecrets(environmentId: String, pagination: PaginationInput): OrgSecretsPage!
-  componentSecrets(componentId: String!, environmentId: String!, pagination: PaginationInput): BoundSecretsPage!
-
-  # Environment Queries
-  environments(
-    orgUuid: String
-    type: String
-    projectId: String
-    pagination: PaginationInput
-  ): EnvironmentsPage!
-  adminEnvironments: [Environment!]!
-  environmentByHandler(environmentHandler: String!): Environment
-  environmentHandlerAvailability(
-    environmentHandlerCandidate: String!
-  ): EnvironmentHandlerAvailability!
-
-  # Project Queries
-  projects(orgId: Int, pagination: PaginationInput): ProjectsPage!
-  project(orgId: Int, projectId: String!): Project
-  projectCreationEligibility(
-    orgId: Int!
-    orgHandler: String!
-  ): ProjectCreationEligibility!
-  projectHandlerAvailability(
-    orgId: Int!
-    projectHandlerCandidate: String!
-  ): ProjectHandlerAvailability!
-
-  # Component Queries
-  components(
-    orgHandler: String!
-    projectId: String
-    options: ComponentOptionsInput
-  ): ComponentsPage!
-  component(
-    componentId: String
-    projectId: String
-    componentHandler: String
-  ): Component
-  componentDeployment(
-    orgHandler: String!
-    orgUuid: String!
-    componentId: String!
-    versionId: String!
-    environmentId: String!
-  ): ComponentDeployment
-  componentArtifactTypes(componentId: String!): ArtifactTypes!
-
-  # Artifact Queries by Environment and Component
-  servicesByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): ServicesPage!
-  listenersByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): ListenersPage!
-  restApisByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): RestApisPage!
-  proxyServicesByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): ProxyServicesPage!
-  endpointsByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): EndpointsPage!
-  inboundEndpointsByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): InboundEndpointsPage!
-  sequencesByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): SequencesPage!
-  tasksByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): TasksPage!
-  templatesByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): TemplatesPage!
-  messageStoresByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): MessageStoresPage!
-  messageProcessorsByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): MessageProcessorsPage!
-  localEntriesByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): LocalEntriesPage!
-  dataServicesByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): DataServicesPage!
-  dataServiceFaultStackTrace(
-    runtimeId: String!
-    serviceName: String!
-  ): DataServiceFaultStackTrace
-  dataSourcesByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): DataSourcesPage!
-  compositeAppsByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): CompositeAppsPage!
-  compositeAppFaultStackTrace(
-    runtimeId: String!
-    appName: String!
-  ): CompositeAppFaultStackTrace
-  connectorsByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): ConnectorsPage!
-  registryResourcesByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): RegistryResourcesPage!
-  workflowsByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): WorkflowsPage!
-
-  # Logger Queries
+  listenersByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): ListenersPage!
+  workflowsByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): WorkflowsPage!
+  automationsByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): AutomationsPage!
+  restApisByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): RestApisPage!
+  compositeAppsByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): CompositeAppsPage!
+  compositeAppFaultStackTrace(runtimeId: String!, appName: String!): CompositeAppFaultStackTrace!
+  dataServiceFaultStackTrace(runtimeId: String!, serviceName: String!): DataServiceFaultStackTrace!
+  inboundEndpointsByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): InboundEndpointsPage!
+  endpointsByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): EndpointsPage!
+  sequencesByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): SequencesPage!
+  proxyServicesByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): ProxyServicesPage!
+  tasksByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): TasksPage!
+  templatesByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): TemplatesPage!
+  messageStoresByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): MessageStoresPage!
+  messageProcessorsByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): MessageProcessorsPage!
+  localEntriesByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): LocalEntriesPage!
+  dataServicesByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): DataServicesPage!
+  dataSourcesByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): DataSourcesPage!
+  registryResourcesByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): RegistryResourcesPage!
+  connectorsByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): ConnectorsPage!
   loggersByRuntime(runtimeId: String!, pagination: PaginationInput): LoggersPage!
-  loggersByEnvironmentAndComponent(
-    environmentId: String!
-    componentId: String!
-    pagination: PaginationInput
-  ): LoggerGroupsPage!
-
-  # Log File Queries
+  loggersByEnvironmentAndComponent(environmentId: String!, componentId: String!, pagination: PaginationInput): LoggerGroupsPage!
   logFilesByRuntime(runtimeId: String!, searchKey: String, pagination: PaginationInput): LogFilesResponse!
   logFileContent(runtimeId: String!, fileName: String!): FetchableText!
-
-  # MI Artifact Queries — the deployed configuration, read from the runtime
-  artifactSourceByComponent(
-    componentId: String!
-    artifactType: String!
-    artifactName: String!
-    environmentId: String
-    runtimeId: String
-    packageName: String
-    templateType: String
-  ): FetchableText!
-  artifactWsdlByComponent(
-    componentId: String!
-    artifactType: String!
-    artifactName: String!
-    environmentId: String
-    runtimeId: String
-    packageName: String
-  ): FetchableText!
-  localEntryValueByComponent(
-    componentId: String!
-    entryName: String!
-    environmentId: String
-    runtimeId: String
-  ): FetchableText!
-  artifactParametersByComponent(
-    componentId: String!
-    artifactType: String!
-    artifactName: String!
-    environmentId: String
-    runtimeId: String
-    packageName: String
-  ): FetchableParameters!
-  dataSourceOverviewByComponent(
-    componentId: String!
-    dataSourceName: String!
-    environmentId: String
-    runtimeId: String
-  ): FetchableParameters!
-  messageStoreOverviewByComponent(
-    componentId: String!
-    storeName: String!
-    environmentId: String
-    runtimeId: String
-  ): FetchableParameters!
-  messageProcessorOverviewByComponent(
-    componentId: String!
-    processorName: String!
-    environmentId: String
-    runtimeId: String
-  ): FetchableParameters!
-  dataServiceOverviewByComponent(
-    componentId: String!
-    dataServiceName: String!
-    environmentId: String
-    runtimeId: String
-  ): FetchableDataService!
-
-  # MI Runtime User Management Queries
-  getMIUsers(componentId: String!, runtimeId: String!, pagination: PaginationInput): MIUsersPage!
-  # Registry Resource Browser Queries
   registryDirectory(runtimeId: String!, path: String!, expand: Boolean): RegistryDirectoryResponse!
   registryFileContent(runtimeId: String!, path: String!): FetchableText!
   registryResourceMetadata(runtimeId: String!, path: String!): RegistryResourceMetadata!
   registryResourceProperties(runtimeId: String!, path: String!): RegistryPropertiesResponse!
+  environments(orgUuid: String, type: String, projectId: String, pagination: PaginationInput): EnvironmentsPage!
+  environmentByHandler(environmentHandler: String!): Environment
+  environmentHandlerAvailability(environmentHandlerCandidate: String!): EnvironmentHandlerAvailability!
+  projects(orgId: Int, pagination: PaginationInput): ProjectsPage!
+  project(orgId: Int, projectId: String!): Project
+  projectByHandler(orgId: Int!, projectHandler: String!): Project
+  projectCreationEligibility(orgId: Int!, orgHandler: String!): ProjectCreationEligibility!
+  projectHandlerAvailability(orgId: Int!, projectHandlerCandidate: String!): ProjectHandlerAvailability!
+  components(orgHandler: String!, projectId: String, options: ComponentOptionsInput): ComponentsPage!
+  component(componentId: String, projectId: String, componentHandler: String): Component
+  moesifMetricsConfig(environmentId: String!, componentId: String, projectId: String, componentHandler: String): MoesifMetricsConfigStatus!
+  moesifDashboardEmbed(componentId: String!, environmentId: String!): MoesifDashboardEmbed!
+  moesifLogsConfig(environmentId: String!, componentId: String, projectId: String, componentHandler: String): MoesifLogsConfigStatus!
+  moesifLogsEmbed(componentId: String!, environmentId: String!): MoesifDashboardEmbed!
+  moesifApplications(componentId: String!, managementApiKey: String!): [MoesifApplication!]!
+  orgSecrets(environmentId: String, pagination: PaginationInput): OrgSecretsPage!
+  componentSecrets(componentId: String!, environmentId: String!, pagination: PaginationInput): BoundSecretsPage!
+  componentArtifactTypes(componentId: String!, environmentId: String): [ArtifactTypeCount!]!
+  artifactSourceByComponent(componentId: String!, artifactType: String!, artifactName: String!, environmentId: String, runtimeId: String, packageName: String, templateType: String): FetchableText!
+  artifactWsdlByComponent(componentId: String!, artifactType: String!, artifactName: String!, environmentId: String, runtimeId: String, packageName: String): FetchableText!
+  localEntryValueByComponent(componentId: String!, entryName: String!, environmentId: String, runtimeId: String): FetchableText!
+  artifactParametersByComponent(componentId: String!, artifactType: String!, artifactName: String!, environmentId: String, runtimeId: String, packageName: String): FetchableParameters!
+  dataSourceOverviewByComponent(componentId: String!, dataSourceName: String!, environmentId: String, runtimeId: String): FetchableParameters!
+  messageStoreOverviewByComponent(componentId: String!, storeName: String!, environmentId: String, runtimeId: String): FetchableParameters!
+  messageProcessorOverviewByComponent(componentId: String!, processorName: String!, environmentId: String, runtimeId: String): FetchableParameters!
+  dataServiceOverviewByComponent(componentId: String!, dataServiceName: String!, environmentId: String, runtimeId: String): FetchableDataService!
+  getMIUsers(componentId: String!, runtimeId: String!, pagination: PaginationInput): MIUsersPage!
+  systemInfo: SystemInfo!
+  observabilityMetricsConfig: ObservabilityMetricsConfigStatus!
 }
 
-# ============================================
-# Mutation Type - Write Operations
-# ============================================
-type Mutation {
-  # Runtime Mutations
-  deleteRuntime(runtimeId: String!, revokeSecret: Boolean): DeleteRuntimeResult!
-
-  # Environment Mutations
-  createEnvironment(environment: EnvironmentInput!): Environment
-  deleteEnvironment(environmentId: String!): Boolean!
-  updateEnvironment(
-    environmentId: String!
-    name: String
-    handler: String
-    description: String
-  ): Environment
-  updateEnvironmentProductionStatus(
-    environmentId: String!
-    isProduction: Boolean!
-  ): Environment
-
-  # Project Mutations
-  createProject(project: ProjectInput!): Project
-  deleteProject(orgId: Int!, projectId: String!): DeleteResponse!
-  updateProject(project: ProjectUpdateInput!): Project
-
-  # Component Mutations
-  createComponent(component: ComponentInput!): Component
-  deleteComponent(componentId: String!): Boolean!
-  deleteComponentV2(
-    orgHandler: String!
-    componentId: String!
-    projectId: String!
-  ): DeleteComponentV2Response!
-  updateComponent(component: ComponentUpdateInput!): Component!
-
-  # Artifact Control Mutations
-  updateArtifactStatus(
-    input: ArtifactStatusChangeInput!
-  ): ArtifactStatusChangeResponse!
-  updateArtifactTracingStatus(
-    input: ArtifactTracingChangeInput!
-  ): ArtifactTracingChangeResponse!
-  updateArtifactStatisticsStatus(
-    input: ArtifactStatisticsChangeInput!
-  ): ArtifactStatisticsChangeResponse!
-  triggerArtifact(input: ArtifactTriggerInput!): ArtifactTriggerResponse!
-
-  # Listener Control Mutations
-  updateListenerState(input: ListenerControlInput!): ListenerControlResponse!
-
-  # Logger Control Mutations
-  updateLogLevel(input: UpdateLogLevelInput!): UpdateLogLevelResponse!
-  deleteLogger(input: DeleteLoggerInput!): DeleteLoggerResponse!
-
-  # MI Runtime User Management Mutations
-  addMIUser(componentId: String!, runtimeId: String!, username: String!, password: String!, isAdmin: Boolean, domain: String, requestId: String): MIUserOperationResponse!
-  deleteMIUser(componentId: String!, runtimeId: String!, username: String!, domain: String, requestId: String): MIUserOperationResponse!
-
-  # Org-level Secret Mutations
-  createOrgSecret(environmentId: String!, componentId: String): String!
-  revokeOrgSecret(keyId: String!): Boolean!
+type RuntimesPage {
+  items: [Runtime!]!
+  pageInfo: PageInfo!
 }
 
-# ============================================
-# Runtime Type - Runtime Instance Details
-# ============================================
 type Runtime {
   runtimeId: String!
   runtimeName: String
   runtimeType: String!
   status: String!
   version: String
+  managementHostname: String
+  managementPort: String
   component: Component!
   environment: Environment!
   platformName: String
@@ -326,204 +88,645 @@ type Runtime {
   registrationTime: String
   lastHeartbeat: String
   artifacts: Artifacts
-  logLevels: [RuntimeLogLevel!]
-  openApiDefinitions: [OpenApiDefinition!]
+  logLevels: [RuntimeLogLevelRecord!]
+  openApiDefinitions: [OpenApiDefinitionRecord!]
 }
 
-# OpenAPI (Swagger) definition packed into a BI runtime's JAR by the swagger-pack compiler
-# plugin. `definition` is the raw OpenAPI document as a JSON string (parse client-side).
-type OpenApiDefinition {
-  fileName: String!
-  definition: String!
+type Component {
+  id: String!
+  projectId: String!
+  orgHandler: String!
+  orgId: Int
+  name: String!
+  handler: String!
+  displayName: String!
+  displayType: String!
+  description: String
+  ownerName: String
+  status: String!
+  initStatus: String
+  version: String!
+  createdAt: String!
+  lastBuildDate: String
+  updatedAt: String
+  componentSubType: String
+  componentType: RuntimeType!
+  labels: String
+  isSystemComponent: Boolean
+  apiId: String
+  httpBased: Boolean
+  isMigrationCompleted: Boolean
+  skipDeploy: Boolean
+  endpointShortUrlEnabled: Boolean
+  isUnifiedConfigMapping: Boolean
+  serviceAccessMode: String
+  repository: Repository
+  apiVersions: [ApiVersion!]
+  deploymentTracks: [DeploymentTrack!]
+  gitProvider: String
+  gitOrganization: String
+  gitRepository: String
+  branch: String
+  endpoints: [ComponentEndpoint!]
+  environmentVariables: [ComponentEnvironmentVariable!]
+  secrets: [ComponentSecret!]
+  componentId: String
+  project: Project
+  createdBy: String
+  updatedBy: String
 }
 
-# ============================================
-# Artifacts Type - Runtime Artifacts Container
-# ============================================
+enum RuntimeType {
+  BI
+  MI
+}
+
+type Repository {
+  buildpackConfig: BuildpackConfig
+  byocWebAppBuildConfig: ByocWebAppBuildConfig
+  byocBuildConfig: ByocBuildConfig
+  dockerBuildConfig: DockerBuildConfig
+  testRunnerConfig: TestRunnerConfig
+  repositoryType: String
+  repositoryBranch: String
+  repositorySubPath: String
+  repositoryUrl: String
+  bitbucketServerUrl: String
+  serverUrl: String
+  gitProvider: String
+  nameApp: String
+  nameConfig: String
+  branch: String
+  branchApp: String
+  organizationApp: String
+  organizationConfig: String
+  appSubPath: String
+  isUserManage: Boolean
+  isAuthorizedRepo: Boolean
+  isBuildConfigurationMigrated: Boolean
+}
+
+type BuildpackConfig {
+  versionId: String
+  buildContext: String
+  languageVersion: String
+  buildCommand: String
+  runCommand: String
+  isUnitTestEnabled: Boolean
+  pullLatestSubmodules: Boolean
+  enableTrivyScan: Boolean
+  buildpack: Buildpack
+  keyValues: [KeyValue!]
+}
+
+type Buildpack {
+  id: String!
+  name: String
+  language: String!
+  version: String
+  description: String
+}
+
+type KeyValue {
+  id: String
+  key: String!
+  value: String
+}
+
+type ByocWebAppBuildConfig {
+  id: String
+  containerId: String
+  componentId: String
+  repositoryId: String
+  dockerContext: String
+  webAppType: String
+  port: Int
+  imageUrl: String
+  registryId: String
+  dockerfile: String
+  buildCommand: String
+  packageManagerVersion: String
+  outputDirectory: String
+  enableTrivyScan: Boolean
+}
+
+type ByocBuildConfig {
+  id: String
+  isMainContainer: Boolean
+  containerId: String
+  componentId: String
+  repositoryId: String
+  dockerContext: String
+  dockerfilePath: String
+  oasFilePath: String
+}
+
+type DockerBuildConfig {
+  id: String
+  dockerContext: String
+  dockerfile: String
+  port: Int
+  imageUrl: String
+  registryId: String
+}
+
+type TestRunnerConfig {
+  dockerContext: String
+  postmanDirectory: String
+  testRunnerType: String
+}
+
+type ApiVersion {
+  id: String!
+  apiVersion: String!
+  versionId: String
+  proxyName: String
+  proxyUrl: String
+  proxyId: String
+  state: ArtifactState!
+  latest: Boolean!
+  branch: String
+  accessibility: String
+  autoDeployEnabled: Boolean
+  appEnvVersions: [AppEnvVersion!]
+  cellDiagram: CellDiagram
+  openApiSpec: String
+  graphqlSchema: String
+  createdAt: String
+  updatedAt: String
+  description: String
+}
+
+enum ArtifactState {
+  DISABLED
+  ENABLED
+}
+
+type AppEnvVersion {
+  environmentId: String!
+  releaseId: String!
+  release: Release
+}
+
+type Release {
+  id: String!
+  metadata: ReleaseMetadata
+  environmentId: String
+  environment: String
+  gitHash: String
+  gitOpsHash: String
+}
+
+type ReleaseMetadata {
+  choreoEnv: String
+}
+
+type CellDiagram {
+  data: String
+  message: String
+  errorName: String
+  success: Boolean!
+}
+
+type DeploymentTrack {
+  id: String!
+  componentId: String!
+  createdAt: String!
+  updatedAt: String!
+  apiVersion: String!
+  branch: String
+  latest: Boolean!
+  versionStrategy: String
+  description: String
+  autoDeployEnabled: Boolean
+  autoBuildEnabled: Boolean
+  environmentName: String
+  environmentId: String
+  deploymentStatus: String
+  lastDeployedAt: String
+}
+
+type ComponentEndpoint {
+  id: String!
+  componentId: String!
+  name: String!
+  url: String!
+  type: String!
+  protocol: String
+  port: Int
+  visibility: String
+}
+
+type ComponentEnvironmentVariable {
+  key: String!
+  value: String
+  isSecret: Boolean!
+  description: String
+}
+
+type ComponentSecret {
+  key: String!
+  description: String
+  createdAt: String
+  updatedAt: String
+}
+
+type Project {
+  id: String!
+  orgId: Int!
+  name: String!
+  version: String
+  createdDate: String
+  handler: String!
+  extendedHandler: String
+  region: String
+  description: String
+  owner: String
+  labels: [String!]
+  defaultDeploymentPipelineId: String!
+  deploymentPipelineIds: [String!]!
+  type: String
+  gitProvider: String
+  gitOrganization: String
+  repository: String
+  branch: String
+  secretRef: String
+  ownerId: String
+  createdBy: String
+  updatedAt: String
+  updatedBy: String
+}
+
+type Environment {
+  id: String!
+  name: String!
+  handler: String!
+  description: String
+  region: String
+  clusterId: String
+  choreoEnv: String
+  externalApimEnvName: String
+  internalApimEnvName: String
+  sandboxApimEnvName: String
+  critical: Boolean!
+  dnsPrefix: String
+  vhost: String
+  sandboxVhost: String
+  apiEnvName: String
+  apimEnvId: String
+  isMigrating: Boolean
+  promoteFrom: String
+  namespace: String
+  dpId: String
+  templateId: String
+  isPdp: Boolean
+  scaleToZeroEnabled: Boolean
+  createdAt: String
+  updatedAt: String
+  updatedBy: String
+  createdBy: String
+}
+
 type Artifacts {
   listeners: [Listener!]!
   services: [Service!]!
+  main: Main
   apis: [RestApi!]!
   proxyServices: [ProxyService!]!
-  endpoints: [MIEndpoint!]!
+  endpoints: [Endpoint!]!
   inboundEndpoints: [InboundEndpoint!]!
   sequences: [Sequence!]!
   tasks: [Task!]!
+  templates: [Template!]!
+  messageStores: [MessageStore!]!
+  messageProcessors: [MessageProcessor!]!
+  localEntries: [LocalEntry!]!
+  dataServices: [DataService!]!
+  carbonApps: [CompositeApp!]!
+  dataSources: [DataSource!]!
+  connectors: [Connector!]!
+  registryResources: [RegistryResource!]!
 }
 
-# ============================================
-# Service Type - Service Artifacts
-# ============================================
-type Service {
-  name: String!
-  package: String!
-  basePath: String!
-  state: ArtifactState!
-  resources: [Resource!]!
-  listeners: [Listener!]!
-  runtimes: [ArtifactRuntimeInfo]
-}
-
-# ============================================
-# Listener Type - Listener Artifacts
-# ============================================
 type Listener {
   name: String!
   package: String!
   protocol: String!
   host: String
   port: Int
+  destination: String
+  queue: String
+  path: String
   state: ArtifactState!
-  runtimes: [ArtifactRuntimeInfo]
+  stateInSync: Boolean
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
 }
 
-# ============================================
-# Workflow Type - Workflow definitions fetched live from the
-# runtime's workflow management API (via its workflowCallbackUrl)
-# ============================================
-type Workflow {
-  name: String!
-  isActive: Boolean!
-  workerCount: Int!
-  inputSchema: String
-  state: ArtifactState!
-  runtimes: [ArtifactRuntimeInfo]
-}
-
-# ============================================
-# Resource Type - Service Resources
-# ============================================
-type Resource {
-  methods: [String!]!
-  url: String!
-}
-
-# ============================================
-# Logger Type - Runtime Logger Configuration
-# ============================================
-type Logger {
-  loggerName: String
-  componentName: String!
-  logLevel: LogLevel!
-  logLevelInSync: Boolean
+type ArtifactRuntimeInfo {
   runtimeId: String!
+  runtimeName: String
+  status: String!
 }
 
-# ============================================
-# LoggerGroup Type - Grouped Loggers by Component
-# ============================================
-type LoggerGroup {
-  loggerName: String
-  componentName: String!
-  logLevel: LogLevel!
-  logLevelInSync: Boolean
+type Service {
+  name: String!
+  package: String!
+  basePath: String!
+  state: ArtifactState!
+  stateInSync: Boolean
+  type: String!
+  resources: [Resource!]!
+  listeners: [Listener!]!
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type Resource {
+  path: String!
+  method: String!
+  url: String!
+  methods: [String!]!
+}
+
+type Main {
+  packageOrg: String!
+  packageName: String!
+  packageVersion: String!
+}
+
+type RestApi {
+  name: String!
+  url: String!
+  urls: [String!]!
+  context: String!
+  version: String
+  state: ArtifactState!
+  stateInSync: Boolean
+  tracing: String!
+  tracingInSync: Boolean
+  statistics: String!
+  statisticsInSync: Boolean
+  compositeApp: String
+  resources: [ApiResource!]!
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type ApiResource {
+  path: String!
+  methods: String!
+}
+
+type ProxyService {
+  name: String!
+  state: ArtifactState!
+  stateInSync: Boolean
+  tracing: String!
+  tracingInSync: Boolean
+  statistics: String!
+  statisticsInSync: Boolean
+  compositeApp: String
+  endpoints: [String!]
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type Endpoint {
+  name: String!
+  type: String!
+  state: ArtifactState!
+  stateInSync: Boolean
+  tracing: String!
+  tracingInSync: Boolean
+  statistics: String!
+  statisticsInSync: Boolean
+  compositeApp: String
+  attributes: [EndpointAttribute!]
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type EndpointAttribute {
+  name: String!
+  value: String
+}
+
+type InboundEndpoint {
+  name: String!
+  protocol: String
+  sequence: String
+  statistics: String
+  statisticsInSync: Boolean
+  onError: String
+  state: ArtifactState!
+  stateInSync: Boolean
+  tracing: String!
+  tracingInSync: Boolean
+  compositeApp: String
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type Sequence {
+  name: String!
+  type: String
+  container: String
+  state: ArtifactState!
+  stateInSync: Boolean
+  tracing: String!
+  tracingInSync: Boolean
+  statistics: String!
+  statisticsInSync: Boolean
+  compositeApp: String
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type Task {
+  name: String!
+  class: String
+  group: String
+  state: ArtifactState!
+  stateInSync: Boolean
+  compositeApp: String
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type Template {
+  name: String!
+  type: String!
+  tracing: String!
+  statistics: String!
+  compositeApp: String
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type MessageStore {
+  name: String!
+  type: String!
+  size: Int!
+  state: ArtifactState!
+  stateInSync: Boolean
+  compositeApp: String
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type MessageProcessor {
+  name: String!
+  type: String!
+  class: String
+  state: ArtifactState!
+  stateInSync: Boolean
+  compositeApp: String
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type LocalEntry {
+  name: String!
+  type: String!
+  value: String
+  state: ArtifactState!
+  stateInSync: Boolean
+  compositeApp: String
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type DataService {
+  name: String!
+  description: String
+  wsdl: String
+  state: String!
+  status: String
+  stateInSync: Boolean
+  compositeApp: String
+  errorMessage: String
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type CompositeApp {
+  name: String!
+  componentId: String
+  version: String
+  state: String!
+  status: String
+  errorMessage: String
+  artifacts: [CompositeAppArtifact!]
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type CompositeAppArtifact {
+  name: String!
+  type: String!
+}
+
+type DataSource {
+  name: String!
+  type: String
+  driver: String
+  url: String
+  username: String
+  state: ArtifactState!
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type Connector {
+  name: String!
+  package: String!
+  version: String
+  description: String
+  state: ArtifactState!
+  stateInSync: Boolean
+  runtimeIds: [String!]
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type RegistryResource {
+  name: String!
+  type: String!
   runtimeIds: [String!]!
+  runtimes: [ArtifactRuntimeInfo!]
 }
 
-# ============================================
-# LogLevel Enum - Log Level Values
-# ============================================
-enum LogLevel {
-  OFF
-  FATAL
-  ERROR
-  WARN
-  INFO
-  DEBUG
-  TRACE
+type RuntimeLogLevelRecord {
+  runtimeId: String!
+  componentName: String!
+  logLevel: String!
 }
 
-# ============================================
-# RuntimeType Enum - Component Runtime Types
-# ============================================
-enum RuntimeType {
-  MI
-  BI
-}
-
-# ============================================
-# LogFile Type - MI Log File Information
-# ============================================
-type LogFile {
+type OpenApiDefinitionRecord {
   fileName: String!
-  size: String!
+  definition: String!
 }
 
-# ============================================
-# LogFilesResponse Type - Response for Log Files Query
-# ============================================
-type LogFilesResponse {
-  preparing: Boolean!
-  stale: Boolean!
-  retryAfterMs: Int!
-  count: Int!
-  files: [LogFile!]!
-  pageInfo: PageInfo!
-}
-
-# ============================================
-# Fetchable - MI management answers
-# ============================================
-# Every field the MI management API serves carries these three. With `miTunnelEnabled`
-# off — the default — the ICP dials the runtime's management port and answers inside the
-# request, so `preparing` is never true and behaviour is what it always was. With it on,
-# the question rides down on the runtime's next heartbeat and the first answer may be
-# `preparing`.
-#
-# Read `preparing` before anything else: a field that reports it has no answer yet, so its
-# other members hold defaults — and on a mutation `success` is false while nothing failed.
-# `stale` means the value is real but superseded (by your own write, usually) and its
-# replacement is on the way. `retryAfterMs` is when to ask again; zero means settled.
-
-type FetchableText {
-  preparing: Boolean!
-  stale: Boolean!
-  retryAfterMs: Int!
-  content: String!
-}
-
-type FetchableParameters {
-  preparing: Boolean!
-  stale: Boolean!
-  retryAfterMs: Int!
-  parameters: [Parameter!]!
-}
-
-type FetchableDataService {
-  preparing: Boolean!
-  stale: Boolean!
-  retryAfterMs: Int!
-  dataService: MgmtDataServiceInfo
-}
-
-# ============================================
-# Pagination Types
-# ============================================
 type PageInfo {
   total: Int!
   limit: Int!
   offset: Int!
 }
 
-
-type ComponentsPage {
-  items: [Component!]!
-  pageInfo: PageInfo!
+input PaginationInput {
+  limit: Int
+  offset: Int
+  cursor: String
 }
 
-type RuntimesPage {
-  items: [Runtime!]!
-  pageInfo: PageInfo!
+type ComponentDeployment {
+  environmentId: String!
+  configCount: Int!
+  apiId: String
+  releaseId: String!
+  apiRevision: ApiRevision
+  build: BuildInfo!
+  imageUrl: String!
+  invokeUrl: String!
+  versionId: String!
+  deploymentStatus: String!
+  deploymentStatusV2: String!
+  version: String
+  cron: String
+  cronTimezone: String
 }
 
-type ProjectsPage {
-  items: [Project!]!
-  pageInfo: PageInfo!
+type ApiRevision {
+  id: String!
+  displayName: String!
 }
 
-type OrgSecretsPage {
-  items: [OrgSecretListEntry!]!
-  pageInfo: PageInfo!
+type BuildInfo {
+  buildId: String!
+  deployedAt: String
+  commit: CommitInfo
+  sourceConfigMigrationStatus: SourceConfigMigrationStatus
+  runId: String!
+}
+
+type CommitInfo {
+  author: AuthorInfo!
+  sha: String!
+  message: String!
+  isLatest: Boolean!
+}
+
+type AuthorInfo {
+  name: String!
+  date: String!
+  email: String!
+  avatarUrl: String!
+}
+
+type SourceConfigMigrationStatus {
+  canMigrate: Boolean!
+  existingFileName: String!
+  existingFileSchemaVersion: String!
 }
 
 type ServicesPage {
@@ -536,19 +739,67 @@ type ListenersPage {
   pageInfo: PageInfo!
 }
 
+type WorkflowsPage {
+  items: [Workflow!]!
+  pageInfo: PageInfo!
+}
+
+type Workflow {
+  name: String!
+  isActive: Boolean!
+  workerCount: Int!
+  inputSchema: String
+  state: ArtifactState!
+  runtimes: [ArtifactRuntimeInfo!]
+}
+
+type AutomationsPage {
+  items: [Automation!]!
+  pageInfo: PageInfo!
+}
+
+type Automation {
+  packageOrg: String!
+  packageName: String!
+  packageVersion: String!
+  executionTimestamp: String!
+  runtimeIds: [String!]
+  runtimes: [AutomationRuntimeInfo!]
+}
+
+type AutomationRuntimeInfo {
+  runtimeId: String!
+  runtimeName: String
+  status: String!
+  executionTimestamps: [String!]!
+}
+
 type RestApisPage {
   items: [RestApi!]!
   pageInfo: PageInfo!
 }
 
-type ProxyServicesPage {
-  items: [ProxyService!]!
+type CompositeAppsPage {
+  items: [CompositeApp!]!
   pageInfo: PageInfo!
 }
 
-type EndpointsPage {
-  items: [MIEndpoint!]!
-  pageInfo: PageInfo!
+type CompositeAppFaultStackTrace {
+  runtimeId: String!
+  appName: String!
+  faultStackTrace: String!
+  preparing: Boolean!
+  stale: Boolean!
+  retryAfterMs: Int!
+}
+
+type DataServiceFaultStackTrace {
+  runtimeId: String!
+  serviceName: String!
+  faultStackTrace: String!
+  preparing: Boolean!
+  stale: Boolean!
+  retryAfterMs: Int!
 }
 
 type InboundEndpointsPage {
@@ -556,8 +807,18 @@ type InboundEndpointsPage {
   pageInfo: PageInfo!
 }
 
+type EndpointsPage {
+  items: [Endpoint!]!
+  pageInfo: PageInfo!
+}
+
 type SequencesPage {
   items: [Sequence!]!
+  pageInfo: PageInfo!
+}
+
+type ProxyServicesPage {
+  items: [ProxyService!]!
   pageInfo: PageInfo!
 }
 
@@ -596,8 +857,8 @@ type DataSourcesPage {
   pageInfo: PageInfo!
 }
 
-type CompositeAppsPage {
-  items: [CompositeApp!]!
+type RegistryResourcesPage {
+  items: [RegistryResource!]!
   pageInfo: PageInfo!
 }
 
@@ -606,288 +867,83 @@ type ConnectorsPage {
   pageInfo: PageInfo!
 }
 
-type RegistryResourcesPage {
-  items: [RegistryResource!]!
+type LoggersPage {
+  items: [Logger!]!
   pageInfo: PageInfo!
+  preparing: Boolean!
+  stale: Boolean!
+  retryAfterMs: Int!
+}
+
+type Logger {
+  loggerName: String
+  componentName: String!
+  logLevel: LogLevel!
+  logLevelInSync: Boolean
+  runtimeId: String!
+}
+
+enum LogLevel {
+  FATAL
+  ERROR
+  WARN
+  INFO
+  DEBUG
+  TRACE
+  OFF
 }
 
 type LoggerGroupsPage {
-  preparing: Boolean!
-  stale: Boolean!
-  retryAfterMs: Int!
   items: [LoggerGroup!]!
   pageInfo: PageInfo!
-}
-
-type AutomationsPage {
-  items: [Automation!]!
-  pageInfo: PageInfo!
-}
-
-type WorkflowsPage {
-  items: [Workflow!]!
-  pageInfo: PageInfo!
-}
-
-type LoggersPage {
   preparing: Boolean!
   stale: Boolean!
   retryAfterMs: Int!
-  items: [Logger!]!
-  pageInfo: PageInfo!
 }
 
-type BoundSecretsPage {
-  items: [BoundSecretEntry!]!
-  pageInfo: PageInfo!
+type LoggerGroup {
+  loggerName: String
+  componentName: String!
+  logLevel: LogLevel!
+  logLevelInSync: Boolean
+  runtimeIds: [String!]!
 }
 
-type EnvironmentsPage {
-  items: [Environment!]!
+type LogFilesResponse {
+  count: Int!
+  files: [LogFile!]!
   pageInfo: PageInfo!
-}
-
-type MIUsersPage {
   preparing: Boolean!
   stale: Boolean!
   retryAfterMs: Int!
-  items: [MIUser!]!
-  pageInfo: PageInfo!
 }
 
-# ============================================
-# RestApi Type - MI REST API Artifacts
-# ============================================
-type RestApi {
-  name: String!
-  url: String!
-  urls: [String!]!
-  context: String!
-  version: String
-  state: ArtifactState!
-  tracing: String!
-  statistics: String!
-  compositeApp: String
-  resources: [ApiResource!]!
+type LogFile {
+  fileName: String!
+  size: String!
 }
 
-# ============================================
-# ApiResource Type - API Resource Path and Methods
-# ============================================
-type ApiResource {
-  path: String!
-  methods: String!
-}
-
-# ============================================
-# ProxyService Type - MI Proxy Service Artifacts
-# ============================================
-type ProxyService {
-  name: String!
-  state: ArtifactState!
-  tracing: String!
-  statistics: String!
-  compositeApp: String
-  endpoints: [String!]
-}
-
-# ============================================
-# MIEndpoint Type - MI Endpoint Artifacts
-# ============================================
-type MIEndpoint {
-  name: String!
-  type: String!
-  state: ArtifactState!
-  tracing: String!
-  statistics: String!
-  compositeApp: String
-  attributes: [EndpointAttribute!]
-}
-
-# ============================================
-# EndpointAttribute Type - Endpoint Attribute Key-Value
-# ============================================
-type EndpointAttribute {
-  name: String!
-  value: String
-}
-
-# ============================================
-# InboundEndpoint Type - MI Inbound Endpoint Artifacts
-# ============================================
-type InboundEndpoint {
-  name: String!
-  protocol: String
-  sequence: String
-  state: ArtifactState!
-  statistics: String
-  onError: String
-  tracing: String!
-  compositeApp: String
-}
-
-# ============================================
-# Sequence Type - MI Sequence Artifacts
-# ============================================
-type Sequence {
-  name: String!
-  type: String
-  container: String
-  state: ArtifactState!
-  tracing: String!
-  statistics: String!
-  compositeApp: String
-}
-
-# ============================================
-# Task Type - MI Scheduled Task Artifacts
-# ============================================
-type Task {
-  name: String!
-  class: String
-  group: String
-  state: ArtifactState!
-  compositeApp: String
-  runtimes: [ArtifactRuntimeInfo]
-}
-
-# ============================================
-# Template Type - MI Template Artifacts
-# ============================================
-type Template {
-  name: String!
-  type: String!
-  statistics: String!
-  tracing: String!
-  compositeApp: String
-}
-
-# ============================================
-# MessageStore Type - MI Message Store Artifacts
-# ============================================
-type MessageStore {
-  name: String!
-  type: String!
-  size: Int!
-  state: ArtifactState!
-  compositeApp: String
-}
-
-# ============================================
-# MessageProcessor Type - MI Message Processor Artifacts
-# ============================================
-type MessageProcessor {
-  name: String!
-  type: String!
-  class: String
-  state: ArtifactState!
-  compositeApp: String
-}
-
-# ============================================
-# LocalEntry Type - MI Local Entry Artifacts
-# ============================================
-type LocalEntry {
-  name: String!
-  type: String!
-  value: String
-  state: ArtifactState!
-  compositeApp: String
-  runtimes: [ArtifactRuntimeInfo]
-}
-
-# ============================================
-# DataService Type - MI Data Service Artifacts
-# ============================================
-type DataService {
-  name: String!
-  description: String
-  wsdl: String
-  state: String!
-  errorMessage: String
-  faultStackTrace: String
-  compositeApp: String
-}
-
-type DataServiceFaultStackTrace {
+"A management answer that is plain text: an artifact's XML, a log file, a registry resource."
+type FetchableText {
+  content: String!
   preparing: Boolean!
   stale: Boolean!
   retryAfterMs: Int!
-  runtimeId: String!
-  serviceName: String!
-  faultStackTrace: String!
 }
 
-# ============================================
-# DataSource Type - MI Data Source Artifacts
-# ============================================
-type DataSource {
-  name: String!
-  type: String
-  driver: String
-  url: String
-  username: String
-  state: ArtifactState!
-}
-
-# ============================================
-# CompositeApp Type - MI Composite Application Artifacts
-# ============================================
-type CompositeApp {
-  name: String!
-  version: String
-  state: String!
-  errorMessage: String
-  faultStackTrace: String
-  artifacts: [CompositeAppArtifact!]
-  runtimes: [ArtifactRuntimeInfo]
-}
-
-type CompositeAppFaultStackTrace {
+type RegistryDirectoryResponse {
+  count: Int!
+  items: [RegistryDirectoryItem!]!
   preparing: Boolean!
   stale: Boolean!
   retryAfterMs: Int!
-  runtimeId: String!
-  appName: String!
-  faultStackTrace: String!
 }
 
-# ============================================
-# CompositeAppArtifact Type - Artifact within Composite App
-# ============================================
-type CompositeAppArtifact {
-  name: String!
-  type: String!
-}
-
-# ============================================
-# Connector Type - MI Connector Artifacts
-# ============================================
-type Connector {
-  name: String!
-  package: String!
-  version: String
-  state: ArtifactState!
-  runtimes: [ArtifactRuntimeInfo]
-}
-
-# ============================================
-# RegistryResource Type - MI Registry Resource Artifacts
-# ============================================
-type RegistryResource {
-  name: String!
-  type: String!
-  runtimes: [ArtifactRuntimeInfo]
-}
-
-# ============================================
-# Registry Browser Types - For browsing registry contents
-# ============================================
 type RegistryDirectoryItem {
   name: String!
   mediaType: String!
   isDirectory: Boolean!
-  properties: [RegistryProperty!]
+  properties: [RegistryProperty!]!
 }
 
 type RegistryProperty {
@@ -895,262 +951,47 @@ type RegistryProperty {
   value: String!
 }
 
-type RegistryDirectoryResponse {
-  preparing: Boolean!
-  stale: Boolean!
-  retryAfterMs: Int!
-  count: Int!
-  items: [RegistryDirectoryItem!]!
-}
-
 type RegistryResourceMetadata {
-  preparing: Boolean!
-  stale: Boolean!
-  retryAfterMs: Int!
   name: String!
   mediaType: String!
+  preparing: Boolean!
+  stale: Boolean!
+  retryAfterMs: Int!
 }
 
 type RegistryPropertiesResponse {
+  count: Int!
+  properties: [RegistryProperty!]!
   preparing: Boolean!
   stale: Boolean!
   retryAfterMs: Int!
-  count: Int!
-  properties: [RegistryProperty!]!
 }
 
-# ============================================
-# Parameter Type - Generic Key-Value Parameter
-# ============================================
-type Parameter {
-  name: String!
-  value: String!
-}
-
-# ============================================
-# MgmtDataServiceDataSource Type - Data Service Data Source
-# ============================================
-type MgmtDataServiceDataSource {
-  dataSourceId: String!
-  dataSourceType: String
-}
-
-# ============================================
-# MgmtDataServiceQuery Type - Data Service Query
-# ============================================
-type MgmtDataServiceQuery {
-  id: String!
-  dataSourceId: String
-  namespace: String
-}
-
-# ============================================
-# MgmtDataServiceResource Type - Data Service Resource
-# ============================================
-type MgmtDataServiceResource {
-  resourcePath: String!
-  resourceMethod: String
-  resourceQuery: String
-}
-
-# ============================================
-# MgmtDataServiceOperation Type - Data Service Operation
-# ============================================
-type MgmtDataServiceOperation {
-  operationName: String!
-  queryName: String
-}
-
-# ============================================
-# MgmtDataServiceInfo Type - Data Service Overview
-# ============================================
-type MgmtDataServiceInfo {
-  serviceName: String!
-  serviceDescription: String
-  wsdl1_1: String
-  wsdl2_0: String
-  swagger_url: String
-  dataSources: [MgmtDataServiceDataSource!]!
-  queries: [MgmtDataServiceQuery!]!
-  resources: [MgmtDataServiceResource!]!
-  operations: [MgmtDataServiceOperation!]!
-  configuration: String
-  serviceGroupName: String
-}
-
-# ============================================
-# Component Type - Integration Component Details
-# ============================================
-type Component {
-  # Basic Identity Fields
-  id: String!
-  projectId: String!
-  orgHandler: String
-  orgId: Int
-
-  # Component Metadata
-  name: String!
-  handler: String!
-  displayName: String!
-  displayType: String
-  description: String
-  ownerName: String
-
-  # Status Fields
-  status: String!
-  initStatus: String
-
-  # Version & Timestamps
-  version: String!
-  createdAt: String!
-  lastBuildDate: String
-  updatedAt: String
-
-  # Classification
-  componentSubType: String
-  componentType: RuntimeType!
-  labels: String
-
-  # System Component Flag
-  isSystemComponent: Boolean
-
-  # Component Configuration Flags
-  apiId: String
-  httpBased: Boolean
-  isMigrationCompleted: Boolean
-  skipDeploy: Boolean
-  endpointShortUrlEnabled: Boolean
-  isUnifiedConfigMapping: Boolean
-  serviceAccessMode: String
-
-  # Nested Objects
-  repository: Repository
-  apiVersions: [ApiVersion!]
-  deploymentTracks: [DeploymentTrack!]
-
-  # Git Integration (for components with source control)
-  gitProvider: String
-  gitOrganization: String
-  gitRepository: String
-  branch: String
-
-  # Advanced Fields (used in specific views)
-  endpoints: [Endpoint!]
-  environmentVariables: [EnvironmentVariable!]
-  secrets: [Secret!]
-
-  # Legacy fields for backward compatibility
-  createdBy: String
-  updatedBy: String
-  componentId: String
-  project: Project
-}
-
-# ============================================
-# Project Type - Project Details
-# ============================================
-type Project {
-  id: String!
-  projectId: String!
-  orgId: Int!
-  name: String!
-  version: String
-  createdDate: String
-  handler: String!
-  extendedHandler: String
-  region: String
-  description: String
-  owner: String
-  labels: [String!]
-  defaultDeploymentPipelineId: String
-  deploymentPipelineIds: [String!]
-  type: String
-  gitProvider: String
-  gitOrganization: String
-  repository: String
-  branch: String
-  secretRef: String
-  createdBy: String
-  updatedAt: String
-  updatedBy: String
-}
-
-# ============================================
-# Environment Type - Deployment Environment
-# ============================================
-type Environment {
-  # Core Identity
-  environmentId: String!
-  id: String!
-  name: String!
-  handler: String!
-  description: String
-  isProduction: Boolean!
-
-  # Infrastructure & Region Configuration
-  region: String
-  clusterId: String
-  dnsPrefix: String
-
-  # Choreo Environment Configuration
-  choreoEnv: String
-
-  # API Management Environment Names
-  externalApimEnvName: String
-  internalApimEnvName: String
-  sandboxApimEnvName: String
-
-  # Features & Flags
-  critical: Boolean
-
-  # Legacy Virtual Host Configuration (deprecated)
-  vhost: String
-  sandboxVhost: String
-
-  # Legacy API Management (deprecated)
-  apiEnvName: String
-  apimEnvId: String
-
-  # Legacy Migration & Deployment (deprecated)
-  isMigrating: Boolean
-  promoteFrom: String
-
-  # Legacy Infrastructure (deprecated)
-  namespace: String
-  dpId: String
-  templateId: String
-  isPdp: Boolean
-  scaleToZeroEnabled: Boolean
-
-  # Audit Fields
-  createdAt: String
-  updatedAt: String
-  updatedBy: String
-  createdBy: String
-}
-
-# ============================================
-# Org Secret List Entry - Truncated secret view
-# ============================================
-type OrgSecretListEntry {
-  keyId: String!
-  environmentId: String!
-  environmentName: String!
-  bound: Boolean!
-  createdAt: String!
-  createdBy: String
-}
-
-type BoundSecretRuntime {
-  runtimeId: String!
-  status: String!
-}
-
-type BoundSecretEntry {
-  keyId: String!
-  createdAt: String!
-  createdBy: String
-  runtimes: [BoundSecretRuntime!]!
+type Mutation {
+  deleteRuntime(runtimeId: String!, revokeSecret: Boolean): DeleteRuntimeResult!
+  updateListenerState(input: ListenerControlInput!): ListenerControlResponse!
+  deleteLogger(input: DeleteLoggerInput!): DeleteLoggerResponse!
+  updateLogLevel(input: UpdateLogLevelInput!): UpdateLogLevelResponse!
+  createEnvironment(environment: EnvironmentInput!): Environment
+  deleteEnvironment(environmentId: String!): Boolean!
+  updateEnvironment(environmentId: String!, name: String, handler: String, description: String, critical: Boolean): Environment
+  updateEnvironmentProductionStatus(environmentId: String!, isProduction: Boolean!): Environment
+  createProject(project: ProjectInput!): Project
+  deleteProject(orgId: Int!, projectId: String!): DeleteResponse!
+  updateProject(project: ProjectUpdateInput!): Project!
+  createComponent(component: ComponentInput!): Component
+  createMoesifDashboards(componentId: String!, environmentId: String!, managementApiKey: String!): MoesifMetricsConfigStatus!
+  createMoesifLogsDashboards(componentId: String!, environmentId: String!, managementApiKey: String!): MoesifLogsConfigStatus!
+  deleteComponentV2(orgHandler: String!, componentId: String!, projectId: String!): DeleteComponentV2Response!
+  updateComponent(component: ComponentUpdateInput!): Component!
+  updateArtifactStatus(input: ArtifactStatusChangeInput!): ArtifactStatusChangeResponse!
+  updateArtifactTracingStatus(input: ArtifactTracingChangeInput!): ArtifactTracingChangeResponse!
+  updateArtifactStatisticsStatus(input: ArtifactStatisticsChangeInput!): ArtifactStatisticsChangeResponse!
+  createOrgSecret(environmentId: String!, componentId: String): String!
+  revokeOrgSecret(keyId: String!): Boolean!
+  triggerArtifact(input: ArtifactTriggerInput!): ArtifactTriggerResponse!
+  addMIUser(componentId: String!, runtimeId: String!, username: String!, password: String!, isAdmin: Boolean! = false, domain: String! = "primary", requestId: String): MIUserOperationResponse!
+  deleteMIUser(componentId: String!, runtimeId: String!, username: String!, domain: String! = "primary", requestId: String): MIUserOperationResponse!
 }
 
 type DeleteRuntimeResult {
@@ -1159,283 +1000,80 @@ type DeleteRuntimeResult {
   secretRevoked: Boolean!
 }
 
-# ============================================
-# Repository Type - Build & Deploy Configuration
-# ============================================
-type Repository {
-  # Build Configurations
-  buildpackConfig: BuildpackConfig
-  byocWebAppBuildConfig: ByocWebAppBuildConfig
-  byocBuildConfig: ByocBuildConfig
-  dockerBuildConfig: DockerBuildConfig
-  testRunnerConfig: TestRunnerConfig
-
-  # Repository Source Information
-  repositoryType: String
-  repositoryBranch: String
-  repositorySubPath: String
-  repositoryUrl: String
-
-  # Git Provider Information
-  bitbucketServerUrl: String
-  serverUrl: String
-  gitProvider: String
-  nameApp: String
-  nameConfig: String
-  branch: String
-  branchApp: String
-  organizationApp: String
-  organizationConfig: String
-  appSubPath: String
-
-  # Repository Flags
-  isUserManage: Boolean
-  isAuthorizedRepo: Boolean
-  isBuildConfigurationMigrated: Boolean
-}
-
-# ============================================
-# Buildpack Configuration
-# ============================================
-type BuildpackConfig {
-  versionId: String
-  buildContext: String
-  languageVersion: String
-  buildCommand: String
-  runCommand: String
-  isUnitTestEnabled: Boolean
-  pullLatestSubmodules: Boolean
-  enableTrivyScan: Boolean
-  buildpack: Buildpack
-  keyValues: [KeyValue!]
-}
-
-type Buildpack {
-  id: String!
-  name: String
-  language: String!
-  version: String
-  description: String
-}
-
-# ============================================
-# BYOC Web App Build Configuration
-# ============================================
-type ByocWebAppBuildConfig {
-  id: String
-  containerId: String
-  componentId: String
-  repositoryId: String
-  dockerContext: String
-  webAppType: String
-  port: Int
-  imageUrl: String
-  registryId: String
-  dockerfile: String
-  buildCommand: String
-  packageManagerVersion: String
-  outputDirectory: String
-  enableTrivyScan: Boolean
-}
-
-# ============================================
-# Docker Build Configuration
-# ============================================
-type DockerBuildConfig {
-  id: String
-  dockerContext: String
-  dockerfile: String
-  port: Int
-  imageUrl: String
-  registryId: String
-}
-
-# ============================================
-# BYOC Build Configuration
-# ============================================
-type ByocBuildConfig {
-  id: String
-  isMainContainer: Boolean
-  containerId: String
-  componentId: String
-  repositoryId: String
-  dockerContext: String
-  dockerfilePath: String
-  oasFilePath: String
-}
-
-# ============================================
-# Test Runner Configuration
-# ============================================
-type TestRunnerConfig {
-  dockerContext: String
-  postmanDirectory: String
-  testRunnerType: String
-}
-
-# ============================================
-# Key Value Pair
-# ============================================
-type KeyValue {
-  id: String
-  key: String!
-  value: String
-}
-
-# ============================================
-# API Version Type - API Management
-# ============================================
-type ApiVersion {
-  # Identity
-  id: String!
-  apiVersion: String!
-  versionId: String
-
-  # Proxy Configuration
-  proxyName: String
-  proxyUrl: String
-  proxyId: String
-
-  # State Management
-  state: String!
-  latest: Boolean!
-
-  # Git Integration
-  branch: String
-
-  # Access Control
-  accessibility: String
-
-  # Deployment Settings
-  autoDeployEnabled: Boolean
-
-  # Environment Versions
-  appEnvVersions: [AppEnvVersion!]
-
-  # Observability
-  cellDiagram: CellDiagram
-
-  # API Specification
-  openApiSpec: String
-  graphqlSchema: String
-
-  # Metadata
-  createdAt: String
-  updatedAt: String
-  description: String
-}
-
-# ============================================
-# App Environment Version Type
-# ============================================
-type AppEnvVersion {
-  environmentId: String!
-  releaseId: String!
-  release: Release
-}
-
-type Release {
-  id: String!
-  metadata: ReleaseMetadata
-  environmentId: String
-  environment: String
-  gitHash: String
-  gitOpsHash: String
-}
-
-type ReleaseMetadata {
-  choreoEnv: String
-}
-
-# ============================================
-# Cell Diagram - Observability & Architecture View
-# ============================================
-type CellDiagram {
-  data: String
-  message: String
-  errorName: String
+type ListenerControlResponse {
   success: Boolean!
+  message: String!
+  commandIds: [String!]!
 }
 
-# ============================================
-# Deployment Track Type - CI/CD Configuration
-# ============================================
-type DeploymentTrack {
-  # Identity
-  id: String!
-  componentId: String!
-
-  # Timestamps
-  createdAt: String!
-  updatedAt: String!
-
-  # Version Configuration
-  apiVersion: String!
-  branch: String
-  latest: Boolean!
-  versionStrategy: String
-
-  # Deployment Settings
-  description: String
-  autoDeployEnabled: Boolean
-  autoBuildEnabled: Boolean
-
-  # Environment Settings
-  environmentName: String
-  environmentId: String
-
-  # Deployment Status
-  deploymentStatus: String
-  lastDeployedAt: String
-}
-
-# ============================================
-# Endpoint Type - Service Endpoints
-# ============================================
-type Endpoint {
-  id: String!
-  componentId: String!
-  name: String!
-  url: String!
-  type: String!
-  protocol: String
+input ListenerControlInput {
+  runtimeIds: [String!]!
+  listenerName: String!
+  listenerPackage: String
   port: Int
-  visibility: String
+  action: ControlAction!
 }
 
-# ============================================
-# Environment Variable Type
-# ============================================
-type EnvironmentVariable {
-  key: String!
-  value: String
-  isSecret: Boolean!
-  description: String
+enum ControlAction {
+  MI_MGMT
+  WORKFLOW_MGMT
+  SET_LOGGER_LEVEL
+  STOP
+  START
 }
 
-# ============================================
-# Secret Type
-# ============================================
-type Secret {
-  key: String!
-  description: String
-  createdAt: String
-  updatedAt: String
+type DeleteLoggerResponse {
+  success: Boolean!
+  message: String!
+  preparing: Boolean!
+  stale: Boolean!
+  retryAfterMs: Int!
 }
 
-# ============================================
-# Input Types for Mutations
-# ============================================
+input DeleteLoggerInput {
+  runtimeIds: [String!]!
+  loggerName: String!
+  requestId: String
+}
 
-# Environment Input
+type UpdateLogLevelResponse {
+  success: Boolean!
+  message: String!
+  commandIds: [String!]!
+  preparing: Boolean!
+  stale: Boolean!
+  retryAfterMs: Int!
+}
+
+input UpdateLogLevelInput {
+  runtimeIds: [String!]!
+  componentType: RuntimeType
+  componentName: String
+  componentPackage: String
+  loggerName: String
+  loggerClass: String
+  logLevel: LogLevel!
+  requestId: String
+}
+
 input EnvironmentInput {
   name: String!
   environmentHandler: String!
   description: String
-  isProduction: Boolean
+  critical: Boolean!
+  createdBy: String
 }
 
-# Project Input
+type EnvironmentsPage {
+  items: [Environment!]!
+  pageInfo: PageInfo!
+}
+
+type EnvironmentHandlerAvailability {
+  handlerUnique: Boolean!
+  alternateHandlerCandidate: String
+}
+
 input ProjectInput {
   orgId: Int!
   orgHandler: String!
@@ -1455,38 +1093,25 @@ input ProjectInput {
   secretRef: String
 }
 
-# Component Input
-input ComponentInput {
-  # Required Fields
-  projectId: String!
-  name: String!
-
-  # Recommended Fields
-  displayName: String
-  description: String
-
-  # Organization Context (optional - can derive from projectId)
-  orgId: Int
-  orgHandler: String
-
-  # Component Classification (optional - can have defaults)
-  componentType: RuntimeType
-  technology: String
-  # Integration type: displayType carries the type on its own (e.g.
-  # "ballerinaService", "scheduledTask"); componentSubType discriminates the
-  # types that share a generic service displayType. Defaults to "service".
-  displayType: String
-  componentSubType: String
-
-  # Repository Integration (optional - for future use)
-  repository: String
-  branch: String
-  directoryPath: String
-  secretRef: String
-  isPublicRepo: Boolean
+type ProjectsPage {
+  items: [Project!]!
+  pageInfo: PageInfo!
 }
 
-# Project Update Input
+type ProjectCreationEligibility {
+  isProjectCreationAllowed: Boolean!
+}
+
+type ProjectHandlerAvailability {
+  handlerUnique: Boolean!
+  alternateHandlerCandidate: String
+}
+
+type DeleteResponse {
+  status: String!
+  details: String!
+}
+
 input ProjectUpdateInput {
   id: String!
   orgId: Int
@@ -1495,12 +1120,75 @@ input ProjectUpdateInput {
   description: String
 }
 
-# Component Update Input
-input ComponentUpdateInput {
-  # Required field - component ID to update
-  id: String!
+input ComponentInput {
+  projectId: String!
+  name: String!
+  displayName: String
+  description: String
+  orgId: Int
+  orgHandler: String
+  componentType: RuntimeType
+  technology: String
+  displayType: String
+  componentSubType: String
+  repository: String
+  branch: String
+  directoryPath: String
+  secretRef: String
+  isPublicRepo: Boolean
+  createdBy: String
+}
 
-  # Basic fields that can be updated
+type ComponentsPage {
+  items: [Component!]!
+  pageInfo: PageInfo!
+}
+
+input ComponentOptionsInput {
+  filter: ComponentFilterInput
+  sort: ComponentSortInput
+  pagination: PaginationInput
+}
+
+input ComponentFilterInput {
+  withSystemComponents: Boolean
+  displayType: String
+  status: String
+  componentSubType: String
+}
+
+input ComponentSortInput {
+  field: String!
+  order: String!
+}
+
+type MoesifMetricsConfigStatus {
+  dashboardsCreated: Boolean!
+}
+
+type MoesifDashboardEmbed {
+  embedUrl: String!
+  token: String!
+}
+
+type MoesifLogsConfigStatus {
+  logsConfigured: Boolean!
+}
+
+type MoesifApplication {
+  id: String!
+  name: String!
+}
+
+type DeleteComponentV2Response {
+  status: String!
+  canDelete: Boolean!
+  message: String!
+  encodedData: String!
+}
+
+input ComponentUpdateInput {
+  id: String!
   name: String
   displayName: String
   description: String
@@ -1508,26 +1196,29 @@ input ComponentUpdateInput {
   version: String
   labels: String
   serviceAccessMode: String
-  # Integration type. Written as a pair with componentSubType: supplying
-  # displayType clears a stale componentSubType when that is omitted. Omit
-  # displayType to leave the recorded type unchanged.
   displayType: String
-  componentSubType: String
-
-  # Extended fields (accepted for compatibility but may not be persisted)
   apiId: String
   httpBased: Boolean
   isMigrationCompleted: Boolean
   skipDeploy: Boolean
   endpointShortUrlEnabled: Boolean
   isUnifiedConfigMapping: Boolean
+  componentSubType: String
 }
 
-# ============================================
-# Artifact Status Change Input/Response
-# ============================================
+type ArtifactStatusChangeResponse {
+  status: Status!
+  message: String!
+  successCount: Int!
+  failedCount: Int!
+  details: [String!]!
+}
 
-# Input for changing artifact status
+enum Status {
+  FAILED
+  SUCCESS
+}
+
 input ArtifactStatusChangeInput {
   componentId: String!
   artifactType: String!
@@ -1535,16 +1226,14 @@ input ArtifactStatusChangeInput {
   status: ArtifactState!
 }
 
-# Response for artifact status change
-type ArtifactStatusChangeResponse {
-  status: String!
+type ArtifactTracingChangeResponse {
+  status: Status!
   message: String!
   successCount: Int!
   failedCount: Int!
   details: [String!]!
 }
 
-# Input for artifact tracing change
 input ArtifactTracingChangeInput {
   componentId: String!
   environmentId: String!
@@ -1553,17 +1242,14 @@ input ArtifactTracingChangeInput {
   trace: ArtifactState!
 }
 
-# Response for artifact tracing change
-type ArtifactTracingChangeResponse {
-  status: String!
+type ArtifactStatisticsChangeResponse {
+  status: Status!
   message: String!
   successCount: Int!
   failedCount: Int!
   details: [String!]!
 }
 
-# Input for artifact statistics change
-# Supported artifact types: proxy-service, endpoint, api, sequence, inbound-endpoint, template
 input ArtifactStatisticsChangeInput {
   componentId: String!
   environmentId: String!
@@ -1572,265 +1258,157 @@ input ArtifactStatisticsChangeInput {
   statistics: ArtifactState!
 }
 
-# Response for artifact statistics change
-type ArtifactStatisticsChangeResponse {
+type OrgSecretsPage {
+  items: [OrgSecretListEntry!]!
+  pageInfo: PageInfo!
+}
+
+type OrgSecretListEntry {
+  keyId: String!
+  environmentId: String!
+  environmentName: String!
+  bound: Boolean!
+  createdAt: String!
+  createdBy: String
+}
+
+type BoundSecretsPage {
+  items: [BoundSecretEntry!]!
+  pageInfo: PageInfo!
+}
+
+type BoundSecretEntry {
+  keyId: String!
+  createdAt: String!
+  createdBy: String
+  runtimes: [BoundSecretRuntime!]!
+}
+
+type BoundSecretRuntime {
+  runtimeId: String!
   status: String!
+}
+
+type ArtifactTriggerResponse {
+  status: Status!
   message: String!
   successCount: Int!
   failedCount: Int!
   details: [String!]!
 }
 
-# Input for artifact trigger (e.g., triggering scheduled tasks)
 input ArtifactTriggerInput {
   componentId: String!
   taskName: String!
 }
 
-# Response for artifact trigger
-type ArtifactTriggerResponse {
-  status: String!
-  message: String!
-  successCount: Int!
-  failedCount: Int!
-  details: [String!]!
+type ArtifactTypeCount {
+  artifactType: ArtifactType!
+  artifactCount: Int!
 }
 
-# ============================================
-# Input Types for Queries
-# ============================================
-
-# Component Filter Input
-input ComponentFilterInput {
-  withSystemComponents: Boolean
-  displayType: String
-  status: String
-  componentSubType: String
+enum ArtifactType {
+  REGISTRYRESOURCE
+  CONNECTOR
+  DATASOURCE
+  COMPOSITEAPP
+  DATASERVICE
+  LOCALENTRY
+  MESSAGEPROCESSOR
+  MESSAGESTORE
+  TEMPLATE
+  TASK
+  SEQUENCE
+  INBOUNDENDPOINT
+  ENDPOINT
+  PROXYSERVICE
+  RESTAPI
+  LISTENER
+  SERVICE
 }
 
-# Component Sort Input
-input ComponentSortInput {
-  field: String!
-  order: String!
+"A management answer projected into name/value pairs: artifact parameters and overviews."
+type FetchableParameters {
+  parameters: [Parameter!]!
+  preparing: Boolean!
+  stale: Boolean!
+  retryAfterMs: Int!
 }
 
-# Pagination Input
-input PaginationInput {
-  limit: Int
-  offset: Int
-  cursor: String
-}
-
-# Component Options Input
-input ComponentOptionsInput {
-  filter: ComponentFilterInput
-  sort: ComponentSortInput
-  pagination: PaginationInput
-}
-
-# ============================================
-# Project Creation Eligibility Type
-# ============================================
-type ProjectCreationEligibility {
-  isProjectCreationAllowed: Boolean!
-}
-
-# ============================================
-# Project Handler Availability Type
-# ============================================
-type EnvironmentHandlerAvailability {
-  handlerUnique: Boolean!
-  alternateHandlerCandidate: String
-}
-
-type ProjectHandlerAvailability {
-  handlerUnique: Boolean!
-  alternateHandlerCandidate: String
-}
-
-# ============================================
-# Delete Response Type
-# ============================================
-type DeleteResponse {
-  status: String!
-  details: String!
-}
-
-# ============================================
-# Delete Component V2 Response Type
-# ============================================
-type DeleteComponentV2Response {
-  status: String!
-  canDelete: Boolean!
-  message: String!
-  encodedData: String!
-}
-
-# ============================================
-# Artifact Types Type
-# ============================================
-type ArtifactTypes {
-  availableTypes: [String!]!
-  componentType: RuntimeType!
-}
-
-# ============================================
-# Component Deployment Type - Deployment Information
-# ============================================
-type ComponentDeployment {
-  environmentId: String!
-  configCount: Int!
-  apiId: String
-  releaseId: String!
-  apiRevision: ApiRevision
-  build: BuildInfo!
-  imageUrl: String!
-  invokeUrl: String!
-  versionId: String!
-  deploymentStatus: String!
-  deploymentStatusV2: String!
-  version: String
-  cron: String
-  cronTimezone: String
-}
-
-# ============================================
-# API Revision Type
-# ============================================
-type ApiRevision {
-  id: String!
-  displayName: String!
-}
-
-# ============================================
-# Build Info Type - Build Information
-# ============================================
-type BuildInfo {
-  buildId: String!
-  deployedAt: String
-  commit: CommitInfo
-  sourceConfigMigrationStatus: SourceConfigMigrationStatus
-  runId: String!
-}
-
-# ============================================
-# Commit Info Type - Git Commit Information
-# ============================================
-type CommitInfo {
-  author: AuthorInfo!
-  sha: String!
-  message: String!
-  isLatest: Boolean!
-}
-
-# ============================================
-# Author Info Type - Commit Author Information
-# ============================================
-type AuthorInfo {
+type Parameter {
   name: String!
-  date: String!
-  email: String!
-  avatarUrl: String!
+  value: String!
 }
 
-# ============================================
-# Source Config Migration Status Type
-# ============================================
-type SourceConfigMigrationStatus {
-  canMigrate: Boolean!
-  existingFileName: String!
-  existingFileSchemaVersion: String!
-}
-
-# ============================================
-# ControlAction Enum - Control Actions for Artifacts
-# ============================================
-enum ControlAction {
-  START
-  STOP
-}
-
-# ============================================
-# Listener Control Input - used for enabling/disabling listeners
-# ============================================
-input ListenerControlInput {
-  runtimeIds: [String!]!
-  listenerName: String!
-  action: ControlAction!
-}
-
-# ============================================
-# Listener Control Response
-# ============================================
-type ListenerControlResponse {
-  success: Boolean!
-  message: String!
-  commandIds: [String!]!
-}
-
-# ============================================
-# Update Log Level Input
-# ============================================
-input UpdateLogLevelInput {
-  runtimeIds: [String!]!
-  componentType: RuntimeType
-  componentName: String
-  loggerName: String
-  loggerClass: String
-  logLevel: LogLevel!
-  # Names one submission, so re-sending this mutation while the runtime has not confirmed
-  # it polls the queued write instead of issuing a second one. Only the heartbeat tunnel
-  # needs it; a write answered inside the request never sees it twice.
-  requestId: String
-}
-
-# ============================================
-# Update Log Level Response
-# ============================================
-type UpdateLogLevelResponse {
+type FetchableDataService {
+  dataService: MgmtDataServiceInfo
   preparing: Boolean!
   stale: Boolean!
   retryAfterMs: Int!
-  success: Boolean!
-  message: String!
-  commandIds: [String!]!
 }
 
-# ============================================
-# Delete Logger Input / Response
-# ============================================
-input DeleteLoggerInput {
-  runtimeIds: [String!]!
-  loggerName: String!
-  # See UpdateLogLevelInput.requestId.
-  requestId: String
+type MgmtDataServiceInfo {
+  serviceName: String!
+  serviceDescription: String
+  wsdl1_1: String
+  wsdl2_0: String
+  swagger_url: String
+  dataSources: [MgmtDataServiceDataSource!]!
+  queries: [MgmtDataServiceQuery!]!
+  resources: [MgmtDataServiceResource!]!
+  operations: [MgmtDataServiceOperation!]!
+  configuration: String
+  serviceGroupName: String
 }
 
-type DeleteLoggerResponse {
+type MgmtDataServiceDataSource {
+  dataSourceId: String!
+  dataSourceType: String
+}
+
+type MgmtDataServiceQuery {
+  id: String!
+  dataSourceId: String
+  namespace: String
+}
+
+type MgmtDataServiceResource {
+  resourcePath: String!
+  resourceMethod: String
+  resourceQuery: String
+}
+
+type MgmtDataServiceOperation {
+  operationName: String!
+  queryName: String
+}
+
+type MIUsersPage {
+  items: [MIUser!]!
+  pageInfo: PageInfo!
   preparing: Boolean!
   stale: Boolean!
   retryAfterMs: Int!
-  success: Boolean!
-  message: String!
 }
 
-# ============================================
-# MI Runtime User Management Types
-# ============================================
 type MIUser {
   username: String!
   domain: String!
   isAdmin: Boolean!
 }
 
-type MIUsersResponse {
-  users: [MIUser!]!
-}
-
 type MIUserOperationResponse {
+  username: String!
+  status: String!
   preparing: Boolean!
   stale: Boolean!
   retryAfterMs: Int!
-  username: String!
-  status: String!
+}
+
+type SystemInfo {
+  version: String!
+}
+
+type ObservabilityMetricsConfigStatus {
+  configured: Boolean!
 }
