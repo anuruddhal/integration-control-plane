@@ -345,6 +345,7 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
   const runtimesByEnvError = isAggregate ? projectRuntimesByEnvError : componentRuntimesByEnvError;
   const refetchRuntimesByEnv = isAggregate ? refetchProjectRuntimesByEnv : refetchComponentRuntimesByEnv;
   const availableEnvironments = environments.filter((e) => (isAggregate ? (aggregateRuntimesByEnv[e.id]?.length ?? 0) > 0 : envsWithRuntimes.has(e.id)));
+  const noRuntimes = availableEnvironments.length === 0;
 
   // Default to the first environment that has runtimes; ignore a stale/explicit
   // selection that no longer has runtimes so we never load config/dashboards for
@@ -368,7 +369,7 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
 
   // Once the dashboards exist, mint a short-lived workspace access token and
   // build the iframe embed URL. The hook refetches before the token expires.
-  const { data: embed, isLoading: loadingEmbed, isFetching: fetchingEmbed, error: embedError, refetch: refetchEmbed } = useMoesifDashboardEmbed(targetComponentId || undefined, effectiveEnvId || undefined, dashboardsCreated);
+  const { data: embed, isLoading: loadingEmbed, isFetching: fetchingEmbed, error: embedError, refetch: refetchEmbed } = useMoesifDashboardEmbed(targetComponentId || undefined, effectiveEnvId || undefined, dashboardsCreated && !noRuntimes);
 
   // The canvas is scoped to the runtimes in view: their ids are passed to the
   // canvas as the `runtimeId` context filter (see MoesifCanvas CANVAS_INIT) so
@@ -376,7 +377,7 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
   // dashboard is linked and an integration + environment are selected; in
   // aggregate mode the runtimes already come from the per-environment project
   // queries, so no extra request is made.
-  const { data: runtimes = [] } = useComponentRuntimes(effectiveEnvId, projectId, targetComponentId, dashboardsCreated && !isAggregate);
+  const { data: runtimes = [] } = useComponentRuntimes(effectiveEnvId, projectId, targetComponentId, dashboardsCreated && !noRuntimes && !isAggregate);
   // Runtime filter options for the canvas' `runtimeId` context filter: `value` is
   // the actual runtime id (matched against the metric tag) and `label` names the
   // owning integration alongside the runtime — "integration1 (runtime1)" — in
@@ -388,11 +389,11 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
       <Typography variant="h1">Metrics</Typography>
       <Stack direction="row" alignItems="center" gap={1}>
-        {/* Only offer the backend toggle when BOTH backends are configured for
-            this integration: OpenSearch globally and this integration's Moesif
-            dashboard (dashboardsCreated). */}
-        {opensearchConfigured && dashboardsCreated && backendSelector}
-        {dashboardsCreated && (
+        {/* A linked dashboard normally gates the backend toggle. In the
+            no-runtimes state, keep the toggle solely as a route back to
+            OpenSearch without loading the Moesif dashboard. */}
+        {opensearchConfigured && (dashboardsCreated || noRuntimes) && backendSelector}
+        {dashboardsCreated && !noRuntimes && (
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => refetchEmbed()} disabled={fetchingEmbed}>
               <RefreshCw size={18} />
@@ -508,8 +509,25 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
     );
   }
 
-  // Publishing instructions remain useful before the first runtime is registered.
-  const noRuntimes = availableEnvironments.length === 0;
+  // Without runtimes there is no safe dashboard scope. Show a dedicated empty
+  // state and keep only the backend navigation control in the header.
+  if (noRuntimes) {
+    return (
+      <PageContent>
+        {header}
+        {integrationSelector && (
+          <Stack direction="row" gap={2} sx={{ mb: 3 }} flexWrap="wrap" alignItems="center">
+            {integrationSelector}
+          </Stack>
+        )}
+        <EmptyListing
+          icon={<BarChart3 size={48} />}
+          title="No runtimes"
+          description={isAggregate ? `No runtimes are registered for ${aggregateTechnology} integrations in this project in any environment.` : 'No runtimes are registered for this integration in any environment.'}
+        />
+      </PageContent>
+    );
+  }
 
   // Resolving whether this integration is configured for Moesif metrics.
   if (loadingMoesifConfig) {
@@ -527,7 +545,7 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
   // the imported workspace id and persists it (setting the `dashboardsCreated`
   // flag). The Collector Application ID itself is not stored. On success the
   // config query is invalidated and the metrics view below is shown.
-  if (!dashboardsCreated || noRuntimes) {
+  if (!dashboardsCreated) {
     return (
       <PageContent>
         {envSelector && (
@@ -542,13 +560,6 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
           <Stack direction="row" gap={2} sx={{ mb: 3 }} flexWrap="wrap" alignItems="center">
             {integrationSelector}
           </Stack>
-        )}
-        {noRuntimes && (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            {isAggregate
-              ? `No runtimes are registered for ${aggregateTechnology} integrations in this project in any environment, so there are no metrics to show.`
-              : 'No runtimes are registered for this integration in any environment, so there are no metrics to show.'}
-          </Alert>
         )}
         {/* Neither backend configured for this integration (no OpenSearch and no
             linked Moesif dashboard): explain that observability must be set up
@@ -584,7 +595,7 @@ export default function MetricsMoesif({ scope, backendSelector, opensearchConfig
         {/* Nothing configured yet (no OpenSearch backend and no Moesif dashboard
             linked): offer OpenSearch as an alternative. The setup guide depends
             on the integration's runtime technology (MI vs. other runtimes). */}
-        {(!opensearchConfigured || noRuntimes) && (
+        {!opensearchConfigured && (
           <>
             <Divider sx={{ my: 4 }} />
             <Typography variant="h4" sx={{ mb: 2, color: 'warning.main' }}>

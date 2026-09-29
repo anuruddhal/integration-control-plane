@@ -18,6 +18,7 @@
 
 import { Alert, ToggleButton, ToggleButtonGroup, Button, Checkbox, Chip, CircularProgress, Divider, FormControlLabel, IconButton, ListItemText, MenuItem, PageContent, Select, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
 import { ArrowLeft, ChevronDown, ChevronRight, Copy, Download, RefreshCw, ScrollText, X } from '@wso2/oxygen-ui-icons-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { Link } from 'react-router';
 import { useProjectByHandler, useComponentByHandler, useComponents, useEnvironments, useRuntimes, useComponentRuntimes, useComponentRuntimesByEnvironments, useProjectRuntimes, useProjectRuntimesByEnvironments } from '../api/queries';
@@ -577,6 +578,7 @@ function LogEntry({ log, expanded, onToggle }: { log: LogRow; expanded: boolean;
 }
 
 export default function RuntimeLogs(scope: ProjectScope | ComponentScope): JSX.Element {
+  const queryClient = useQueryClient();
   const [selectedBackend, setSelectedBackend] = useState<'opensearch' | 'moesif' | null>(null);
   const moesifEnabled = isMoesifEnabled();
 
@@ -738,6 +740,17 @@ export default function RuntimeLogs(scope: ProjectScope | ComponentScope): JSX.E
 
   const { data, isLoading, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteLogs(useMoesifBackend ? null : logsRequest, autoFetch ? AUTO_FETCH_INTERVAL : false, getTimeRange);
 
+  const retryOpenSearch = useCallback(async () => {
+    // The failed query remains cached while the Moesif fallback is active. Reset
+    // it before re-enabling OpenSearch so the stale error cannot immediately
+    // latch the page back into the fallback state.
+    if (logsRequest) {
+      await queryClient.resetQueries({ queryKey: ['logs', logsRequest], exact: true });
+    }
+    setSelectedBackend('opensearch');
+    setOpensearchUnavailable(false);
+  }, [logsRequest, queryClient]);
+
   // Disable auto-fetch when observability service is unavailable
   useEffect(() => {
     if (isUnavailable(error)) {
@@ -898,6 +911,11 @@ export default function RuntimeLogs(scope: ProjectScope | ComponentScope): JSX.E
               <ToggleButton value="opensearch">OpenSearch</ToggleButton>
               <ToggleButton value="moesif">Moesif</ToggleButton>
             </ToggleButtonGroup>
+          )}
+          {opensearchUnavailable && (
+            <Button variant="outlined" size="small" startIcon={<RefreshCw size={16} />} onClick={() => void retryOpenSearch()}>
+              Retry OpenSearch
+            </Button>
           )}
         </Stack>
       </Stack>
