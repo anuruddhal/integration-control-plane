@@ -225,7 +225,7 @@ public isolated function miControlRequest(string artifactType, string artifactNa
         }
 
         // Build payload based on artifact type
-        if artifactType == ARTIFACT_TYPE_TEMPLATE {
+        if normalizeArtifactType(artifactType) == ARTIFACT_TYPE_TEMPLATE {
             // Templates require a 'type' field (sequence or endpoint)
             payload = {
                 "name": artifactName,

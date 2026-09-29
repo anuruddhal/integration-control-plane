@@ -352,6 +352,10 @@ function testArtifactControlsAreManagementWrites() {
             ["/management/proxy-services", {name: "p1", status: "inactive"}]);
     test:assertEquals(storage:miControlRequest("task", "t1", types:ARTIFACT_TRIGGER),
             ["/management/tasks", {name: "t1", status: "trigger"}]);
+    // The template body needs its `type`, however the artifact type was spelled: the path is
+    // resolved case- and space-insensitively, so the body must be too.
+    test:assertEquals(storage:miControlRequest(" Template ", "t1", types:ARTIFACT_ENABLE_STATISTICS),
+            ["/management/templates", {name: "t1", "type": "sequence", statistics: "enable"}]);
     test:assertTrue(storage:miControlRequest("local-entry", "e1", types:ARTIFACT_ENABLE_STATISTICS) is (),
             "An artifact type without the control must not become a write to some other path");
 }
