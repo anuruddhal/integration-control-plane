@@ -17,7 +17,6 @@
 import icp_server.storage;
 import icp_server.types;
 
-import ballerina/crypto;
 import ballerina/http;
 import ballerina/log;
 import ballerina/time;
@@ -561,19 +560,3 @@ const int TUNNEL_FAILED_READ_TTL_SECONDS = 15;
 // audit trail lives in audit_logs, so the row itself only has to outlast the poll that
 // reads it.
 const int TUNNEL_COMPLETED_RETENTION_SECONDS = 300;
-
-# The signature an MI runtime checks before executing a tunneled command.
-#
-# The command's authenticity otherwise rests on the TLS connection alone, and an MI run with
-# `ssl_verify = false` would execute whatever a party on the path put in a heartbeat
-# response. The key is the one the runtime authenticates its heartbeats with, so the runtime
-# already holds it and nothing new is exchanged.
-#
-# Computed over the payload exactly as sent, never over a re-serialization of it: the two
-# sides do not have to agree on how JSON is written, only on these bytes. The runtime id is
-# included so a command signed for one replica cannot be replayed to another sharing the key.
-# The payload carries the deadline, so a captured command is only good until then, and the
-# runtime's replay cache stops it running twice before that.
-isolated function signTunneledCommand(string runtimeId, string payload, string keyMaterial)
-        returns string|error =>
-    (check crypto:hmacSha256((runtimeId + "\n" + payload).toBytes(), keyMaterial.toBytes())).toBase64();

@@ -458,14 +458,46 @@ function testNothingIsDeliveredInAResponseTheRuntimeWillReplace() returns error?
             "The write must still be waiting for the full heartbeat that follows");
 }
 
+// ── Signed heartbeat commands ────────────────────────────────────────────────
+
+// The same two vectors are asserted by the MI agent's and the BI bridge's tests, computed
+// independently; the three sides interoperate only if all three produce these.
+const string SIGNING_KEY = "key-material-that-is-at-least-32-bytes-long";
+const string SIGNED_MI_PAYLOAD = "{\"commandId\":\"mio-1.runtime-1\",\"operation\":\"management\",\"params\":" +
+    "{\"method\":\"POST\",\"path\":\"/management/sequences\",\"body\":{\"name\":\"fault\",\"statistics\":\"enable\"}}," +
+    "\"deadline\":\"2026-09-30T10:00:00Z\"}";
+
 @test:Config {groups: ["mi_tunnel"]}
-function testTheCommandSignatureMatchesTheAgentsVector() returns error? {
-    // The same vector is asserted by the MI agent's ICPCommandExecutorTest. Both sides sign
-    // the payload bytes exactly as sent, so they only agree if they agree here.
-    string payload = "{\"commandId\":\"mio-1.runtime-1\",\"operation\":\"management\",\"params\":{\"method\":\"POST\"," +
-        "\"path\":\"/management/sequences\",\"body\":{\"name\":\"fault\",\"statistics\":\"enable\"}},\"deadline\":\"2026-09-30T10:00:00Z\"}";
-    test:assertEquals(check signTunneledCommand("runtime-1", payload, "key-material-that-is-at-least-32-bytes-long"),
-            "s3V8zp25O+8ls4xvHo5nCV2pUHgMv67lXPi52Se1b3Y=");
-    test:assertNotEquals(check signTunneledCommand("runtime-2", payload, "key-material-that-is-at-least-32-bytes-long"),
-            "s3V8zp25O+8ls4xvHo5nCV2pUHgMv67lXPi52Se1b3Y=", "A signature must not verify for another runtime");
+function testCommandSignaturesMatchTheRuntimesVectors() returns error? {
+    types:ControlCommand mi = {commandId: "mio-1.runtime-1", runtimeId: "runtime-1",
+        targetArtifact: {name: "management"}, action: types:MI_MGMT, issuedAt: [0, 0],
+        status: types:PENDING, payload: SIGNED_MI_PAYLOAD};
+    test:assertEquals(check signCommand("runtime-1", mi, SIGNING_KEY),
+            "3zoKUUS0CVRD/4ccF6nqssTJfGQgx7sPyj8nG980VRA=");
+
+    types:ControlCommand stop = {commandId: "cmd-1", runtimeId: "runtime-1",
+        targetArtifact: {name: "greetingService", "package": "hello/icp"}, action: types:STOP,
+        issuedAt: [0, 0], status: types:PENDING};
+    test:assertEquals(check signCommand("runtime-1", stop, SIGNING_KEY),
+            "W3lXJP/dtlfHIFCgTbMeQlTBF2tOpKIUmLUlKBWq210=");
+
+    test:assertNotEquals(check signCommand("runtime-2", stop, SIGNING_KEY),
+            "W3lXJP/dtlfHIFCgTbMeQlTBF2tOpKIUmLUlKBWq210=", "A signature must not verify for another runtime");
+    stop.action = types:START;
+    test:assertNotEquals(check signCommand("runtime-1", stop, SIGNING_KEY),
+            "W3lXJP/dtlfHIFCgTbMeQlTBF2tOpKIUmLUlKBWq210=", "Turning a STOP into a START must break the signature");
+}
+
+@test:Config {groups: ["mi_tunnel"]}
+function testEveryCommandInAResponseIsSigned() {
+    types:HeartbeatResponse response = {acknowledged: true, commands: [
+        {commandId: "a", runtimeId: "r", targetArtifact: {name: "svc"}, action: types:STOP,
+            issuedAt: [0, 0], status: types:PENDING},
+        {commandId: "b", runtimeId: "r", targetArtifact: {name: "management"}, action: types:MI_MGMT,
+            issuedAt: [0, 0], status: types:PENDING, payload: "{}"}
+    ]};
+    signHeartbeatCommands("r", response, SIGNING_KEY);
+    foreach types:ControlCommand command in response.commands ?: [] {
+        test:assertTrue(command.signature is string, "Every command must be signed: " + command.commandId);
+    }
 }

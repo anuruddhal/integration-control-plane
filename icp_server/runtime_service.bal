@@ -188,6 +188,7 @@ service /icp on runtimeListener {
             }
 
             deliverTunneledCommands(runtimeId, heartbeatResponse);
+            signHeartbeatCommands(runtimeId, heartbeatResponse, orgSecret.keyMaterial);
 
             log:printDebug(string `Heartbeat processed for runtime=${runtimeId}, kid=${kid}`);
             return heartbeatResponse;
@@ -257,6 +258,7 @@ service /icp on runtimeListener {
             }
 
             deliverTunneledCommands(runtimeId, heartbeatResponse);
+            signHeartbeatCommands(runtimeId, heartbeatResponse, orgSecret.keyMaterial);
 
             log:printDebug(string `Delta heartbeat processed for runtime=${runtimeId}, kid=${kid}`);
             return heartbeatResponse;
