@@ -457,3 +457,15 @@ function testNothingIsDeliveredInAResponseTheRuntimeWillReplace() returns error?
     test:assertTrue(row is types:CacheOperation && row.status == types:CACHE_OP_PENDING,
             "The write must still be waiting for the full heartbeat that follows");
 }
+
+@test:Config {groups: ["mi_tunnel"]}
+function testTheCommandSignatureMatchesTheAgentsVector() returns error? {
+    // The same vector is asserted by the MI agent's ICPCommandExecutorTest. Both sides sign
+    // the payload bytes exactly as sent, so they only agree if they agree here.
+    string payload = "{\"commandId\":\"mio-1.runtime-1\",\"operation\":\"management\",\"params\":{\"method\":\"POST\"," +
+        "\"path\":\"/management/sequences\",\"body\":{\"name\":\"fault\",\"statistics\":\"enable\"}},\"deadline\":\"2026-09-30T10:00:00Z\"}";
+    test:assertEquals(check signTunneledCommand("runtime-1", payload, "key-material-that-is-at-least-32-bytes-long"),
+            "s3V8zp25O+8ls4xvHo5nCV2pUHgMv67lXPi52Se1b3Y=");
+    test:assertNotEquals(check signTunneledCommand("runtime-2", payload, "key-material-that-is-at-least-32-bytes-long"),
+            "s3V8zp25O+8ls4xvHo5nCV2pUHgMv67lXPi52Se1b3Y=", "A signature must not verify for another runtime");
+}

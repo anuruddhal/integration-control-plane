@@ -491,6 +491,10 @@ public type ControlCommand record {
     time:Utc issuedAt;
     ControlCommandStatus status; // pending, sent, acknowledged, failed
     string payload?; // JSON payload for actions that need additional data
+    // HMAC-SHA256 over the runtime id and `payload` exactly as sent, keyed with the org
+    // secret the runtime heartbeats with, Base64. Set on MI_MGMT commands so the agent can
+    // tell a command from the ICP from one injected on the way; see signTunneledCommand.
+    string signature?;
 };
 
 public type HeartbeatResponse record {

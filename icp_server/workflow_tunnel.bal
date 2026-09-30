@@ -466,6 +466,20 @@ isolated function deliverTunneledCommands(string runtimeId,
     types:ControlCommand[] commands = [];
     int now = nowUnixSeconds();
 
+    // Resolved before anything is claimed: a command that cannot be signed must not be taken
+    // off the queue, or it is marked delivered and never runs.
+    string? signingKey = ();
+    if isMI {
+        record {|string keyId; string keyMaterial;|}|error key =
+            storage:resolveKeyIdAndMaterialByRuntimeId(runtimeId);
+        if key is error {
+            log:printError("Cannot sign tunneled commands for a runtime; leaving them queued", key,
+                    runtimeId = runtimeId);
+            return;
+        }
+        signingKey = key.keyMaterial;
+    }
+
     // Mutations first: a user waiting on an action outranks a list refresh.
     types:CacheOperation[]|error operations =
         storage:claimCacheOperations(runtimeId, WF_MAX_OPERATIONS_PER_HEARTBEAT);
@@ -516,6 +530,18 @@ isolated function deliverTunneledCommands(string runtimeId,
         }
     } else {
         log:printError("Failed to claim cache fetches for delivery", fetches, owner = owner);
+    }
+
+    if signingKey is string {
+        foreach types:ControlCommand command in commands {
+            string|error signature = signTunneledCommand(runtimeId, command.payload ?: "", signingKey);
+            if signature is error {
+                log:printError("Failed to sign a tunneled command", signature,
+                        commandId = command.commandId);
+                continue;
+            }
+            command.signature = signature;
+        }
     }
 
     if commands.length() > 0 {
