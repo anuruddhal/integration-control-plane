@@ -87,12 +87,14 @@ const toLocalInput = (d: Date): string => {
 
 const ANY_TIME = 'Any time';
 const CUSTOM_RANGE = 'Custom';
+export const PAST_24_HOURS = 'Past 24 hours';
 // Relative presets for the time-range dropdown (window length in milliseconds).
 const TIME_PRESETS: { label: string; ms: number }[] = [
   { label: 'Past 10 minutes', ms: 10 * 60_000 },
   { label: 'Past 30 minutes', ms: 30 * 60_000 },
   { label: 'Past 1 hour', ms: 60 * 60_000 },
-  { label: 'Past 24 hours', ms: 24 * 60 * 60_000 },
+  { label: PAST_24_HOURS, ms: 24 * 60 * 60_000 },
+  { label: 'Past 7 days', ms: 7 * 24 * 60 * 60_000 },
 ];
 
 export type Toast = { severity: 'success' | 'error'; message: string } | null;
@@ -144,8 +146,9 @@ export function WorkflowNameFilter({ definitions, value, onChange }: { definitio
   );
 }
 
-export function useTimeRangeFilter() {
-  const [timeRange, setTimeRange] = useState(ANY_TIME);
+// `initialRange` is also what Clear filters restores, so the default window does not count as a filter.
+export function useTimeRangeFilter(initialRange: string = ANY_TIME) {
+  const [timeRange, setTimeRange] = useState(initialRange);
   const [customStart, setCustomStart] = useState(() => toLocalInput(new Date(Date.now() - 24 * 3600_000)));
   const [customEnd, setCustomEnd] = useState(() => toLocalInput(new Date()));
 
@@ -192,7 +195,7 @@ export function useTimeRangeFilter() {
     </>
   );
 
-  return { bounds, controls, active: timeRange !== ANY_TIME, reset: () => setTimeRange(ANY_TIME) };
+  return { bounds, controls, active: timeRange !== initialRange, reset: () => setTimeRange(initialRange) };
 }
 
 export default function AdminPortal({ targets, environmentId, taskQueue, initialWorkflowType, initialWorkflowId }: PortalScope & { initialWorkflowType?: string; initialWorkflowId?: string }) {
