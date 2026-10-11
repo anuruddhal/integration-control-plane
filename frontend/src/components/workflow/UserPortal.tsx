@@ -24,9 +24,26 @@ import { useEffect, useState, type ReactNode } from 'react';
 import SchemaOrRawEditor from './SchemaOrRawEditor';
 import StructuredValue from './StructuredValue';
 import TaskAdministerCard, { AdministratorsRow, completedAsLabel } from './TaskAdministerCard';
-import { buildFormResult, displayWorkflowId, formIsAuthoritative, formatTime, gatewayScope, jsonPretty, ownerLabel, ownerScope, parseFormSchema, parseRawJson, sortByStartTimeDesc, splitQualifiedName, unescapeRoleName, type PortalScope } from './helpers';
+import {
+  buildFormResult,
+  displayWorkflowId,
+  emptyWorkQueueMessage,
+  formIsAuthoritative,
+  formatTime,
+  gatewayScope,
+  HUMAN_TASKS_DEFAULT_TIME_RANGE,
+  jsonPretty,
+  ownerLabel,
+  ownerScope,
+  parseFormSchema,
+  parseRawJson,
+  sortByStartTimeDesc,
+  splitQualifiedName,
+  unescapeRoleName,
+  type PortalScope,
+} from './helpers';
 import { ActionCard, DetailDrawer, DetailRow, HeaderCell, IdText, ListFooter, NotProvided, RefreshingNote, SectionCard, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope, rowOpenProps } from './shared';
-import { IntegrationFilter, PAST_24_HOURS, ReviewActivityDetailDialog, StatusFilter, useTimeRangeFilter, WorkflowNameFilter } from './AdminPortal';
+import { IntegrationFilter, ReviewActivityDetailDialog, StatusFilter, useTimeRangeFilter, WorkflowNameFilter } from './AdminPortal';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
 import DateTime from '../DateTime';
@@ -288,8 +305,7 @@ function WorkQueue({
   const [search, setSearch] = useState('');
   const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(null);
   const [integration, setIntegration] = useState<WorkflowTarget | null>(null);
-  // The task listing scans every execution in the window, so the default is bounded rather than Any time.
-  const timeFilter = useTimeRangeFilter(PAST_24_HOURS);
+  const timeFilter = useTimeRangeFilter(HUMAN_TASKS_DEFAULT_TIME_RANGE);
 
   const multi = scope.targets.length > 1;
 
@@ -439,7 +455,7 @@ function WorkQueue({
       ) : queuePreparing && items.length === 0 ? (
         <Typography sx={emptySx}>Fetching tasks from the integration…</Typography>
       ) : items.length === 0 ? (
-        <Typography sx={emptySx}>{`${status === 'All' ? 'No tasks' : `No ${status.toLowerCase()} tasks`}${timeFilter.bounds.startTimeFrom ? ' in the selected time range' : ''}.`}</Typography>
+        <Typography sx={emptySx}>{emptyWorkQueueMessage(status, timeFilter.bounds)}</Typography>
       ) : (
         <>
           {selecting && (

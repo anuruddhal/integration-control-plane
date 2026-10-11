@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildFormResult, formIsAuthoritative, formValuesForRaw, formValuesFromObject, parseFormSchema, parseRawJson, type FormField } from './helpers';
+import { ANY_TIME, buildFormResult, CUSTOM_RANGE, emptyWorkQueueMessage, formIsAuthoritative, formValuesForRaw, formValuesFromObject, HUMAN_TASKS_DEFAULT_TIME_RANGE, parseFormSchema, parseRawJson, timeRangeBounds, type FormField } from './helpers';
 
 // The schema a review activity's arguments arrive with: free text, a number, a nested group.
 const SCHEMA = JSON.stringify({
@@ -156,5 +156,50 @@ describe('formIsAuthoritative', () => {
     // No schema, no form — the JSON editor is all there is, in either mode.
     expect(formIsAuthoritative(null, false)).toBe(false);
     expect(formIsAuthoritative(null, true)).toBe(false);
+  });
+});
+
+const NOW = Date.parse('2026-10-11T12:00:00.000Z');
+const HOUR = 60 * 60_000;
+const NO_CUSTOM = { start: '', end: '' };
+
+describe('timeRangeBounds', () => {
+  it('bounds the Human Tasks default instead of listing every task execution', () => {
+    // An unbounded default made the inbox's first load read the integration's whole task history (#2510).
+    expect(HUMAN_TASKS_DEFAULT_TIME_RANGE).not.toBe(ANY_TIME);
+    expect(timeRangeBounds(HUMAN_TASKS_DEFAULT_TIME_RANGE, NOW, NO_CUSTOM)).toEqual({
+      startTimeFrom: new Date(NOW - 24 * HOUR).toISOString(),
+      startTimeTo: new Date(NOW).toISOString(),
+    });
+  });
+
+  it('offers a seven-day window', () => {
+    expect(timeRangeBounds('Past 7 days', NOW, NO_CUSTOM)).toEqual({
+      startTimeFrom: '2026-10-04T12:00:00.000Z',
+      startTimeTo: '2026-10-11T12:00:00.000Z',
+    });
+  });
+
+  it('sends no bounds for Any time or an unknown label', () => {
+    expect(timeRangeBounds(ANY_TIME, NOW, NO_CUSTOM)).toEqual({});
+    expect(timeRangeBounds('Past fortnight', NOW, NO_CUSTOM)).toEqual({});
+  });
+
+  it('converts a custom range from local inputs and drops an empty or invalid end', () => {
+    const start = '2026-10-01T09:30';
+    expect(timeRangeBounds(CUSTOM_RANGE, NOW, { start, end: '' })).toEqual({ startTimeFrom: new Date(start).toISOString(), startTimeTo: undefined });
+    expect(timeRangeBounds(CUSTOM_RANGE, NOW, { start, end: 'not-a-date' }).startTimeTo).toBeUndefined();
+  });
+});
+
+describe('emptyWorkQueueMessage', () => {
+  it('names the time range when one is applied, so older pending tasks are not mistaken for none', () => {
+    expect(emptyWorkQueueMessage('PENDING', timeRangeBounds(HUMAN_TASKS_DEFAULT_TIME_RANGE, NOW, NO_CUSTOM))).toBe('No pending tasks in the selected time range.');
+    expect(emptyWorkQueueMessage('All', { startTimeFrom: '2026-10-11T11:00:00.000Z' })).toBe('No tasks in the selected time range.');
+  });
+
+  it('keeps the plain message for Any time', () => {
+    expect(emptyWorkQueueMessage('COMPLETED', {})).toBe('No completed tasks.');
+    expect(emptyWorkQueueMessage('All', {})).toBe('No tasks.');
   });
 });

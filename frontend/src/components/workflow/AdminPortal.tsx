@@ -27,7 +27,9 @@ import WorkflowDetailDrawer from './WorkflowDetailDrawer';
 import StructuredValue from './StructuredValue';
 import TaskAdministerCard, { AdministratorsRow, completedAsLabel } from './TaskAdministerCard';
 import {
+  ANY_TIME,
   buildFormResult,
+  CUSTOM_RANGE,
   diffFormValues,
   displayWorkflowId,
   extractNodeExecutionDetail,
@@ -43,6 +45,8 @@ import {
   sectionTitleSx,
   sortByStartTimeDesc,
   splitQualifiedName,
+  TIME_PRESETS,
+  timeRangeBounds,
   type PortalScope,
 } from './helpers';
 import { ActionCard, DetailDrawer, DetailRow, HeaderCell, IdText, ListFooter, NotProvided, RefreshingNote, SchemaDisclosure, SectionCard, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope, rowOpenProps } from './shared';
@@ -74,28 +78,10 @@ const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const
 
 const statusLabel = (s: string) => (s === 'All' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' '));
 
-const localToIso = (v: string): string | undefined => {
-  if (!v) return undefined;
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? undefined : d.toISOString();
-};
-
 const toLocalInput = (d: Date): string => {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
-
-const ANY_TIME = 'Any time';
-const CUSTOM_RANGE = 'Custom';
-export const PAST_24_HOURS = 'Past 24 hours';
-// Relative presets for the time-range dropdown (window length in milliseconds).
-const TIME_PRESETS: { label: string; ms: number }[] = [
-  { label: 'Past 10 minutes', ms: 10 * 60_000 },
-  { label: 'Past 30 minutes', ms: 30 * 60_000 },
-  { label: 'Past 1 hour', ms: 60 * 60_000 },
-  { label: PAST_24_HOURS, ms: 24 * 60 * 60_000 },
-  { label: 'Past 7 days', ms: 7 * 24 * 60 * 60_000 },
-];
 
 export type Toast = { severity: 'success' | 'error'; message: string } | null;
 
@@ -154,14 +140,7 @@ export function useTimeRangeFilter(initialRange: string = ANY_TIME) {
 
   // Memoized so a relative preset snapshots "now" only when the selection changes —
   // recomputing every render would change the query key continuously and refetch in a loop.
-  const bounds = useMemo<{ startTimeFrom?: string; startTimeTo?: string }>(() => {
-    if (timeRange === ANY_TIME) return {};
-    if (timeRange === CUSTOM_RANGE) return { startTimeFrom: localToIso(customStart), startTimeTo: localToIso(customEnd) };
-    const preset = TIME_PRESETS.find((p) => p.label === timeRange);
-    if (!preset) return {};
-    const now = Date.now();
-    return { startTimeFrom: new Date(now - preset.ms).toISOString(), startTimeTo: new Date(now).toISOString() };
-  }, [timeRange, customStart, customEnd]);
+  const bounds = useMemo(() => timeRangeBounds(timeRange, Date.now(), { start: customStart, end: customEnd }), [timeRange, customStart, customEnd]);
 
   const controls = (
     <>

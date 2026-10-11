@@ -412,6 +412,42 @@ export function sortByStartTimeDesc<T extends { startTime?: string }>(items: T[]
   return [...items].sort((a, b) => ts(b.startTime) - ts(a.startTime));
 }
 
+export const ANY_TIME = 'Any time';
+export const CUSTOM_RANGE = 'Custom';
+export const PAST_24_HOURS = 'Past 24 hours';
+// Relative presets for the time-range dropdown (window length in milliseconds).
+export const TIME_PRESETS: { label: string; ms: number }[] = [
+  { label: 'Past 10 minutes', ms: 10 * 60_000 },
+  { label: 'Past 30 minutes', ms: 30 * 60_000 },
+  { label: 'Past 1 hour', ms: 60 * 60_000 },
+  { label: PAST_24_HOURS, ms: 24 * 60 * 60_000 },
+  { label: 'Past 7 days', ms: 7 * 24 * 60 * 60_000 },
+];
+// The task listing scans every execution in the window, so the default is bounded rather than Any time.
+export const HUMAN_TASKS_DEFAULT_TIME_RANGE = PAST_24_HOURS;
+
+export type TimeBounds = { startTimeFrom?: string; startTimeTo?: string };
+
+export const localToIso = (v: string): string | undefined => {
+  if (!v) return undefined;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? undefined : d.toISOString();
+};
+
+// The start-time bounds a time-range selection sends; Any time and an unknown label send none.
+export function timeRangeBounds(range: string, now: number, custom: { start: string; end: string }): TimeBounds {
+  if (range === CUSTOM_RANGE) return { startTimeFrom: localToIso(custom.start), startTimeTo: localToIso(custom.end) };
+  const preset = TIME_PRESETS.find((p) => p.label === range);
+  if (!preset) return {};
+  return { startTimeFrom: new Date(now - preset.ms).toISOString(), startTimeTo: new Date(now).toISOString() };
+}
+
+// Names the window when one applies, so an older pending task is not mistaken for an empty inbox.
+export function emptyWorkQueueMessage(status: string, bounds: TimeBounds): string {
+  const base = status === 'All' ? 'No tasks' : `No ${status.toLowerCase()} tasks`;
+  return `${base}${bounds.startTimeFrom ? ' in the selected time range' : ''}.`;
+}
+
 // Formats an ISO-8601 timestamp for compact display; passes through on failure.
 export function formatTime(value?: string): string {
   return formatDateTime(value);
