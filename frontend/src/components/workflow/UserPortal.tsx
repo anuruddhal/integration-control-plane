@@ -24,7 +24,24 @@ import { useEffect, useState, type ReactNode } from 'react';
 import SchemaOrRawEditor from './SchemaOrRawEditor';
 import StructuredValue from './StructuredValue';
 import TaskAdministerCard, { AdministratorsRow, completedAsLabel } from './TaskAdministerCard';
-import { buildFormResult, displayWorkflowId, formIsAuthoritative, formatTime, gatewayScope, jsonPretty, ownerLabel, ownerScope, parseFormSchema, parseRawJson, sortByStartTimeDesc, splitQualifiedName, unescapeRoleName, type PortalScope } from './helpers';
+import {
+  buildFormResult,
+  displayWorkflowId,
+  emptyWorkQueueMessage,
+  formIsAuthoritative,
+  formatTime,
+  gatewayScope,
+  humanTasksDefaultTimeRange,
+  jsonPretty,
+  ownerLabel,
+  ownerScope,
+  parseFormSchema,
+  parseRawJson,
+  sortByStartTimeDesc,
+  splitQualifiedName,
+  unescapeRoleName,
+  type PortalScope,
+} from './helpers';
 import { ActionCard, DetailDrawer, DetailRow, HeaderCell, IdText, ListFooter, NotProvided, RefreshingNote, SectionCard, StatusChip, SubmitError, WorkflowIdLink, type WorkflowScope, rowOpenProps } from './shared';
 import { IntegrationFilter, ReviewActivityDetailDialog, StatusFilter, useTimeRangeFilter, WorkflowNameFilter } from './AdminPortal';
 import Authorized from '../Authorized';
@@ -288,7 +305,7 @@ function WorkQueue({
   const [search, setSearch] = useState('');
   const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(null);
   const [integration, setIntegration] = useState<WorkflowTarget | null>(null);
-  const timeFilter = useTimeRangeFilter();
+  const timeFilter = useTimeRangeFilter(humanTasksDefaultTimeRange(status));
 
   const multi = scope.targets.length > 1;
 
@@ -320,7 +337,7 @@ function WorkQueue({
   const isLoading = query.isLoading;
   const error = query.error;
   const isFetching = query.isFetching;
-  const refetchAll = () => void query.refetch();
+  const refetchAll = () => timeFilter.refresh() || void query.refetch();
   const hasMore = query.hasNextPage;
 
   const selectable = items.filter((w) => w.kind === 'review' && taskDisplayStatus(w.status) === 'PENDING');
@@ -438,7 +455,7 @@ function WorkQueue({
       ) : queuePreparing && items.length === 0 ? (
         <Typography sx={emptySx}>Fetching tasks from the integration…</Typography>
       ) : items.length === 0 ? (
-        <Typography sx={emptySx}>{status === 'All' ? 'No tasks.' : `No ${status.toLowerCase()} tasks.`}</Typography>
+        <Typography sx={emptySx}>{emptyWorkQueueMessage(status, timeFilter.range, timeFilter.bounds)}</Typography>
       ) : (
         <>
           {selecting && (

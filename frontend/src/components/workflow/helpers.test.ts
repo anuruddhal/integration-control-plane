@@ -17,7 +17,23 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildFormResult, formIsAuthoritative, formValuesForRaw, formValuesFromObject, parseFormSchema, parseRawJson, type FormField } from './helpers';
+import {
+  ANY_TIME,
+  buildFormResult,
+  CUSTOM_RANGE,
+  emptyWorkQueueMessage,
+  formIsAuthoritative,
+  formValuesForRaw,
+  formValuesFromObject,
+  HUMAN_TASKS_DEFAULT_TIME_RANGE,
+  humanTasksDefaultTimeRange,
+  isRelativeRange,
+  parseFormSchema,
+  parseRawJson,
+  TIME_PRESETS,
+  timeRangeBounds,
+  type FormField,
+} from './helpers';
 
 // The schema a review activity's arguments arrive with: free text, a number, a nested group.
 const SCHEMA = JSON.stringify({
@@ -156,5 +172,72 @@ describe('formIsAuthoritative', () => {
     // No schema, no form — the JSON editor is all there is, in either mode.
     expect(formIsAuthoritative(null, false)).toBe(false);
     expect(formIsAuthoritative(null, true)).toBe(false);
+  });
+});
+
+const NOW = Date.parse('2026-10-11T12:00:00.000Z');
+const DAY = 24 * 60 * 60_000;
+const NO_CUSTOM = { start: '', end: '' };
+
+describe('humanTasksDefaultTimeRange', () => {
+  it('lists every pending task, since PENDING already limits the scan to running executions', () => {
+    // A window here hid the overdue tasks, and disagreed with the unbounded pending-count badge (#988 review).
+    expect(humanTasksDefaultTimeRange('PENDING')).toBe(ANY_TIME);
+  });
+
+  it('bounds the statuses that include finished tasks, instead of reading the whole task history', () => {
+    // An unbounded default made the first load read the integration's whole task history (#2510).
+    for (const status of ['All', 'COMPLETED', 'FAILED', 'TIMED_OUT']) expect(humanTasksDefaultTimeRange(status)).toBe(HUMAN_TASKS_DEFAULT_TIME_RANGE);
+    expect(HUMAN_TASKS_DEFAULT_TIME_RANGE).toBe('Past 3 days');
+  });
+});
+
+describe('timeRangeBounds', () => {
+  it('pins a preset to its anchor, so the window keeps its length and every page reads the same snapshot', () => {
+    expect(timeRangeBounds('Past 3 days', NOW, NO_CUSTOM)).toEqual({ startTimeFrom: '2026-10-08T12:00:00.000Z', startTimeTo: '2026-10-11T12:00:00.000Z' });
+    // A later anchor (a refresh) moves both ends rather than widening the window.
+    const later = timeRangeBounds('Past 30 minutes', NOW + 7 * DAY, NO_CUSTOM);
+    expect(Date.parse(later.startTimeTo!) - Date.parse(later.startTimeFrom!)).toBe(30 * 60_000);
+  });
+
+  it('offers windows from 30 minutes to 30 days', () => {
+    expect(TIME_PRESETS.map((p) => p.label)).toEqual(['Past 30 minutes', 'Past 1 hour', 'Past 24 hours', 'Past 3 days', 'Past 7 days', 'Past 30 days']);
+    expect(timeRangeBounds('Past 30 days', NOW, NO_CUSTOM).startTimeFrom).toBe('2026-09-11T12:00:00.000Z');
+    expect(TIME_PRESETS.every((p) => isRelativeRange(p.label))).toBe(true);
+    expect(isRelativeRange(ANY_TIME) || isRelativeRange(CUSTOM_RANGE)).toBe(false);
+  });
+
+  it('sends no bounds for Any time or an unknown label', () => {
+    expect(timeRangeBounds(ANY_TIME, NOW, NO_CUSTOM)).toEqual({});
+    expect(timeRangeBounds('Past 10 minutes', NOW, NO_CUSTOM)).toEqual({});
+  });
+
+  it('converts a custom range from local inputs and drops an empty or invalid end', () => {
+    const start = '2026-10-01T09:30';
+    expect(timeRangeBounds(CUSTOM_RANGE, NOW, { start, end: '' })).toEqual({ startTimeFrom: new Date(start).toISOString(), startTimeTo: undefined });
+    expect(timeRangeBounds(CUSTOM_RANGE, NOW, { start, end: 'not-a-date' }).startTimeTo).toBeUndefined();
+  });
+});
+
+describe('emptyWorkQueueMessage', () => {
+  it('names a preset window and points to a wider one, so older tasks are not mistaken for none', () => {
+    expect(emptyWorkQueueMessage('COMPLETED', HUMAN_TASKS_DEFAULT_TIME_RANGE)).toBe('No completed tasks found in the past 3 days. Choose a wider time range to see older tasks.');
+    expect(emptyWorkQueueMessage('All', 'Past 24 hours')).toBe('No tasks found in the past 24 hours. Choose a wider time range to see older tasks.');
+  });
+
+  it('spells multi-word statuses as words', () => {
+    expect(emptyWorkQueueMessage('TIMED_OUT', 'Past 7 days')).toBe('No timed out tasks found in the past 7 days. Choose a wider time range to see older tasks.');
+  });
+
+  it('keeps a custom range neutral, and says when it starts after it ends', () => {
+    const bounds = { startTimeFrom: '2026-10-01T00:00:00.000Z', startTimeTo: '2026-10-02T00:00:00.000Z' };
+    expect(emptyWorkQueueMessage('PENDING', CUSTOM_RANGE, bounds)).toBe('No pending tasks found in the selected time range.');
+    const reversed = { startTimeFrom: bounds.startTimeTo, startTimeTo: bounds.startTimeFrom };
+    expect(emptyWorkQueueMessage('PENDING', CUSTOM_RANGE, reversed)).toBe('The time range starts after it ends. Choose a start before the end.');
+  });
+
+  it('keeps the plain message for Any time', () => {
+    expect(emptyWorkQueueMessage('PENDING', ANY_TIME)).toBe('No pending tasks.');
+    expect(emptyWorkQueueMessage('All', ANY_TIME)).toBe('No tasks.');
   });
 });

@@ -412,6 +412,65 @@ export function sortByStartTimeDesc<T extends { startTime?: string }>(items: T[]
   return [...items].sort((a, b) => ts(b.startTime) - ts(a.startTime));
 }
 
+export const ANY_TIME = 'Any time';
+export const CUSTOM_RANGE = 'Custom';
+export const PAST_3_DAYS = 'Past 3 days';
+const DAY = 24 * 60 * 60_000;
+// Relative presets for the time-range dropdown (window length in milliseconds).
+export const TIME_PRESETS: { label: string; ms: number }[] = [
+  { label: 'Past 30 minutes', ms: 30 * 60_000 },
+  { label: 'Past 1 hour', ms: 60 * 60_000 },
+  { label: 'Past 24 hours', ms: DAY },
+  { label: PAST_3_DAYS, ms: 3 * DAY },
+  { label: 'Past 7 days', ms: 7 * DAY },
+  { label: 'Past 30 days', ms: 30 * DAY },
+];
+// A bounded default keeps the scan of finished tasks small. PENDING already narrows the query to running executions,
+// and a window there would hide the overdue tasks that most need action, so it defaults to Any time.
+export const HUMAN_TASKS_DEFAULT_TIME_RANGE = PAST_3_DAYS;
+export const humanTasksDefaultTimeRange = (status: string): string => (status === 'PENDING' ? ANY_TIME : HUMAN_TASKS_DEFAULT_TIME_RANGE);
+
+export type TimeBounds = { startTimeFrom?: string; startTimeTo?: string };
+
+export const statusLabel = (s: string) => (s === 'All' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' '));
+
+export const toLocalInput = (d: Date): string => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+// What the Custom inputs open with: the 24 hours before `now`.
+export const defaultCustomRange = (now: number) => ({ start: toLocalInput(new Date(now - DAY)), end: toLocalInput(new Date(now)) });
+
+export const localToIso = (v: string): string | undefined => {
+  if (!v) return undefined;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? undefined : d.toISOString();
+};
+
+export const isRelativeRange = (range: string): boolean => TIME_PRESETS.some((p) => p.label === range);
+
+// The start-time bounds a time-range selection sends; Any time and an unknown label send none.
+// A preset ends at `anchor`, so every page of one listing reads the same window; refreshing moves the anchor to now.
+export function timeRangeBounds(range: string, anchor: number, custom: { start: string; end: string }): TimeBounds {
+  if (range === CUSTOM_RANGE) return { startTimeFrom: localToIso(custom.start), startTimeTo: localToIso(custom.end) };
+  const preset = TIME_PRESETS.find((p) => p.label === range);
+  if (!preset) return {};
+  return { startTimeFrom: new Date(anchor - preset.ms).toISOString(), startTimeTo: new Date(anchor).toISOString() };
+}
+
+// Names the window when one applies, so an older task is not mistaken for an empty inbox.
+export function emptyWorkQueueMessage(status: string, range: string, bounds: TimeBounds = {}): string {
+  const base = status === 'All' ? 'No tasks' : `No ${statusLabel(status).toLowerCase()} tasks`;
+  if (range === ANY_TIME) return `${base}.`;
+  if (range === CUSTOM_RANGE) {
+    const { startTimeFrom: from, startTimeTo: to } = bounds;
+    if (from && to && from > to) return 'The time range starts after it ends. Choose a start before the end.';
+    return `${base} found in the selected time range.`;
+  }
+  return `${base} found in the ${range.toLowerCase()}. Choose a wider time range to see older tasks.`;
+}
+
 // Formats an ISO-8601 timestamp for compact display; passes through on failure.
 export function formatTime(value?: string): string {
   return formatDateTime(value);
