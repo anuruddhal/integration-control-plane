@@ -138,7 +138,7 @@ export function useTimeRangeFilter(initialRange: string = ANY_TIME) {
   const [customStart, setCustomStart] = useState(() => toLocalInput(new Date(Date.now() - 24 * 3600_000)));
   const [customEnd, setCustomEnd] = useState(() => toLocalInput(new Date()));
 
-  // Memoized so a relative preset snapshots "now" only when the selection changes —
+  // Memoized so a relative preset snapshots its start only when the selection changes —
   // recomputing every render would change the query key continuously and refetch in a loop.
   const bounds = useMemo(() => timeRangeBounds(timeRange, Date.now(), { start: customStart, end: customEnd }), [timeRange, customStart, customEnd]);
 

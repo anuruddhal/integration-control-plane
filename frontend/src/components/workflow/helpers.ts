@@ -414,20 +414,20 @@ export function sortByStartTimeDesc<T extends { startTime?: string }>(items: T[]
 
 export const ANY_TIME = 'Any time';
 export const CUSTOM_RANGE = 'Custom';
-export const PAST_7_DAYS = 'Past 7 days';
+export const PAST_3_DAYS = 'Past 3 days';
 const DAY = 24 * 60 * 60_000;
 // Relative presets for the time-range dropdown (window length in milliseconds).
 export const TIME_PRESETS: { label: string; ms: number }[] = [
   { label: 'Past 30 minutes', ms: 30 * 60_000 },
   { label: 'Past 1 hour', ms: 60 * 60_000 },
   { label: 'Past 24 hours', ms: DAY },
-  { label: 'Past 3 days', ms: 3 * DAY },
-  { label: PAST_7_DAYS, ms: 7 * DAY },
+  { label: PAST_3_DAYS, ms: 3 * DAY },
+  { label: 'Past 7 days', ms: 7 * DAY },
   { label: 'Past 30 days', ms: 30 * DAY },
 ];
 // The task listing scans every execution in the window, so the default is bounded rather than Any time;
-// a week still covers a pending task left over a weekend.
-export const HUMAN_TASKS_DEFAULT_TIME_RANGE = PAST_7_DAYS;
+// three days still covers a pending task left over a weekend.
+export const HUMAN_TASKS_DEFAULT_TIME_RANGE = PAST_3_DAYS;
 
 export type TimeBounds = { startTimeFrom?: string; startTimeTo?: string };
 
@@ -438,11 +438,12 @@ export const localToIso = (v: string): string | undefined => {
 };
 
 // The start-time bounds a time-range selection sends; Any time and an unknown label send none.
+// A preset leaves the end open, so a refresh still picks up items started after it was selected.
 export function timeRangeBounds(range: string, now: number, custom: { start: string; end: string }): TimeBounds {
   if (range === CUSTOM_RANGE) return { startTimeFrom: localToIso(custom.start), startTimeTo: localToIso(custom.end) };
   const preset = TIME_PRESETS.find((p) => p.label === range);
   if (!preset) return {};
-  return { startTimeFrom: new Date(now - preset.ms).toISOString(), startTimeTo: new Date(now).toISOString() };
+  return { startTimeFrom: new Date(now - preset.ms).toISOString() };
 }
 
 // Names the window when one applies, so an older pending task is not mistaken for an empty inbox.

@@ -178,13 +178,14 @@ const DAY = 24 * 60 * 60_000;
 const NO_CUSTOM = { start: '', end: '' };
 
 describe('timeRangeBounds', () => {
-  it('bounds the Human Tasks default to a week instead of listing every task execution', () => {
+  it('bounds the Human Tasks default to three days instead of listing every task execution', () => {
     // An unbounded default made the inbox's first load read the integration's whole task history (#2510).
     expect(HUMAN_TASKS_DEFAULT_TIME_RANGE).not.toBe(ANY_TIME);
-    expect(timeRangeBounds(HUMAN_TASKS_DEFAULT_TIME_RANGE, NOW, NO_CUSTOM)).toEqual({
-      startTimeFrom: new Date(NOW - 7 * DAY).toISOString(),
-      startTimeTo: new Date(NOW).toISOString(),
-    });
+    expect(timeRangeBounds(HUMAN_TASKS_DEFAULT_TIME_RANGE, NOW, NO_CUSTOM)).toEqual({ startTimeFrom: new Date(NOW - 3 * DAY).toISOString() });
+  });
+
+  it('leaves a preset open-ended so a refresh still sees items started after it was selected', () => {
+    expect(timeRangeBounds('Past 1 hour', NOW, NO_CUSTOM).startTimeTo).toBeUndefined();
   });
 
   it('offers windows from 30 minutes to 30 days', () => {
@@ -207,7 +208,7 @@ describe('timeRangeBounds', () => {
 
 describe('emptyWorkQueueMessage', () => {
   it('names the window and points to a wider one, so older pending tasks are not mistaken for none', () => {
-    expect(emptyWorkQueueMessage('PENDING', HUMAN_TASKS_DEFAULT_TIME_RANGE)).toBe('No pending tasks found in the past 7 days. Choose a wider time range to see older tasks.');
+    expect(emptyWorkQueueMessage('PENDING', HUMAN_TASKS_DEFAULT_TIME_RANGE)).toBe('No pending tasks found in the past 3 days. Choose a wider time range to see older tasks.');
     expect(emptyWorkQueueMessage('All', 'Past 24 hours')).toBe('No tasks found in the past 24 hours. Choose a wider time range to see older tasks.');
     expect(emptyWorkQueueMessage('PENDING', CUSTOM_RANGE)).toBe('No pending tasks found in the selected time range. Choose a wider time range to see older tasks.');
   });
