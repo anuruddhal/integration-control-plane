@@ -174,7 +174,7 @@ export function useTimeRangeFilter(initialRange: string = ANY_TIME) {
     </>
   );
 
-  return { bounds, controls, active: timeRange !== initialRange, reset: () => setTimeRange(initialRange) };
+  return { range: timeRange, bounds, controls, active: timeRange !== initialRange, reset: () => setTimeRange(initialRange) };
 }
 
 export default function AdminPortal({ targets, environmentId, taskQueue, initialWorkflowType, initialWorkflowId }: PortalScope & { initialWorkflowType?: string; initialWorkflowId?: string }) {

@@ -455,7 +455,7 @@ function WorkQueue({
       ) : queuePreparing && items.length === 0 ? (
         <Typography sx={emptySx}>Fetching tasks from the integration…</Typography>
       ) : items.length === 0 ? (
-        <Typography sx={emptySx}>{emptyWorkQueueMessage(status, timeFilter.bounds)}</Typography>
+        <Typography sx={emptySx}>{emptyWorkQueueMessage(status, timeFilter.range)}</Typography>
       ) : (
         <>
           {selecting && (
