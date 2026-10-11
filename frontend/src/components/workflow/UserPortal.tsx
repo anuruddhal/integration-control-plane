@@ -31,7 +31,7 @@ import {
   formIsAuthoritative,
   formatTime,
   gatewayScope,
-  HUMAN_TASKS_DEFAULT_TIME_RANGE,
+  humanTasksDefaultTimeRange,
   jsonPretty,
   ownerLabel,
   ownerScope,
@@ -305,7 +305,7 @@ function WorkQueue({
   const [search, setSearch] = useState('');
   const [selectedType, setSelectedType] = useState<WorkflowDefinition | null>(null);
   const [integration, setIntegration] = useState<WorkflowTarget | null>(null);
-  const timeFilter = useTimeRangeFilter(HUMAN_TASKS_DEFAULT_TIME_RANGE);
+  const timeFilter = useTimeRangeFilter(humanTasksDefaultTimeRange(status));
 
   const multi = scope.targets.length > 1;
 
@@ -337,7 +337,7 @@ function WorkQueue({
   const isLoading = query.isLoading;
   const error = query.error;
   const isFetching = query.isFetching;
-  const refetchAll = () => void query.refetch();
+  const refetchAll = () => timeFilter.refresh() || void query.refetch();
   const hasMore = query.hasNextPage;
 
   const selectable = items.filter((w) => w.kind === 'review' && taskDisplayStatus(w.status) === 'PENDING');
@@ -455,7 +455,7 @@ function WorkQueue({
       ) : queuePreparing && items.length === 0 ? (
         <Typography sx={emptySx}>Fetching tasks from the integration…</Typography>
       ) : items.length === 0 ? (
-        <Typography sx={emptySx}>{emptyWorkQueueMessage(status, timeFilter.range)}</Typography>
+        <Typography sx={emptySx}>{emptyWorkQueueMessage(status, timeFilter.range, timeFilter.bounds)}</Typography>
       ) : (
         <>
           {selecting && (

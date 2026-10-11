@@ -46,6 +46,9 @@ import {
   sortByStartTimeDesc,
   splitQualifiedName,
   TIME_PRESETS,
+  defaultCustomRange,
+  isRelativeRange,
+  statusLabel,
   timeRangeBounds,
   type PortalScope,
 } from './helpers';
@@ -75,13 +78,6 @@ import {
 
 const WORKFLOW_STATUSES = ['All', 'RUNNING', 'COMPLETED', 'FAILED', 'TERMINATED', 'CANCELED', 'TIMED_OUT'];
 const emptySx = { py: 4, textAlign: 'center', color: 'text.secondary' } as const;
-
-const statusLabel = (s: string) => (s === 'All' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' '));
-
-const toLocalInput = (d: Date): string => {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
 
 export type Toast = { severity: 'success' | 'error'; message: string } | null;
 
@@ -132,15 +128,22 @@ export function WorkflowNameFilter({ definitions, value, onChange }: { definitio
   );
 }
 
-// `initialRange` is also what Clear filters restores, so the default window does not count as a filter.
-export function useTimeRangeFilter(initialRange: string = ANY_TIME) {
-  const [timeRange, setTimeRange] = useState(initialRange);
-  const [customStart, setCustomStart] = useState(() => toLocalInput(new Date(Date.now() - 24 * 3600_000)));
-  const [customEnd, setCustomEnd] = useState(() => toLocalInput(new Date()));
+// The range follows `defaultRange` (which may change, e.g. with the status) until the user picks one; Clear filters
+// returns to following it, so the default window never counts as a filter.
+export function useTimeRangeFilter(defaultRange: string = ANY_TIME) {
+  const [chosen, setChosen] = useState<string | null>(null);
+  const timeRange = chosen ?? defaultRange;
+  const [custom, setCustom] = useState(() => defaultCustomRange(Date.now()));
+  // A preset's window ends at `anchor`; it moves to now when the range changes, on Clear filters, and on refresh.
+  const [anchor, setAnchor] = useState(() => Date.now());
+  const [anchoredRange, setAnchoredRange] = useState(timeRange);
+  if (anchoredRange !== timeRange) {
+    setAnchoredRange(timeRange);
+    setAnchor(Date.now());
+  }
 
-  // Memoized so a relative preset snapshots its start only when the selection changes —
-  // recomputing every render would change the query key continuously and refetch in a loop.
-  const bounds = useMemo(() => timeRangeBounds(timeRange, Date.now(), { start: customStart, end: customEnd }), [timeRange, customStart, customEnd]);
+  // Memoized on the anchor rather than the clock, so the query key stays stable between refreshes.
+  const bounds = useMemo(() => timeRangeBounds(timeRange, anchor, custom), [timeRange, anchor, custom]);
 
   const controls = (
     <>
@@ -150,11 +153,9 @@ export function useTimeRangeFilter(initialRange: string = ANY_TIME) {
         value={timeRange}
         onChange={(e) => {
           const v = e.target.value as string;
-          setTimeRange(v);
-          if (v === CUSTOM_RANGE) {
-            setCustomStart(toLocalInput(new Date(Date.now() - 24 * 3600_000)));
-            setCustomEnd(toLocalInput(new Date()));
-          }
+          setChosen(v);
+          setAnchor(Date.now());
+          if (v === CUSTOM_RANGE) setCustom(defaultCustomRange(Date.now()));
         }}
         inputProps={{ 'aria-label': 'Time range' }}>
         <MenuItem value={ANY_TIME}>{ANY_TIME}</MenuItem>
@@ -167,14 +168,29 @@ export function useTimeRangeFilter(initialRange: string = ANY_TIME) {
       </Select>
       {timeRange === CUSTOM_RANGE && (
         <>
-          <TextField label="Start From" type="datetime-local" size="small" value={customStart} onChange={(e) => setCustomStart(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-          <TextField label="End On" type="datetime-local" size="small" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+          <TextField label="Start From" type="datetime-local" size="small" value={custom.start} onChange={(e) => setCustom((c) => ({ ...c, start: e.target.value }))} slotProps={{ inputLabel: { shrink: true } }} />
+          <TextField label="End On" type="datetime-local" size="small" value={custom.end} onChange={(e) => setCustom((c) => ({ ...c, end: e.target.value }))} slotProps={{ inputLabel: { shrink: true } }} />
         </>
       )}
     </>
   );
 
-  return { range: timeRange, bounds, controls, active: timeRange !== initialRange, reset: () => setTimeRange(initialRange) };
+  return {
+    range: timeRange,
+    bounds,
+    controls,
+    active: chosen !== null && chosen !== defaultRange,
+    reset: () => {
+      setChosen(null);
+      setAnchor(Date.now());
+    },
+    // Moves a preset's window to now and reports true, since the new bounds refetch on their own; otherwise false.
+    refresh: (): boolean => {
+      if (!isRelativeRange(timeRange)) return false;
+      setAnchor(Date.now());
+      return true;
+    },
+  };
 }
 
 export default function AdminPortal({ targets, environmentId, taskQueue, initialWorkflowType, initialWorkflowId }: PortalScope & { initialWorkflowType?: string; initialWorkflowId?: string }) {
@@ -263,7 +279,7 @@ function WorkflowsAdmin({
         <SearchField value={search} onChange={setSearch} placeholder="Search by workflow ID" sx={{ width: 280 }} />
         <Box sx={{ flex: 1 }} />
         <Tooltip title="Refresh">
-          <IconButton size="small" onClick={() => refetch()} aria-label="Refresh">
+          <IconButton size="small" onClick={() => timeFilter.refresh() || void refetch()} aria-label="Refresh">
             <RefreshCw size={16} style={{ animation: isFetching ? 'spin 1s linear infinite' : 'none' }} />
           </IconButton>
         </Tooltip>
