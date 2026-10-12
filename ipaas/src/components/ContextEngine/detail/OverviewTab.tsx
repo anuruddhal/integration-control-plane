@@ -16,8 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, Button, Chip, CircularProgress, Grid, Link, Stack, Tooltip, Typography } from '@wso2/oxygen-ui';
-import { EyeOff, Info, KeyRound, Lock, Play, RefreshCw } from '@wso2/oxygen-ui-icons-react';
+import { Alert, Box, /* Button, */ Chip, /* CircularProgress, */ Grid, Link, Stack, Tooltip, Typography } from '@wso2/oxygen-ui';
+import { EyeOff, Info, KeyRound, Lock /* , Play, RefreshCw */ } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useAddContextSource, useAskedFlag, useContextEngineProgress, useContextPermissions, useEngineGraphStatus, useInvalidateContextEngine, useRebuildContextEngine, useUploadAudience } from '../../../hooks/useContextEngine';
 import { rememberedSourceRules, rememberSourceRules, startUploads } from '../../../hooks/contextUploads';
@@ -26,7 +26,7 @@ import { EMBEDDING_PROVIDERS } from '../../../constants/ragIngestion';
 import { checkStagedFile, connectorFor, engineMessage, getStartedSteps, modelKeysLabel, sourceAsConfig, summarizeEngineProgress, visibilityTags, withSourceVisibilityRules } from '../../../utils/contextEngine';
 import { dropStagedFile, getStagedFile } from '../../../utils/stagedFiles';
 import { HttpError } from '../../../types/http';
-import GraphStatusChip from '../GraphStatusChip';
+// import GraphStatusChip from '../GraphStatusChip';
 import GetStartedChecklist from './GetStartedChecklist';
 import OwnerAccessButton from './OwnerAccessButton';
 import SourcesProgressCard from './SourcesProgressCard';
@@ -116,7 +116,7 @@ function enrichFailure(e: unknown): EnrichFailure {
 }
 
 /** Overview — first-run checklist, source progress, enrichment, access, models, storage and exposure, each linking to its tab. */
-export default function OverviewTab({ engine, orgHandle, roleNames, onGoTab, openFilesSourceId, readOnly = false }: OverviewTabProps): JSX.Element {
+export default function OverviewTab({ engine, orgHandle, /* roleNames, */ onGoTab, openFilesSourceId, readOnly = false }: OverviewTabProps): JSX.Element {
   const [filesSource, setFilesSource] = useState<ContextSource | null>(() => engine.sources.find((s) => s.id === openFilesSourceId && s.type === 'upload') ?? null);
   const [filesOpen, setFilesOpen] = useState(!!openFilesSourceId);
   const openFiles = (source: ContextSource) => {
@@ -175,7 +175,7 @@ export default function OverviewTab({ engine, orgHandle, roleNames, onGoTab, ope
       },
     });
   };
-  const building = graph.state === 'building';
+  // const building = graph.state === 'building';
 
   // When a job we are watching ends, the engine may report new state — refetch the engine once.
   const jobState = job?.state;
@@ -195,7 +195,8 @@ export default function OverviewTab({ engine, orgHandle, roleNames, onGoTab, ope
   // An engine whose only sources are uploads starts with an upload, not a wait for a connector.
   const uploadSources = engine.sources.filter((s) => s.type === 'upload');
   const uploadFirst = uploadSources.length > 0 && uploadSources.length === engine.sources.length && (!progressSummary || (progressSummary.processed === 0 && progressSummary.active === 0));
-  const steps = getStartedSteps({ ...engine, graph }, asked, progressSummary, uploadFirst);
+  // 'Grant access' step hidden along with the Access tab: roles can't be granted from the UI, so it would never complete.
+  const steps = getStartedSteps({ ...engine, graph }, asked, progressSummary, uploadFirst).filter((s) => s.id !== 'grant');
   const allDone = steps.every((s) => s.state === 'done');
 
   const startEnrichment = () => {
@@ -211,7 +212,7 @@ export default function OverviewTab({ engine, orgHandle, roleNames, onGoTab, ope
     else if (id === 'index') document.getElementById(SOURCES_CARD_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     else if (id === 'ask') onGoTab('playground');
     else if (id === 'publish') onGoTab('api');
-    else onGoTab('access');
+    // else onGoTab('access'); — 'Grant access' step hidden with the Access tab
   };
 
   return (
@@ -236,7 +237,8 @@ export default function OverviewTab({ engine, orgHandle, roleNames, onGoTab, ope
       )}
 
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 7 }}>
+        {/* Full width while the Context graph card is hidden; was md: 7 beside it. */}
+        <Grid size={{ xs: 12 }}>
           <SourcesProgressCard
             id={SOURCES_CARD_ID}
             engineId={engine.id}
@@ -255,6 +257,7 @@ export default function OverviewTab({ engine, orgHandle, roleNames, onGoTab, ope
           />
         </Grid>
 
+        {/* 'Context graph' (Enrich) card hidden for now.
         <Grid size={{ xs: 12, md: 5 }}>
           <Card
             title="Context graph"
@@ -283,7 +286,9 @@ export default function OverviewTab({ engine, orgHandle, roleNames, onGoTab, ope
             )}
           </Card>
         </Grid>
+        */}
 
+        {/* 'Who can query' card hidden for now, along with the Access tab.
         <Grid size={{ xs: 12, md: 4 }}>
           <Card
             title="Who can query"
@@ -305,6 +310,7 @@ export default function OverviewTab({ engine, orgHandle, roleNames, onGoTab, ope
             )}
           </Card>
         </Grid>
+        */}
 
         <Grid size={{ xs: 12, md: 4 }}>
           <Card
