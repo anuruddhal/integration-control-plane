@@ -27,6 +27,8 @@ set PID_FILE=!PARENT_DIR!\icp.pid
 set LOG_DIR=!PARENT_DIR!\logs
 set LOG_FILE=!LOG_DIR!\icp.log
 set COMMAND=run
+REM Netty loads native libraries; allow it without JDK restricted-method warnings
+set "JAVA_OPTS=--enable-native-access=ALL-UNNAMED !JAVA_OPTS!"
 if /I "!PROCESSOR_ARCHITECTURE!"=="ARM64" (
     echo ARM Windows detected - disabling native Netty tcnative libraries
     set "JAVA_OPTS=!JAVA_OPTS! -Dio.netty.transport.noNative=true -Dio.netty.handler.ssl.noOpenSsl=true"
@@ -203,7 +205,7 @@ set "ICP_SCRIPT_DIR=!SCRIPT_DIR!"
 set "ICP_JAVA_OPTS=!JAVA_OPTS!"
 set "ICP_CLASSPATH_PS=!ICP_CLASSPATH!"
 set "ICP_MAIN_CLASS_PS=!ICP_MAIN_CLASS!"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$cp = $env:ICP_CLASSPATH_PS; $mc = $env:ICP_MAIN_CLASS_PS; $log = $env:ICP_LOG_FILE; $errLog = $env:ICP_ERR_LOG_FILE; $wd = $env:ICP_SCRIPT_DIR; $appArgs = @(); if ($env:ICP_APP_ARGS_JSON -and $env:ICP_APP_ARGS_JSON -ne '[]') { $appArgs = @(ConvertFrom-Json -InputObject $env:ICP_APP_ARGS_JSON) }; $javaOpts = @(); if ($env:ICP_JAVA_OPTS) { $javaOpts = $env:ICP_JAVA_OPTS -split '\s+' | Where-Object { $_ } }; $javaArgs = $javaOpts + @('-cp', $cp, $mc) + $appArgs; $p = Start-Process -FilePath 'java' -ArgumentList $javaArgs -WorkingDirectory $wd -RedirectStandardOutput $log -RedirectStandardError $errLog -PassThru -WindowStyle Hidden; $p.Id" > "!PID_FILE!"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$cp = $env:ICP_CLASSPATH_PS; $mc = $env:ICP_MAIN_CLASS_PS; $log = $env:ICP_LOG_FILE; $errLog = $env:ICP_ERR_LOG_FILE; $wd = $env:ICP_SCRIPT_DIR; $appArgs = @(); if ($env:ICP_APP_ARGS_JSON -and $env:ICP_APP_ARGS_JSON -ne '[]') { $appArgs = @(ConvertFrom-Json -InputObject $env:ICP_APP_ARGS_JSON) }; $javaOpts = @(); if ($env:ICP_JAVA_OPTS) { $javaOpts = @($env:ICP_JAVA_OPTS -split '\s+' | Where-Object { $_ }) }; $javaArgs = $javaOpts + @('-cp', $cp, $mc) + $appArgs; $p = Start-Process -FilePath 'java' -ArgumentList $javaArgs -WorkingDirectory $wd -RedirectStandardOutput $log -RedirectStandardError $errLog -PassThru -WindowStyle Hidden; $p.Id" > "!PID_FILE!"
 set /p SERVER_PID=<"!PID_FILE!"
 if not defined SERVER_PID (
     echo Failed to start ICP Server

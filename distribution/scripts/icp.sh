@@ -60,7 +60,8 @@ resolve_version() {
 detect_java_opts() {
     local -a user_opts
     read -r -a user_opts <<< "${JAVA_OPTS:-}"
-    JAVA_OPTS=("-Djava.io.tmpdir=$TMP_DIR")
+    # Netty loads native libraries; allow it without JDK restricted-method warnings
+    JAVA_OPTS=("-Djava.io.tmpdir=$TMP_DIR" "--enable-native-access=ALL-UNNAMED")
     if [ -f /etc/alpine-release ] || (command -v ldd >/dev/null 2>&1 && ldd --version 2>&1 | grep -qi musl); then
         echo "Alpine Linux detected - disabling native Netty tcnative libraries"
         JAVA_OPTS+=(
