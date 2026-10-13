@@ -127,7 +127,7 @@ export async function mountConfig(orgUuid: string, projectId: string, componentI
   return res.data;
 }
 
-export async function updateConfigMount(orgUuid: string, projectId: string, path: ConfigMountPath, data: Record<string, unknown>): Promise<DevopsConfigMount> {
+export async function updateConfigMount(orgUuid: string, projectId: string, path: ConfigMountPath, data: ConfigMountWriteData): Promise<DevopsConfigMount> {
   const res = await choreoClient.put<Wrapped<DevopsConfigMount>>(
     `${BASE}/components/${encodeURIComponent(path.componentId)}/release/${encodeURIComponent(path.releaseId)}/container/${encodeURIComponent(path.containerId)}/config-mount/${encodeURIComponent(path.mountId)}?${dq(orgUuid, projectId)}`,
     { ...data, deploy_changes: true },

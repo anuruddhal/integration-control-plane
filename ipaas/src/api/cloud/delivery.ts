@@ -16,38 +16,51 @@
  * under the License.
  */
 
+import type {
+  DeploymentFrequencySummaryData,
+  DeliveryGranularity,
+  ChangeLeadTimeSummaryData,
+  FailureRateSummaryData,
+  RecoveryTimeSummaryData,
+  DeploymentPoint,
+  LeadTimePoint,
+  FailureRatePoint,
+  RecoveryTimePoint,
+  ProjectPerformance,
+  DeliveryInsightsRaw,
+  DeliveryConfigurations,
+  DeliveryDataPlane,
+} from '../../types/delivery';
+
 /**
  * Delivery (DORA) insights + incident-source configuration.
  *
  * The OpenChoreo BFF exposes no delivery/DORA surface — these live on Devant's
  * platform gateway as the CIO query API and incident configurator. Until the
- * BFF closes that gap, every function throws via ni() (per the
- * src/api/AGENTS.md stub contract) so an unsupported metric read or config
- * write can never be mistaken for a successful one.
+ * BFF closes that gap, every function throws via ni() so an unsupported
+ * metric read or config write can never be mistaken for a successful one.
  *
  * awaits: cio-query-api (DORA metrics) / cio-incident-configurator (config)
  */
 
 // TODO: implement using cloud APIs
-const ni = (name: string): never => {
-  throw new Error(`[cloud] delivery.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] delivery.${name}: not implemented`));
 
 // DORA metrics (cio-query-api)
-export const fetchDeploymentFrequencySummary = (..._args: unknown[]): never => ni('fetchDeploymentFrequencySummary');
-export const fetchChangeLeadTimeSummary = (..._args: unknown[]): never => ni('fetchChangeLeadTimeSummary');
-export const fetchFailureRateSummary = (..._args: unknown[]): never => ni('fetchFailureRateSummary');
-export const fetchRecoveryTimeSummary = (..._args: unknown[]): never => ni('fetchRecoveryTimeSummary');
-export const fetchDeployments = (..._args: unknown[]): never => ni('fetchDeployments');
-export const fetchChangeLeadTimes = (..._args: unknown[]): never => ni('fetchChangeLeadTimes');
-export const fetchFailureRates = (..._args: unknown[]): never => ni('fetchFailureRates');
-export const fetchRecoveryTimes = (..._args: unknown[]): never => ni('fetchRecoveryTimes');
-export const fetchTopPerformingProjects = (..._args: unknown[]): never => ni('fetchTopPerformingProjects');
-export const fetchDeliveryInsights = (..._args: unknown[]): never => ni('fetchDeliveryInsights');
+export const fetchDeploymentFrequencySummary = (_from: string, _to: string, _granularity: DeliveryGranularity, _projectId?: string): Promise<DeploymentFrequencySummaryData | null> => ni('fetchDeploymentFrequencySummary');
+export const fetchChangeLeadTimeSummary = (_from: string, _to: string, _projectId?: string): Promise<ChangeLeadTimeSummaryData | null> => ni('fetchChangeLeadTimeSummary');
+export const fetchFailureRateSummary = (_from: string, _to: string, _projectId?: string): Promise<FailureRateSummaryData | null> => ni('fetchFailureRateSummary');
+export const fetchRecoveryTimeSummary = (_from: string, _to: string, _projectId?: string): Promise<RecoveryTimeSummaryData | null> => ni('fetchRecoveryTimeSummary');
+export const fetchDeployments = (_from: string, _to: string, _granularity: DeliveryGranularity, _projectId?: string): Promise<DeploymentPoint[]> => ni('fetchDeployments');
+export const fetchChangeLeadTimes = (_from: string, _to: string, _granularity: DeliveryGranularity, _projectId?: string): Promise<LeadTimePoint[]> => ni('fetchChangeLeadTimes');
+export const fetchFailureRates = (_from: string, _to: string, _granularity: DeliveryGranularity, _projectId?: string): Promise<FailureRatePoint[]> => ni('fetchFailureRates');
+export const fetchRecoveryTimes = (_from: string, _to: string, _granularity: DeliveryGranularity, _projectId?: string): Promise<RecoveryTimePoint[]> => ni('fetchRecoveryTimes');
+export const fetchTopPerformingProjects = (_from: string, _to: string): Promise<ProjectPerformance[]> => ni('fetchTopPerformingProjects');
+export const fetchDeliveryInsights = (_from: string, _to: string, _granularity: DeliveryGranularity, _configured: boolean, _projectId?: string): Promise<DeliveryInsightsRaw> => ni('fetchDeliveryInsights');
 
 // Incident-source configuration (cio-incident-configurator)
-export const fetchDeliveryConfigurations = (..._args: unknown[]): never => ni('fetchDeliveryConfigurations');
-export const fetchDeliveryDataPlanes = (..._args: unknown[]): never => ni('fetchDeliveryDataPlanes');
-export const addDeliveryConfiguration = (..._args: unknown[]): never => ni('addDeliveryConfiguration');
-export const updateDeliverySelectorCriteria = (..._args: unknown[]): never => ni('updateDeliverySelectorCriteria');
-export const updateDeliveryRejectorCriteria = (..._args: unknown[]): never => ni('updateDeliveryRejectorCriteria');
+export const fetchDeliveryConfigurations = (_orgUuid: string): Promise<DeliveryConfigurations | null> => ni('fetchDeliveryConfigurations');
+export const fetchDeliveryDataPlanes = (_orgUuid: string): Promise<DeliveryDataPlane[]> => ni('fetchDeliveryDataPlanes');
+export const addDeliveryConfiguration = (_orgUuid: string, _dataPlaneId: string, _selectorCriteria: string, _rejectorCriteria: string): Promise<void> => ni('addDeliveryConfiguration');
+export const updateDeliverySelectorCriteria = (_orgUuid: string, _selectorCriteria: string): Promise<void> => ni('updateDeliverySelectorCriteria');
+export const updateDeliveryRejectorCriteria = (_orgUuid: string, _rejectorCriteria: string): Promise<void> => ni('updateDeliveryRejectorCriteria');

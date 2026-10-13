@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildEditorCallbackUrl, editorCallbackUri, editorStateOrgId } from './vscodeCallback';
+import { buildEditorCallbackUrl, editorCallbackUri, editorSignInForwardUrl, editorStateOrgId } from './vscodeCallback';
 
 const state = (value: unknown): string => btoa(JSON.stringify(value));
 
@@ -174,4 +174,28 @@ describe('editorStateOrgId', () => {
   it('reads the org id', () => expect(editorStateOrgId(state({ orgId: 'org-1' }))).toBe('org-1'));
   it('returns null when absent', () => expect(editorStateOrgId(state({}))).toBeNull());
   it('returns null for an unreadable state', () => expect(editorStateOrgId('!!!')).toBeNull());
+});
+
+describe('editorSignInForwardUrl', () => {
+  const editorState = state({ callbackUri: 'vscode://wso2.wso2-integrator/signin' });
+
+  it('forwards the code and state to the editor that asked for them', () => {
+    const params = new URLSearchParams({ code: 'abc', state: editorState });
+    expect(editorSignInForwardUrl(params, {})).toBe(`vscode://wso2.wso2-integrator/signin?code=abc&state=${encodeURIComponent(editorState)}`);
+  });
+
+  // A refused sign-in is a result the editor is waiting for.
+  it('forwards an error instead of a code', () => {
+    const params = new URLSearchParams({ error: 'access_denied', error_description: 'User denied', state: editorState });
+    expect(editorSignInForwardUrl(params, {})).toBe(`vscode://wso2.wso2-integrator/signin?state=${encodeURIComponent(editorState)}&error=access_denied&error_description=User%20denied`);
+  });
+
+  it("returns null for the console's own sign-in", () => {
+    expect(editorSignInForwardUrl(new URLSearchParams({ code: 'abc', state: 'instance_0_request_1' }), {})).toBeNull();
+  });
+
+  it('returns null when the editor names a host outside the policy', () => {
+    const params = new URLSearchParams({ code: 'abc', state: state({ callbackUri: 'https://evil.example/cb' }) });
+    expect(editorSignInForwardUrl(params, { domains: ['cloud.wso2.com'] })).toBeNull();
+  });
 });

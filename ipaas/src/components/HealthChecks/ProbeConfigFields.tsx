@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Box, Button, FormControlLabel, IconButton, Radio, RadioGroup, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Box, Button, FormControlLabel, IconButton, Radio, RadioGroup, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { Plus, X } from '@wso2/oxygen-ui-icons-react';
 import { useState, type JSX } from 'react';
 import StringArrayInput from '../common/StringArrayInput';
@@ -73,7 +74,6 @@ export default function ProbeConfigFields({ kind, form, onChange }: ProbeConfigF
               label="Path"
               required
               size="small"
-              placeholder="Eg. /healthz"
               value={form.path}
               onChange={(e) => onChange({ path: e.target.value })}
               onBlur={touch('path')}

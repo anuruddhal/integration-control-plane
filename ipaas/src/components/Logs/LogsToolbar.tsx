@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Badge, Box, Button, Chip, IconButton, MenuItem, Select, TextField, Tooltip } from '@wso2/oxygen-ui';
+import { Badge, Box, Button, Chip, IconButton, MenuItem, Select, Tooltip } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { Clock, Download, ListFilter, RefreshCw } from '@wso2/oxygen-ui-icons-react';
 import { useMemo, useState, type JSX, type ReactNode } from 'react';
 import type { LogsFiltersState } from '../../hooks/useLogsFilters';
@@ -138,8 +139,8 @@ export default function LogsToolbar({ filters, environments, endpoints = [], log
 
       {timePreset === 'custom' ? (
         <Box sx={customRangeSx}>
-          <TextField type="datetime-local" size="small" label="From" value={customStart} onChange={(e) => setCustomStart(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-          <TextField type="datetime-local" size="small" label="To" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+          <TextField type="datetime-local" size="small" label="From" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+          <TextField type="datetime-local" size="small" label="To" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
           <Button variant="contained" size="small" onClick={() => void refresh()}>
             Apply
           </Button>

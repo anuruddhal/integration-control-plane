@@ -1,0 +1,38 @@
+diff --git a/dist/cjs/lucide-react.js b/dist/cjs/lucide-react.js
+index 8b6b3bf9404b6a8c6ba6921b93d0f0629d0c4b71..cfe644330ed80006e4fb0c8ed2561a19953abc29 100644
+--- a/dist/cjs/lucide-react.js
++++ b/dist/cjs/lucide-react.js
+@@ -93,12 +93,13 @@ const Icon = react.forwardRef(
+         ...rest
+       },
+       [
+-        ...iconNode.map(([tag, attrs]) => react.createElement(tag, attrs)),
++        ...iconNode.map(([tag, attrs], i) => react.createElement(tag, { key: i, ...attrs })),
+         ...Array.isArray(children) ? children : [children]
+       ]
+     );
+   }
+ );
++Icon.displayName = 'LucideIcon';
+ 
+ const createLucideIcon = (iconName, iconNode) => {
+   const Component = react.forwardRef(
+diff --git a/dist/esm/Icon.mjs b/dist/esm/Icon.mjs
+index 0ff59276639c3dca6bc4a820106dc8fcdb8be7d6..dedaafa743046d9c51ce5872355af1cf451d112b 100644
+--- a/dist/esm/Icon.mjs
++++ b/dist/esm/Icon.mjs
+@@ -37,12 +37,13 @@ const Icon = forwardRef(
+         ...rest
+       },
+       [
+-        ...iconNode.map(([tag, attrs]) => createElement(tag, attrs)),
++        ...iconNode.map(([tag, attrs], i) => createElement(tag, { key: i, ...attrs })),
+         ...Array.isArray(children) ? children : [children]
+       ]
+     );
+   }
+ );
++Icon.displayName = 'LucideIcon';
+ 
+ export { Icon as default };
+ //# sourceMappingURL=Icon.mjs.map

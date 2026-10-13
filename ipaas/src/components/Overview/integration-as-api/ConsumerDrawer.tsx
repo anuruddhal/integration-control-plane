@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, Stack, Tooltip, Typography } from '@wso2/oxygen-ui';
+import TextField from '../../common/TextField';
 import { Eye, EyeOff, X } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useState, type JSX } from 'react';
 import { CONSUMER_NAME_TAKEN, DEFAULT_API_KEY_HEADER, REGENERATE_KEY_WARNING, REVOKE_KEY_WARNING, TOKEN_MASK, TOKEN_NOT_RETRIEVABLE_NOTICE, TOKEN_ONE_TIME_WARNING } from '../../../constants/apiConsumption';

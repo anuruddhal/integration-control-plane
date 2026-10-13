@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, Button, Checkbox, CircularProgress, Drawer, FormControlLabel, IconButton, MenuItem, Radio, RadioGroup, Select, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, Button, Checkbox, CircularProgress, Drawer, FormControlLabel, IconButton, MenuItem, Radio, RadioGroup, Select, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@wso2/oxygen-ui';
+import TextField from '../../common/TextField';
 import { X } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { API_KEY_SCHEME_DESCRIPTION, COMING_SOON_OAUTH, COMING_SOON_UPSTREAM_ATTRS, DEFAULT_API_KEY_HEADER, OAUTH_HEADER, OAUTH_SCHEME_DESCRIPTION } from '../../../constants/apiConsumption';

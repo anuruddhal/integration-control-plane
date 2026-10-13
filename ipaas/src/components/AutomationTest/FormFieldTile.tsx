@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Box, Checkbox, FormControlLabel, FormHelperText, IconButton, MenuItem, Select, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Box, Checkbox, FormControlLabel, FormHelperText, IconButton, MenuItem, Select, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { Plus, Trash2 } from '@wso2/oxygen-ui-icons-react';
 import type { JSX, KeyboardEvent } from 'react';
 import type { DynamicFormFieldValue, FormField } from '../../types/executions';

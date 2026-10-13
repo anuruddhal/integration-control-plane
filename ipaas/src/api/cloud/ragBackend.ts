@@ -18,8 +18,6 @@
 
 import type { RetrieveRequestBody, RetrieveResponse } from '../../types/ragIngestion';
 
-const ni = (name: string): never => {
-  throw new Error(`[cloud] ragBackend.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] ragBackend.${name}: not implemented`));
 
 export const retrieveChunks = (_body: RetrieveRequestBody): Promise<RetrieveResponse> => ni('retrieveChunks');

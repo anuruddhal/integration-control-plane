@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { capitalize, toCamelCase, toHandler, formatRepoNameToDisplayName, toProjectHandler, truncate } from './string';
+import { capitalize, toCamelCase, toHandler, formatRepoNameToDisplayName, toProjectHandler, truncate, userInitials } from './string';
 
 describe('capitalize', () => {
   it('uppercases the first character', () => {
@@ -111,5 +111,25 @@ describe('truncate', () => {
 
   it('cuts and appends an ellipsis when longer', () => {
     expect(truncate('a-very-long-name', 6)).toBe('a-very…');
+  });
+});
+
+describe('userInitials', () => {
+  it('takes the first and last word of a full name', () => {
+    expect(userInitials('Sandamini Perera')).toBe('SP');
+    expect(userInitials('Ann Marie de Silva')).toBe('AS');
+  });
+
+  it('takes the first two letters of a single word', () => {
+    expect(userInitials('sandamini')).toBe('SA');
+  });
+
+  it('reads an email by its local part', () => {
+    expect(userInitials('john.doe@wso2.com')).toBe('JD');
+    expect(userInitials('admin@wso2.com')).toBe('AD');
+  });
+
+  it('is empty for a blank name', () => {
+    expect(userInitials('  ')).toBe('');
   });
 });

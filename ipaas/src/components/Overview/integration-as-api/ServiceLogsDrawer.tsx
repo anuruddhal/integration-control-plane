@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Box, Checkbox, Drawer, FormControlLabel, IconButton, MenuItem, Select, Stack, TextField, Tooltip, Typography, Button } from '@wso2/oxygen-ui';
+import { Box, Checkbox, Drawer, FormControlLabel, IconButton, MenuItem, Select, Stack, Tooltip, Typography, Button } from '@wso2/oxygen-ui';
+import TextField from '../../common/TextField';
 import { Download, RefreshCw, X } from '@wso2/oxygen-ui-icons-react';
 import { useMemo } from 'react';
 import { useInfiniteComponentLogs, useVisibleLogs } from '../../../hooks/useLogs';
@@ -179,8 +180,8 @@ export default function ServiceLogsDrawer({ open, onClose, componentId, environm
         {/* Custom date range */}
         {timePreset === 'custom' && (
           <Stack direction="row" gap={1.5} sx={{ mb: 1 }} flexWrap="wrap" alignItems="center">
-            <TextField type="datetime-local" size="small" label="Start" value={customStart} onChange={(e) => setCustomStart(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-            <TextField type="datetime-local" size="small" label="End" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+            <TextField type="datetime-local" size="small" label="Start" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+            <TextField type="datetime-local" size="small" label="End" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
             <Button variant="contained" size="small" onClick={() => refetch()}>
               Apply
             </Button>

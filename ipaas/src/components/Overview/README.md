@@ -3,8 +3,7 @@
 The Overview page (`pages/Component.tsx`) renders an env-card UI that varies by
 **integration type** (automation, integration-as-api, file-integration, …). It uses
 the **surface + slots** pattern. This README maps _this_ directory; the rules and
-the "how to add a type" steps live in `src/components/AGENTS.md`
-("Per-integration-type rendering").
+the "how to add a type" steps are under **Per-integration-type rendering** below.
 
 ## Structure
 
@@ -100,4 +99,90 @@ hooks (`useExecutions`, `useDeployments`, `useLogs`, …) — react-query de-dup
   `_shared/` never imports a type folder.
 - Shared bodies take **behaviour props**, not type flags.
 
-To add a type, see `src/components/AGENTS.md`.
+To add a type, see **Adding a new integration type** below.
+
+## Per-integration-type rendering (the surface + slots pattern)
+
+Integration-level screens (under `/organizations/:o/projects/:p/components/:c/*`) vary
+by **integration type** — automation, integration-as-api, file-integration, webhook,
+mcp-server, ai-agent, tailscale-vpn, … Do **not** branch on type with ad-hoc booleans
+(`isAutomation`, `isGenericService`, `GENERIC_SERVICE_TYPES`, `REST_API_TYPES`) inside
+components. Use this structure instead.
+
+### The pieces
+
+- **Resolver** — `src/utils/identifyIntegration.ts` maps `(displayType, componentSubType)`
+  → an `IntegrationIdentity` with a `type` discriminated union. **Type is identified
+  once here and never re-derived.** Consume via `useIntegrationIdentity` (hook) or the
+  pure `identifyIntegration` fn.
+- **Central metadata** — `src/constants/integrationTypes.ts` (`INTEGRATION_TYPE_INFO`):
+  `displayName` + `Icon` per type; each module spreads its entry.
+- **Per-surface folder** — `src/components/<surface>/` (e.g. `overview/`):
+  - `_shared/` — the surface's shell/frame, `IntegrationRenderer`, shared bodies + helpers.
+  - `<type>/` — one folder per type, each exporting an `IntegrationModule`.
+  - `registry.ts` — `Record<IntegrationType, () => import('./<type>')>`. Lazy chunks
+    (a user viewing automation doesn't download MCP code); the `Record` forces a
+    compile-time entry for every type.
+
+### How a surface renders
+
+The page calls `useIntegrationIdentity`, then `IntegrationRenderer` dynamically imports
+the matching module and hands it to the surface shell. **The shell owns only the generic
+frame + state every type shares; each type fills slots.** For Overview today:
+
+| Slot             | Purpose                                                              |
+| ---------------- | -------------------------------------------------------------------- |
+| `EnvCardBody`    | content-only body (no Card/header chrome)                            |
+| `HeaderStatus`   | left header slot (status dot, Configure)                             |
+| `EnvCardActions` | right header slot (action buttons)                                   |
+| `CustomHeader`   | full header override — escape hatch when the header differs a lot    |
+| `EnvCardFooter`  | optional footer                                                      |
+| `CustomOverview` | full-surface override (type has no env-card concept, e.g. Tailscale) |
+
+A type omits any slot it doesn't need — no null-returning placeholders. Bodies shared by
+two types live in `_shared/bodies/` and are parameterised by **behaviour props, not type
+flags**. See **Structure** above for the concrete layout.
+
+### Adding a new integration type
+
+1. Add it to the `IntegrationType` union (`src/types/integration.ts`), a rule in
+   `identifyIntegration`, and an `INTEGRATION_TYPE_INFO` entry.
+2. Create `src/components/<surface>/<type>/index.ts` exporting an `IntegrationModule`
+   (spread `INTEGRATION_TYPE_INFO[type]` + the slots it needs).
+3. Point that surface's `registry.ts` entry at the new module.
+4. Fetch type-specific data inside the slot via **domain** hooks (`useDeployments`,
+   `useExecutions`, …) — one hook file per domain, never per type. The shell passes
+   shared per-env data + cross-slot callbacks via `EnvCardSlotProps`.
+
+### Rules (enforced by review)
+
+- Zero `isAutomation` / `isGenericService` / `GENERIC_SERVICE_TYPES` / `REST_API_TYPES`
+  under `src/components/<surface>/`. Branch via the registry + slots.
+- Type-specific subcomponents live in the `<type>/` folder; truly shared chrome in
+  `_shared/`. `_shared/` must never import a type folder.
+
+### Status — this milestone
+
+Only the **Overview** surface (`src/components/Overview/`) is built fully this way today.
+The types with a real Overview module are **automation, integration-as-api,
+file-integration, event-integration, ai-agent, and mcp-server** (the latter shared by
+both `mcp-server` and `mcp-proxy` via the registry) — gated by `MIGRATED_INTEGRATION_TYPES`
+in `pages/Component.tsx`; the rest fall back to `UnsupportedFallback`.
+
+**Build, Develop, Deploy, Logs, ComponentHeader, and every other Integration-level
+surface that customises by type should follow this same surface + slots structure when
+migrated.** They currently use legacy per-type branching (e.g. Deploy's
+`getComponentTypeFlags` in `src/utils/componentType.ts`) — do not extend those utils with
+new discriminators; add the type to `identifyIntegration` and consume it instead. A few
+surfaces already do this as targeted stopgaps pending full migration:
+
+- **Deploy** (`pages/Deploy.tsx`, `BuildArea`, `DeployEnvironmentCard`) hides endpoint UI
+  for file-/event-/ai-agent integrations via a `hideEndpoints` flag derived from
+  `identifyIntegration` (they share a service `displayType` but expose no endpoints).
+- **Test** (`layouts/AppLayout.tsx`) routes ai-agent to a chat surface (`test/agent-chat`,
+  `pages/AgentChatConsole.tsx`) instead of the API console, again keyed off
+  `identifyIntegration`, not a new `displayType` set.
+
+Cross-surface shared pieces (e.g. **`components/AgentChat.tsx`**, consumed by both the
+ai-agent Overview body and the Test page) live at the top of `components/`, not under a
+single surface folder.

@@ -21,7 +21,14 @@ export const containerSx = {
   borderColor: 'primary.main',
   borderRadius: 1.5,
   p: 4,
-  maxWidth: 1000,
+  // Sized by its fields rather than the page, so a lone picker does not sit in a wide empty frame.
+  width: { xs: '100%', sm: 'fit-content' },
+  maxWidth: '100%',
+} as const;
+
+// A fixed width, since a percentage has nothing to resolve against inside a box sized by its content.
+export const fieldSx = {
+  width: { xs: '100%', sm: 320 },
 } as const;
 
 export const titleSx = {

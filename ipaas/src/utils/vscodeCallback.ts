@@ -151,3 +151,28 @@ export function editorStateOrgId(state: string | null): string | null {
     return null;
   }
 }
+
+/**
+ * Where to forward a sign-in result that reached /signin on a Cloud Editor's
+ * behalf, or null when it was the console's own.
+ *
+ * An editor cannot receive the IdP's redirect itself: the client registers a
+ * fixed set of callbacks and an editor's address is a per-component subdomain
+ * that is not among them. So it asks to be returned to /signin and names itself
+ * in `state`. A refused or failed sign-in is forwarded too — it is a result the
+ * editor is waiting for, and swallowing it leaves the editor waiting for one
+ * that never comes.
+ */
+export function editorSignInForwardUrl(params: URLSearchParams, policy: EditorCallbackPolicy): string | null {
+  const state = params.get("state");
+  const callbackUri = editorCallbackUri(state, policy);
+  if (!callbackUri) {
+    return null;
+  }
+  return buildEditorCallbackUrl(callbackUri, {
+    code: params.get("code"),
+    state,
+    error: params.get("error"),
+    error_description: params.get("error_description"),
+  });
+}

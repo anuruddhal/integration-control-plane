@@ -243,7 +243,7 @@ export default function Component(scope: ComponentScope): JSX.Element {
           )}
         </PageContent>
       </Box>
-      <ArtifactDetail selected={selectedArtifact} onClose={() => setSelectedArtifact(null)} />
+      <ArtifactDetail selected={selectedArtifact} onClose={() => setSelectedArtifact(null)} orgHandler={scope.org} projectHandler={project?.handler ?? ''} componentHandler={component.handler} />
       {/* </Box> */}
     </>
   );

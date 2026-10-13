@@ -44,9 +44,9 @@ export function forceChangePasswordUrl(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Legacy path helpers — used by pages outside the nav matrix (Organizations,
-// Analytics, Components, ComponentEditor, Error, etc.). Migrate these pages
-// to nav.ts before removing.
+// Legacy path helpers — used by flows outside the nav matrix (onboarding,
+// create/import, prebuilt integrations, access control, governance,
+// certificates). Migrate their callers to nav.ts before removing.
 // ---------------------------------------------------------------------------
 
 export function rootUrl(): string {

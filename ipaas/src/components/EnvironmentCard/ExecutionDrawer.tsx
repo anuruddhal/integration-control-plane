@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, Button, Checkbox, CircularProgress, Divider, Drawer, FormControlLabel, IconButton, InputAdornment, Link, OutlinedInput, Stack, Tab, Tabs, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, Button, Checkbox, CircularProgress, Divider, Drawer, FormControlLabel, IconButton, InputAdornment, Link, OutlinedInput, Stack, Tab, Tabs, Tooltip, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { ArrowLeft, CheckCircle2, Copy, Plus, RefreshCcw, Search, Trash2, X, XCircle } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';

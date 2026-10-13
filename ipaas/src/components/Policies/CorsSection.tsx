@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Autocomplete, Checkbox, Chip, Collapse, FormControlLabel, Stack, Switch, TextField, Typography } from '@wso2/oxygen-ui';
+import { Alert, Autocomplete, Checkbox, Chip, Collapse, FormControlLabel, Stack, Switch, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { Info } from '@wso2/oxygen-ui-icons-react';
 import type { ReactNode } from 'react';
 import { CORS_METHOD_OPTIONS, DEFAULT_CORS_HEADERS } from '../../constants/policy';
@@ -30,7 +31,7 @@ interface CorsSectionProps {
   disabled?: boolean;
 }
 
-function TagField({ label, placeholder, options, values, onChange, disabled, seeded }: { label: string; placeholder: string; options: string[]; values: string[]; onChange: (v: string[]) => void; disabled?: boolean; seeded?: string[] }) {
+function TagField({ label, options, values, onChange, disabled, seeded }: { label: string; options: string[]; values: string[]; onChange: (v: string[]) => void; disabled?: boolean; seeded?: string[] }) {
   return (
     <Autocomplete
       multiple
@@ -58,7 +59,7 @@ function TagField({ label, placeholder, options, values, onChange, disabled, see
           );
         })
       }
-      renderInput={(params) => <TextField {...params} size="small" label={label} placeholder={values.length === 0 ? placeholder : ''} />}
+      renderInput={(params) => <TextField {...params} size="small" label={label} />}
     />
   );
 }
@@ -87,13 +88,11 @@ export default function CorsSection({ value, onChange, disabled }: CorsSectionPr
             label={<Typography variant="body2">Allow all origins (*)</Typography>}
           />
 
-          {!value.allowAllOrigins && (
-            <TagField label="Access control allow origins" placeholder="e.g. https://app.example.com" options={[]} values={value.origins} onChange={(v) => onChange({ ...value, origins: v })} disabled={disabled} seeded={value.platformOrigins} />
-          )}
+          {!value.allowAllOrigins && <TagField label="Access control allow origins" options={[]} values={value.origins} onChange={(v) => onChange({ ...value, origins: v })} disabled={disabled} seeded={value.platformOrigins} />}
 
-          <TagField label="Access control allow headers" placeholder="Add a header" options={DEFAULT_CORS_HEADERS} values={value.headers} onChange={(v) => onChange({ ...value, headers: v })} disabled={disabled} seeded={value.platformHeaders} />
+          <TagField label="Access control allow headers" options={DEFAULT_CORS_HEADERS} values={value.headers} onChange={(v) => onChange({ ...value, headers: v })} disabled={disabled} seeded={value.platformHeaders} />
 
-          <TagField label="Access control allow methods" placeholder="Add a method" options={CORS_METHOD_OPTIONS} values={value.methods} onChange={(v) => onChange({ ...value, methods: v })} disabled={disabled} />
+          <TagField label="Access control allow methods" options={CORS_METHOD_OPTIONS} values={value.methods} onChange={(v) => onChange({ ...value, methods: v })} disabled={disabled} />
 
           {/* Credentials + a wildcard origin makes the gateway 500 every request, so don't offer it. */}
           <FormControlLabel

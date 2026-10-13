@@ -1,7 +1,8 @@
 /** Moving around the console through the navbar and sidebar rather than by URL. */
 
 import { expect, type Page } from '@playwright/test';
-import { reseedSessionToken } from './cloud-fixtures.js';
+import { readSessionToken, reseedSessionToken } from './cloud-fixtures.js';
+import { tokenSubject } from './token.js';
 
 /** Collapsing the sidebar hides the page labels, so nothing asserts a nav item until this runs. */
 export async function expandSidebar(page: Page): Promise<void> {
@@ -15,7 +16,7 @@ export async function expandSidebar(page: Page): Promise<void> {
  */
 export async function gotoOrgHome(page: Page, orgHandler: string): Promise<void> {
   // Every group enters through here, so it is where the session gets topped up. No-op outside
-  // token mode, where buildStorageState writes an empty refresh_token and nothing can refresh.
+  // token mode, where the seeded session carries no refresh token and nothing can refresh.
   if (!page.url().startsWith('about:')) await reseedSessionToken(page);
 
   const landed = page.getByRole('heading', { name: 'All Projects' });
@@ -27,10 +28,11 @@ export async function gotoOrgHome(page: Page, orgHandler: string): Promise<void>
   // OrgHome sends a session it considers un-onboarded to the most recently updated project
   // (OrgHome.tsx:131). Mark it onboarded exactly as OrgHome does for itself (:130) and retry.
   // Seeded here, not in the token setup, which reads the project handle out of that redirect.
-  await page.evaluate((org) => {
-    const userId = (JSON.parse(localStorage.getItem('user') ?? '{}') as { userId?: string }).userId;
-    if (userId) localStorage.setItem(`persona:${userId}:${org}`, 'developer');
-  }, orgHandler);
+  // The console's user id is the token's subject.
+  const userId = tokenSubject(await readSessionToken(page));
+  if (userId) {
+    await page.evaluate(({ org, user }) => localStorage.setItem(`persona:${user}:${org}`, 'developer'), { org: orgHandler, user: userId });
+  }
 
   await page.goto(`/organizations/${orgHandler}/home`, { waitUntil: 'domcontentloaded' });
   await expect(landed, `the org project list did not render for ${orgHandler}`).toBeVisible({ timeout: 60_000 });

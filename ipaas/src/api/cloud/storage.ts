@@ -18,9 +18,7 @@
 
 import type { StorageClass, Volume, VolumeCreateData, VolumeMount, VolumeMountCreateData, VolumeMountPath, VolumeMountUpdateData } from '../../types/storage';
 
-const ni = (name: string): never => {
-  throw new Error(`[cloud] storage.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] storage.${name}: not implemented`));
 
 export const listVolumes = (_orgUuid: string, _projectId: string, _environmentId: string): Promise<Volume[]> => ni('listVolumes');
 export const createVolume = (_orgUuid: string, _projectId: string, _data: VolumeCreateData): Promise<Volume> => ni('createVolume');

@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, FormControlLabel, MenuItem, Stack, Switch, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, FormControlLabel, MenuItem, Stack, Switch, ToggleButton, ToggleButtonGroup, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { useState, type JSX } from 'react';
 import { coerceFieldValue, formatFieldLabel, isSimpleObjectSchema } from '../../utils/mcp';
 import type { JsonSchemaType, JsonValue } from '../../types/mcp';

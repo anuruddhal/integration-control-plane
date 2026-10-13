@@ -18,10 +18,8 @@
 
 import type { EgressPolicy, EgressPolicyRequest } from '../../types/egressPolicy';
 
-// Intentionally a stub (the standard cloud-stub contract — see src/api/AGENTS.md).
-const ni = (name: string): never => {
-  throw new Error(`[cloud] egressControl.${name}: not implemented`);
-};
+// Intentionally a stub: the BFF has no endpoints for this yet, so every call throws via ni().
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] egressControl.${name}: not implemented`));
 
 export const fetchEgressPolicy = (_orgUuid: string, _projectId?: string): Promise<EgressPolicy | null> => ni('fetchEgressPolicy');
 export const createEgressPolicy = (_orgUuid: string, _input: EgressPolicyRequest, _projectId?: string): Promise<EgressPolicy> => ni('createEgressPolicy');

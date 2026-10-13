@@ -17,13 +17,14 @@
  */
 
 /** Git provider identifiers sent to the backend as the credential `type`. */
-export enum GitProvider {
-  GITHUB = 'github',
-  BITBUCKET_CLOUD = 'bitbucket',
-  BITBUCKET_SERVER = 'bitbucket-server',
-  GITLAB_SELF_MANAGED = 'gitlab-server',
-  AZURE_DEVOPS = 'azure-devops',
-}
+export const GitProvider = {
+  GITHUB: 'github',
+  BITBUCKET_CLOUD: 'bitbucket',
+  BITBUCKET_SERVER: 'bitbucket-server',
+  GITLAB_SELF_MANAGED: 'gitlab-server',
+  AZURE_DEVOPS: 'azure-devops',
+} as const;
+export type GitProvider = (typeof GitProvider)[keyof typeof GitProvider];
 
 /** An organization-level git credential. Secrets are write-only; only a reference token is returned. */
 export interface GitCredential {
@@ -54,8 +55,8 @@ export interface CredentialDeleteEligibility {
  * GitHub uses an app/OAuth flow and carries no inline config.
  */
 export type CreateGitCredentialInput =
-  | { name: string; type: GitProvider.GITHUB }
-  | { name: string; type: GitProvider.BITBUCKET_CLOUD; bitbucketCredential: { userName: string; appPassword: string } }
-  | { name: string; type: GitProvider.BITBUCKET_SERVER; bitbucketServerConfig: { serverUrl: string; serverToken: string } }
-  | { name: string; type: GitProvider.GITLAB_SELF_MANAGED; gitLabServerConfig: { serverUrl: string; pat: string } }
-  | { name: string; type: GitProvider.AZURE_DEVOPS; azureDevOpsConfig: { organizationName: string; pat: string } };
+  | { name: string; type: typeof GitProvider.GITHUB }
+  | { name: string; type: typeof GitProvider.BITBUCKET_CLOUD; bitbucketCredential: { userName: string; appPassword: string } }
+  | { name: string; type: typeof GitProvider.BITBUCKET_SERVER; bitbucketServerConfig: { serverUrl: string; serverToken: string } }
+  | { name: string; type: typeof GitProvider.GITLAB_SELF_MANAGED; gitLabServerConfig: { serverUrl: string; pat: string } }
+  | { name: string; type: typeof GitProvider.AZURE_DEVOPS; azureDevOpsConfig: { organizationName: string; pat: string } };

@@ -19,6 +19,7 @@
 import { request as httpRequest } from 'http';
 import { request as httpsRequest } from 'https';
 import { readSecret } from './secrets.js';
+import { PARKED_SESSION_KEY, type StorageEntry } from './session-storage.js';
 
 /** Claims the console needs to reconstruct a signed-in session. */
 export interface TokenClaims {
@@ -27,7 +28,35 @@ export interface TokenClaims {
   name?: string;
   ouHandle: string;
   ouId: string;
+  /** The OAuth client the token was issued to; the SDK keys its session on it. */
+  clientId: string;
+  iat: number;
   exp: number;
+}
+
+/**
+ * Where the Thunder SDK keeps a signed-in session: the session record in sessionStorage (the
+ * console's configured storage), the active flag in localStorage. This is the SDK's own,
+ * internal format — read off a real sign-in with @thunderid/browser at this version, and not
+ * a public API. token.test.ts fails when package.json pins another version, so an upgrade
+ * re-checks these keys instead of finding out from a run that never signs in.
+ */
+export const SDK_STORAGE_VERSION = '1.1.0';
+export const SDK_SESSION_ACTIVE_KEY = 'thunderid-session-active';
+
+/** Instance 0 is the only SDK instance the console creates. */
+export function sdkSessionKey(clientId: string): string {
+  return `session_data-instance_0-${clientId}`;
+}
+
+/** The SDK's session record for an access token alone — no ID or refresh token. */
+export function sdkSession(token: string, claims: TokenClaims): string {
+  return JSON.stringify({
+    access_token: token,
+    token_type: 'Bearer',
+    created_at: claims.iat * 1000,
+    expires_in: claims.exp - claims.iat,
+  });
 }
 
 /**
@@ -40,11 +69,6 @@ export interface TokenClaims {
  * reseedSessionToken, because the provider hands out no refresh token for the console itself.
  */
 export const MIN_TOKEN_LIFETIME_MS = 10 * 60_000;
-
-interface StorageEntry {
-  name: string;
-  value: string;
-}
 
 export interface StorageState {
   cookies: never[];
@@ -72,10 +96,18 @@ export function decodeTokenClaims(token: string): TokenClaims {
     throw new Error('Token payload is not valid JSON.');
   }
 
-  // The console derives the org from ouHandle and keys terms-of-use acceptance on sub,
-  // so a token missing either cannot produce a usable session.
-  for (const claim of ['sub', 'ouHandle', 'ouId', 'exp'] as const) {
+  // The console derives the org from ouHandle and keys terms-of-use acceptance on sub, and the
+  // SDK keys its session on client_id, so a token missing any of them cannot sign in.
+  for (const claim of ['sub', 'ouHandle', 'ouId', 'client_id', 'iat', 'exp'] as const) {
     if (!payload[claim]) throw new Error(`Token has no '${claim}' claim.`);
+  }
+
+  // The session's dates and the lifetime check are computed from these; a value that is not a
+  // number would turn into null dates and a lifetime check that always passes.
+  for (const claim of ['iat', 'exp'] as const) {
+    if (typeof payload[claim] !== 'number' || !Number.isFinite(payload[claim])) {
+      throw new Error(`Token has a non-numeric '${claim}' claim.`);
+    }
   }
 
   return {
@@ -84,8 +116,38 @@ export function decodeTokenClaims(token: string): TokenClaims {
     name: payload.name ? String(payload.name) : undefined,
     ouHandle: String(payload.ouHandle),
     ouId: String(payload.ouId),
+    clientId: String(payload.client_id),
+    iat: Number(payload.iat),
     exp: Number(payload.exp),
   };
+}
+
+/**
+ * The token's subject, or undefined when it cannot be read. Lenient on purpose: for callers that
+ * only need the user id from whatever session the console holds, including one from a real
+ * sign-in, without the token-mode setup's full claim checks (decodeTokenClaims).
+ */
+export function tokenSubject(token: string): string | undefined {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as { sub?: unknown };
+    return typeof payload.sub === 'string' && payload.sub ? payload.sub : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The seeded session is keyed on the token's client, while the console's SDK (and
+ * readSessionToken) look it up under the client the console is configured with. When the two
+ * differ, the console finds no session and the run fails much later with nothing naming why.
+ */
+export function assertClientMatchesConsole(claims: TokenClaims, consoleClientId: string): void {
+  if (claims.clientId !== consoleClientId) {
+    throw new Error(
+      `Token was issued to client '${claims.clientId}', but the console is configured for '${consoleClientId}' (ASGARDEO_CLIENT_ID), ` +
+        'so the console will not find the seeded session. Request a token for the console client from the provider.',
+    );
+  }
 }
 
 export function assertUsableLifetime(claims: TokenClaims, nowMs: number): void {
@@ -99,33 +161,22 @@ export function assertUsableLifetime(claims: TokenClaims, nowMs: number): void {
   }
 }
 
-/** The localStorage a completed OIDC sign-in leaves behind, rebuilt from the token alone. */
+/**
+ * The storage a completed sign-in leaves behind, rebuilt from the token alone. The session record
+ * belongs in sessionStorage, which storageState cannot carry, so it is parked for
+ * restoreSessionStorage to put back (session-storage.ts). The provider hands out no refresh
+ * token, so the SDK never refreshes this session; reseedSessionToken tops it up instead. The SDK
+ * writes its config and discovery keys itself when the console loads.
+ */
 export function buildStorageState(token: string, claims: TokenClaims, origin: string): StorageState {
-  const expiresAt = String(claims.exp * 1000);
   return {
     cookies: [],
     origins: [
       {
         origin,
         localStorage: [
-          { name: 'auth_token', value: token },
-          // No refresh token to hand over: the provider keeps its own and never
-          // exposes it. tokenManager treats the empty value as "cannot refresh".
-          { name: 'refresh_token', value: '' },
-          { name: 'token_expires_at', value: expiresAt },
-          { name: 'refresh_token_expires_at', value: expiresAt },
-          { name: 'auth_mode', value: 'oidc' },
-          { name: 'org_handle', value: claims.ouHandle },
-          {
-            name: 'user',
-            value: JSON.stringify({
-              userId: claims.sub,
-              username: claims.email,
-              displayName: claims.name ?? claims.email,
-              isOidcUser: true,
-              requirePasswordChange: false,
-            }),
-          },
+          { name: PARKED_SESSION_KEY, value: JSON.stringify([{ name: sdkSessionKey(claims.clientId), value: sdkSession(token, claims) }]) },
+          { name: SDK_SESSION_ACTIVE_KEY, value: 'true' },
           // Acceptance is per user and org; without it ProjectsRedirect blocks on its dialog.
           { name: `tos_accepted:${claims.sub}:${claims.ouHandle}`, value: 'true' },
         ],

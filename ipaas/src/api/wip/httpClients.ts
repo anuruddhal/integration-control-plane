@@ -16,8 +16,14 @@
  * under the License.
  */
 
-import { authenticatedFetch, getOrgUuidFromToken, refreshAccessToken } from '../../auth/tokenManager';
+import { authenticatedFetch, getOrgUuidFromToken } from '#auth';
+// WIP-only token refresh, outside the #auth contract. Re-exported below so the rest of
+// api/wip imports it from here; this is the only place that reaches into src/auth/wip.
+// eslint-disable-next-line no-restricted-imports
+import { isAccessTokenExpired, refreshAccessToken } from '../../auth/wip/tokenManager';
 import { HttpError } from '../../types/http';
+
+export { isAccessTokenExpired, refreshAccessToken };
 
 export interface HttpClient {
   get: <T>(path: string) => Promise<T>;

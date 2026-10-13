@@ -121,8 +121,9 @@ export async function fetchCommitHistory(componentId: string, branch: string): P
 // (orgName = the GitHub account the App is installed on). Also rebuilds the
 // owner -> installation index used by the branch/tree lookups. Empty on
 // expired authorization (409 github-auth-required) so the wizard falls back
-// to the Authorize button.
-export async function fetchGitHubUserRepos(): Promise<UserRepo[]> {
+// to the Authorize button. Cloud reads repos through the GitHub App, so the
+// `_secretRef` git-credential argument here and below is accepted and ignored.
+export async function fetchGitHubUserRepos(_secretRef?: string): Promise<UserRepo[]> {
   try {
     const installations = items(await bff.get<ListResponse<GitInstallation>>('/git/github/installations'));
     const index = new Map<string, OwnerIndexEntry>();
@@ -178,7 +179,7 @@ export async function fetchGitHubUserRepos(): Promise<UserRepo[]> {
 // Private repos list branches through the App installation (bare names from
 // the BFF; isDefault stamped from the repos listing). Public repos keep the
 // anonymous BFF route, which stamps isDefault itself.
-export async function fetchRepoBranches(repoOrg: string, repoName: string, isPublicRepo: boolean): Promise<RepoBranch[]> {
+export async function fetchRepoBranches(repoOrg: string, repoName: string, isPublicRepo: boolean, _secretRef?: string): Promise<RepoBranch[]> {
   try {
     if (!isPublicRepo) {
       const entry = await resolveInstallation(repoOrg);
@@ -210,7 +211,7 @@ function collectBlobPaths(nodes: RepoTreeNode[], acc: string[] = []): string[] {
 // equivalent. We compute only the flags the import flow uses for technology
 // detection + sub-path validation; on any failure we fall back to the default
 // so the importer degrades to "non-empty" rather than hanging.
-export async function fetchRepoMetadata(org: string, repo: string, branch: string, subPath: string, isPublicRepo = false): Promise<RepoMetadata> {
+export async function fetchRepoMetadata(org: string, repo: string, branch: string, subPath: string, isPublicRepo = false, _secretRef?: string): Promise<RepoMetadata> {
   try {
     const tree = await fetchRepoContents(org, repo, branch, isPublicRepo);
     if (tree.length === 0) return REPO_METADATA_EMPTY;
@@ -253,8 +254,9 @@ export async function fetchChoreoSampleImages(_orgUuid: string, _projectId: stri
   }
 }
 
-// awaits: PUT /components/{name}/buildpack-config.
-export async function updateBuildpackConfigs(_input: UpdateBuildpackConfigsInput): Promise<string> {
+// Saves the unit test opt-in; the BFF ignores the other build settings.
+export async function updateBuildpackConfigs(input: UpdateBuildpackConfigsInput): Promise<string> {
+  await bff.put(`/components/${seg(input.componentId)}/buildpack-config`, { isUnitTestEnabled: input.isUnitTestEnabled });
   return '';
 }
 
@@ -311,7 +313,7 @@ function buildRepoTree(entries: GitTreeEntry[]): RepoTreeNode[] {
 // nested here); public repos keep the anonymous BFF route, which assembles
 // the nested tree server-side. Empty on any failure so the importer doesn't
 // retry-spin.
-export async function fetchRepoContents(org: string, repo: string, branch: string, isPublicRepo = false): Promise<RepoTreeNode[]> {
+export async function fetchRepoContents(org: string, repo: string, branch: string, isPublicRepo = false, _secretRef?: string): Promise<RepoTreeNode[]> {
   try {
     if (!isPublicRepo) {
       const entry = await resolveInstallation(org);

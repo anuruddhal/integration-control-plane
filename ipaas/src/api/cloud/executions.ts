@@ -285,9 +285,7 @@ export const fetchExecutionLogs = async (componentId: string, _deploymentTrackId
 
 // The runtime-arguments schema is a wip-only feature; OpenChoreo has no equivalent
 // endpoint, so surface it as unsupported rather than fabricating an empty schema.
-const ni = (name: string): never => {
-  throw new Error(`[cloud] executions.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] executions.${name}: not implemented`));
 export const fetchRuntimeArguments = (_componentId: string, _deploymentTrackId: string, _commitHash: string): Promise<RuntimeArgument[]> => ni('fetchRuntimeArguments');
 
 // No dedicated count endpoint; approximate from the listed job runs.

@@ -49,9 +49,7 @@ import type {
   ServiceType,
 } from '../../types/platformServices';
 
-const ni = (name: string): never => {
-  throw new Error(`[cloud] platformServices.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] platformServices.${name}: not implemented`));
 
 // awaits: managed-database endpoints. Empty/neutral defaults keep the read-only
 // listing pages (Databases / Vector Databases / Message Brokers) rendering with an

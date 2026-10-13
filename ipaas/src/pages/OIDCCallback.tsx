@@ -17,13 +17,12 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { buildEditorCallbackUrl, editorCallbackUri } from '../utils/vscodeCallback';
+import { editorSignInForwardUrl } from '../utils/vscodeCallback';
 import type { JSX } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Alert, Box, Typography } from '@wso2/oxygen-ui';
 import PageLoader from '../components/PageLoader';
-import { useAuth } from '../auth/AuthContext';
-import { validateAndClearOIDCState, getAndClearRedirectUrl } from '../auth/tokenManager';
+import { useAuth, getAndClearRedirectUrl } from '#auth';
 import { useFetchProjectsByOrgId } from '../hooks/useOrg';
 import { fetchProjects as fetchProjectsApi } from '#api/projects';
 import { loginUrl, projectHomeUrl, projectsRedirectUrl, registerOrgUrl } from '../paths';
@@ -32,7 +31,7 @@ import { IS_CLOUD } from '../features';
 export default function OIDCCallback(): JSX.Element {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { handleOIDCCallback } = useAuth();
+  const { completeSignIn } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const handledRef = useRef(false);
   const fetchProjects = useFetchProjectsByOrgId();
@@ -42,63 +41,25 @@ export default function OIDCCallback(): JSX.Element {
     handledRef.current = true;
 
     const processCallback = async () => {
-      const code = searchParams.get('code');
-      const state = searchParams.get('state');
-      const oidcError = searchParams.get('error');
-
-      // A Cloud Editor cannot receive the provider's redirect itself: the client
-      // registers a fixed set of callbacks and an editor's address is a
-      // per-component subdomain that is not among them. So it asks to be
-      // returned here and names itself in `state`, and this page forwards. The
-      // target is checked against the same allowlist the GitHub callback uses,
-      // because `state` reaches us by way of the provider and anyone who can
-      // start a sign-in chooses its contents.
-      //
-      // Resolved before the error below is handled: a refused or failed sign-in
-      // is a result the editor is waiting for, and swallowing it here leaves it
-      // waiting for one that never comes. The editor is told what happened and
-      // says so, rather than appearing to hang.
-      const editorCallback = editorCallbackUri(state, {
+      // Resolved before anything else, a failed sign-in included: see
+      // editorSignInForwardUrl. The target is checked against the same
+      // allowlist the GitHub callback uses, because `state` reaches us by way of
+      // the provider and anyone who can start a sign-in chooses its contents.
+      const editorUrl = editorSignInForwardUrl(searchParams, {
         origins: window.API_CONFIG?.editorCallbackOrigins ?? [],
         domains: window.API_CONFIG?.editorCallbackDomains ?? [],
       });
-      if (editorCallback) {
-        window.location.href = buildEditorCallbackUrl(editorCallback, {
-          code,
-          state,
-          error: oidcError,
-          error_description: searchParams.get('error_description'),
-        });
-        return;
-      }
-
-      if (oidcError) {
-        setError(`Authentication failed: ${searchParams.get('error_description') || oidcError}`);
-        return;
-      }
-
-      if (!state) {
-        setError('Missing state parameter. Please try logging in again.');
-        return;
-      }
-
-      if (!validateAndClearOIDCState(state)) {
-        setError('Invalid state parameter. This may indicate a CSRF attack. Please try logging in again.');
-        return;
-      }
-
-      if (!code) {
-        setError('Missing authorization code. Please try logging in again.');
+      if (editorUrl) {
+        window.location.href = editorUrl;
         return;
       }
 
       try {
-        const { isNewUser } = await handleOIDCCallback(code, state);
+        const { isNewUser, userId } = await completeSignIn(searchParams);
 
-        if (isNewUser && !IS_CLOUD) {
-          // First-time user — no org yet; send to org registration.
-          // In cloud, Thunder has already provisioned the org at sign-up,
-          // so we fall through to the normal post-login routing below.
+        if (isNewUser) {
+          // First-time user — no org yet; send to org registration. Cloud never
+          // reports one: Thunder provisions the org at sign-up.
           navigate(registerOrgUrl(), { replace: true });
           return;
         }
@@ -128,10 +89,7 @@ export default function OIDCCallback(): JSX.Element {
           // Try to navigate to the last visited project (for existing users)
           let navigatedToLastProject = false;
           try {
-            const stored = localStorage.getItem('user');
-            const userId: string | undefined = stored ? (JSON.parse(stored) as { userId?: string })?.userId : undefined;
-
-            if (userId && orgHandle) {
+            if (orgHandle) {
               // 1. Try the last-visited project stored by AppLayout
               const lastProjectRaw = localStorage.getItem(`last_project:${userId}`);
               if (lastProjectRaw) {
@@ -165,14 +123,7 @@ export default function OIDCCallback(): JSX.Element {
 
           if (!navigatedToLastProject) {
             // Redirect to the projects/redirect route which shows the ToS welcome dialog.
-            // In cloud, if orgHandle is missing from localStorage we surface an
-            // error rather than route to RegisterOrganization (it is a no-op in
-            // cloud, and hitting it means the Thunder login flow did not seed
-            // the org handle).
-            if (!orgHandle && IS_CLOUD) {
-              setError('Missing organization context after sign-in. Please try logging in again.');
-              return;
-            }
+            // Cloud has an org handle here: its completeSignIn refuses a token without one.
             navigate(orgHandle ? projectsRedirectUrl(orgHandle) : registerOrgUrl(), { replace: true });
           }
         }

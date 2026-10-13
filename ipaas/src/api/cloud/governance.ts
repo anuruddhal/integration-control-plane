@@ -35,9 +35,7 @@ import type {
   RuleAdherenceResponse as GovernanceRuleAdherenceResponse,
 } from '../../types/governance';
 
-const ni = (name: string): never => {
-  throw new Error(`[cloud] governance.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] governance.${name}: not implemented`));
 
 // awaits: governance list endpoints. Empty defaults keep the read-only listing
 // pages rendering (with an empty state) instead of throwing on cloud.

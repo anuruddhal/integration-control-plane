@@ -33,9 +33,7 @@ import type {
   RotateConnectionKeysByConnectionIdParams,
 } from '../../types/connections';
 
-const ni = (name: string): never => {
-  throw new Error(`[cloud] connections.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] connections.${name}: not implemented`));
 
 export const listConnections = (_params: ListConnectionsParams): Promise<ConnectionListingRecord[]> => ni('listConnections');
 export const listConnectionCatalog = (_params: ListCatalogParams): Promise<ConnectionCatalogResponse> => ni('listConnectionCatalog');

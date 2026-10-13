@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Box, Button, CircularProgress, Divider, InputAdornment, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Box, Button, CircularProgress, Divider, InputAdornment, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { GitCommit, Search } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useState } from 'react';
 import type { Commit } from '../../types/repository';

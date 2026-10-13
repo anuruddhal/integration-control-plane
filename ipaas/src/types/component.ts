@@ -94,12 +94,6 @@ export interface ComponentDetail extends Component {
   apiVersions?: ApiVersion[];
 }
 
-export interface Endpoint {
-  displayName: string;
-  visibility: string;
-  apimId?: string | null;
-}
-
 export interface EnvEndpoint {
   id: string;
   name?: string | null;

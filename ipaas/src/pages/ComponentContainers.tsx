@@ -21,11 +21,10 @@ import { useEffect, useMemo, useState, type JSX } from 'react';
 import DeploymentTrackBar from '../components/DeploymentTrackBar';
 import EnvironmentSelect from '../components/common/EnvironmentSelect';
 import ContainerInfoCard from '../components/Containers/ContainerInfoCard';
-import ComingSoon from './ComingSoon';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import { Permissions } from '../constants/permissions';
 import { PAID_SUBSCRIPTION_TYPE } from '../constants/subscription';
-import { isContainersEnabled, useRelease } from '../hooks/useDevopsConfigs';
+import { useRelease } from '../hooks/useDevopsConfigs';
 import { useComponentByHandler } from '../hooks/useComponents';
 import { useComponentDeployment } from '../hooks/useDeployments';
 import { useEnvironments } from '../hooks/useEnvironments';
@@ -64,10 +63,6 @@ export default function ComponentContainers({ org, project, component }: Compone
 
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   useEffect(() => setAlert(null), [trackId, envId]);
-
-  if (!isContainersEnabled()) {
-    return <ComingSoon title="Coming Soon" description="Containers management is currently under development." />;
-  }
 
   const containers = release?.containers ?? [];
 

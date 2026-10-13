@@ -24,10 +24,9 @@ import EmptyListing from '../components/EmptyListing';
 import HealthCheckCard from '../components/HealthChecks/HealthCheckCard';
 import CreateHealthCheckStepper from '../components/HealthChecks/CreateHealthCheckStepper';
 import EnvironmentSelect from '../components/common/EnvironmentSelect';
-import ComingSoon from './ComingSoon';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import { Permissions } from '../constants/permissions';
-import { isHealthChecksEnabled, useHealthChecks } from '../hooks/useHealthChecks';
+import { useHealthChecks } from '../hooks/useHealthChecks';
 import { useRelease } from '../hooks/useDevopsConfigs';
 import { useComponentByHandler } from '../hooks/useComponents';
 import { useComponentDeployment } from '../hooks/useDeployments';
@@ -75,10 +74,6 @@ export default function ComponentHealthChecks({ org, project, component }: Compo
     setAlert(null);
     setCreating(false);
   }, [trackId, envId]);
-
-  if (!isHealthChecksEnabled()) {
-    return <ComingSoon title="Coming Soon" description="Health Checks configuration is currently under development." />;
-  }
 
   const envSelect = environments.length > 1 ? <EnvironmentSelect environments={environments} value={envId} onChange={setEnvId} deployment={{ orgHandler: org, orgUuid: orgUuid ?? '', componentId: comp?.id ?? '', versionId: trackId }} /> : null;
 

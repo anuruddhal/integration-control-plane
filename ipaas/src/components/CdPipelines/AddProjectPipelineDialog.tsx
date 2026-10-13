@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Autocomplete, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Alert, Autocomplete, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useOrgDeploymentPipelines, useUpdateProjectDeploymentPipelines } from '../../hooks/useDeploymentPipelines';
 import { IS_CLOUD } from '../../features';
@@ -94,7 +95,7 @@ export default function AddProjectPipelineDialog({ projectId, currentPipelineIds
             getOptionLabel={(p) => p.name}
             isOptionEqualToValue={(a, b) => a.id === b.id}
             disabled={update.isPending}
-            renderInput={(params) => <TextField {...params} label={IS_CLOUD ? 'Pipeline' : 'Pipelines'} placeholder={IS_CLOUD ? 'Select a pipeline' : 'Select pipelines'} />}
+            renderInput={(params) => <TextField {...params} label={IS_CLOUD ? 'Pipeline' : 'Pipelines'} />}
           />
         )}
       </DialogContent>

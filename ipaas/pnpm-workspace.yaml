@@ -12,4 +12,4 @@ allowBuilds:
   tree-sitter-json: true
 
 patchedDependencies:
-  lucide-react@0.545.0: patches/lucide-react@0.545.0.patch
+  lucide-react@1.16.0: patches/lucide-react@1.16.0.patch

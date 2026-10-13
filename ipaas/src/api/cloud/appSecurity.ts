@@ -18,10 +18,8 @@
 
 import type { Dataplane, IdentityProvider, IdentityProviderRequest, RoleGroupMappingResponse } from '../../types/appSecurity';
 
-// Intentionally a stub (the standard cloud-stub contract — see src/api/AGENTS.md).
-const ni = (name: string): never => {
-  throw new Error(`[cloud] appSecurity.${name}: not implemented`);
-};
+// Intentionally a stub: the BFF has no endpoints for this yet, so every call throws via ni().
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] appSecurity.${name}: not implemented`));
 
 export const fetchIdentityProviders = (): Promise<IdentityProvider[]> => ni('fetchIdentityProviders');
 export const fetchIdentityProvider = (_id: string): Promise<IdentityProvider> => ni('fetchIdentityProvider');

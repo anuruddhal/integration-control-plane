@@ -16,8 +16,9 @@
  * under the License.
  */
 
-import { Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, PageContent, Stack, TextField, Typography } from '@wso2/oxygen-ui';
-import { IS_CLOUD } from '../features';
+import { Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, FormHelperText, PageContent, Stack, Typography } from '@wso2/oxygen-ui';
+import { CRITICAL_ENVIRONMENT_HELP, CRITICAL_ENVIRONMENT_LABEL } from '../constants/environment';
+import TextField from '../components/common/TextField';
 import { ArrowLeft } from '@wso2/oxygen-ui-icons-react';
 import { useState, type JSX } from 'react';
 import { useParams } from 'react-router';
@@ -67,8 +68,10 @@ function EditEnvironmentForm({ env, orgHandler }: { env: Environment; orgHandler
       <Stack gap={3} sx={{ maxWidth: 600, mb: 4 }}>
         <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
         <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth />
-        {/* Hidden on cloud: marking an environment critical does not take effect. */}
-        {!IS_CLOUD && <FormControlLabel control={<Checkbox checked={critical} onChange={(_, v) => setCritical(v)} />} label="Mark as Critical Environment" />}
+        <Box>
+          <FormControlLabel control={<Checkbox checked={critical} onChange={(_, v) => setCritical(v)} />} label={CRITICAL_ENVIRONMENT_LABEL} />
+          <FormHelperText sx={{ mt: 0 }}>{CRITICAL_ENVIRONMENT_HELP}</FormHelperText>
+        </Box>
       </Stack>
 
       <Stack direction="row" gap={2}>

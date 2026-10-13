@@ -16,15 +16,15 @@
  * under the License.
  */
 
-import { Box, Button, Divider, MenuItem, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Box, Button, Divider, MenuItem, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from './common/TextField';
 import { Plus } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useState, type JSX } from 'react';
 import { useAppNavigate } from '../hooks/useAppNavigate';
 import { useComponents } from '../hooks/useComponents';
 import { useProjectId, useProjects } from '../hooks/useProjects';
 import { newComponentUrl, newProjectUrl } from '../nav';
-import { actionItemSx, containerSx, goButtonSx, subtitleSx, titleSx } from './IntegrationScopePicker.styles';
-import { SMALL_SELECT_LABEL_SX } from '../constants/styles';
+import { actionItemSx, containerSx, fieldSx, goButtonSx, subtitleSx, titleSx } from './IntegrationScopePicker.styles';
 import { componentUrl } from '../paths';
 
 const CREATE = '__create__';
@@ -40,7 +40,7 @@ const TITLES: Record<ScopePickerSegment, string> = {
 
 export interface IntegrationScopePickerProps {
   org: string;
-  /** Preselects the project (project-level pages). */
+  /** The project the user is in (project-level pages); only the integration is asked for then. */
   project?: string;
   segment: ScopePickerSegment;
 }
@@ -52,8 +52,10 @@ export interface IntegrationScopePickerProps {
 export default function IntegrationScopePicker({ org, project, segment }: IntegrationScopePickerProps): JSX.Element {
   const navigate = useAppNavigate();
   const { data: projects = [] } = useProjects();
-  const [projectHandler, setProjectHandler] = useState(project ?? '');
+  const [pickedProject, setPickedProject] = useState('');
   const [componentHandler, setComponentHandler] = useState('');
+  // Read from the prop each render, so moving to another project's page follows it.
+  const projectHandler = project ?? pickedProject;
 
   const { projectId } = useProjectId(projectHandler);
   const { data: components = [] } = useComponents(org, projectId);
@@ -72,45 +74,45 @@ export default function IntegrationScopePicker({ org, project, segment }: Integr
         {TITLES[segment]}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={subtitleSx}>
-        Select a project and an integration to continue.
+        {project ? 'Select an integration to continue.' : 'Select a project and an integration to continue.'}
       </Typography>
 
       <Stack direction={{ xs: 'column', sm: 'row' }} gap={2} alignItems={{ sm: 'flex-end' }}>
-        <TextField
-          select
-          fullWidth
-          size="small"
-          label="Project"
-          sx={SMALL_SELECT_LABEL_SX}
-          value={projectHandler}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (value === CREATE) {
-              navigate(newProjectUrl({ org }));
-              return;
-            }
-            setProjectHandler(value);
-          }}>
-          <MenuItem value={CREATE}>
-            <Stack direction="row" alignItems="center" gap={1} sx={actionItemSx}>
-              <Plus size={16} />
-              Create Project
-            </Stack>
-          </MenuItem>
-          <Divider />
-          {projects.map((p) => (
-            <MenuItem key={p.id} value={p.handler}>
-              {p.name}
+        {!project && (
+          <TextField
+            select
+            size="small"
+            label="Project"
+            sx={fieldSx}
+            value={projectHandler}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === CREATE) {
+                navigate(newProjectUrl({ org }));
+                return;
+              }
+              setPickedProject(value);
+            }}>
+            <MenuItem value={CREATE}>
+              <Stack direction="row" alignItems="center" gap={1} sx={actionItemSx}>
+                <Plus size={16} />
+                Create Project
+              </Stack>
             </MenuItem>
-          ))}
-        </TextField>
+            <Divider />
+            {projects.map((p) => (
+              <MenuItem key={p.id} value={p.handler}>
+                {p.name}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
 
         <TextField
           select
-          fullWidth
           size="small"
           label="Integration"
-          sx={SMALL_SELECT_LABEL_SX}
+          sx={fieldSx}
           value={componentHandler}
           disabled={!projectHandler}
           onChange={(e) => {
