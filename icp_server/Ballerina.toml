@@ -8,6 +8,6 @@ description = "ICP Server"
 [[dependency]]
 org = "ballerina"
 name = "websocket"
-version = "2.15.3"
+version = "2.16.0"
 
 
