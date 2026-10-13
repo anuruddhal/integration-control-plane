@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Box, CircularProgress, type JSX } from '@wso2/oxygen-ui';
+import { Box, CircularProgress } from '@wso2/oxygen-ui';
+import type { JSX } from 'react';
 import TailscaleOverview from './TailscaleOverview';
 import { Permissions } from '../../../constants/permissions';
 import { useAccessControl } from '../../../contexts/AccessControlContext';

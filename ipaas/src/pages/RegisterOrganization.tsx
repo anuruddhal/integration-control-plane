@@ -22,7 +22,7 @@ import { useAppNavigate } from '../hooks/useAppNavigate';
 import { Alert, Box, Button, Checkbox, CircularProgress, ColorSchemeImage, Divider, FormControlLabel, InputAdornment, InputLabel, Link, OutlinedInput, Stack, Typography } from '@wso2/oxygen-ui';
 import { Building2, CheckCircle, XCircle } from '@wso2/oxygen-ui-icons-react';
 
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '#auth';
 import { useRegisterUser, useValidateOrgName } from '../hooks/useOrg';
 import type { RegisterUserResponse } from '../types/org';
 import { loginUrl, orgHomeUrl, privacyPolicyUrl } from '../paths';
@@ -142,7 +142,7 @@ export default function RegisterOrganization(): JSX.Element {
     if (!orgName) return null;
     if (isValidating) return <CircularProgress size={18} />;
     if (localError || isNameAvailable === false) return <XCircle size={18} color="error" />;
-    if (isNameValid && isNameAvailable !== false) return <CheckCircle size={18} color="success" />;
+    if (isNameValid) return <CheckCircle size={18} color="success" />;
     return null;
   };
 

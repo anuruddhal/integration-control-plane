@@ -67,12 +67,7 @@ export const PILL_SELECT_SX = {
   '& .MuiSelect-select': { py: 0.5, px: 1.5 },
 } as const;
 
-/**
- * Cancels oxygen's `top: -7px` nudge on a resting select label. That correction is
- * calibrated for size="medium" (MUI rests those at translate(14px, 16px) versus
- * small's 9px), so on a small select it double-corrects and the label floats above
- * centre. Apply to any small Select/TextField that carries a label.
- */
-export const SMALL_SELECT_LABEL_SX = {
-  '& .MuiInputLabel-root:not(.MuiInputLabel-shrink)': { top: 0 },
+/** Row padding for the card-variant ListingTable, shared by the project, integration and environment lists. */
+export const CARD_TABLE_SX = {
+  '& .MuiTableBody-root .MuiTableCell-root': { py: 2 },
 } as const;

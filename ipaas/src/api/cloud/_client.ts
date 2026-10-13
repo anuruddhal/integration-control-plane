@@ -24,17 +24,8 @@
  * supported here because the shared HttpClient lacks it.
  */
 
-import { authenticatedFetch } from '../../auth/tokenManager';
-
-// Token-scope 403 retry helpers are product-agnostic shared HTTP infra; they
-// live alongside the base HTTP clients in wip/. Re-exported so cloud domain
-// files can wrap scope-sensitive BFF calls without reaching across folders.
-export { withStsRetry, withScopeRetry } from '../wip/httpClients';
-
-// Observability client (window.API_CONFIG.observabilityUrl). In the cloud
-// deployment that URL points at the wso2cloud observability proxy, which logs
-// and metrics are queried from directly rather than through the BFF.
-export { obsClient } from '../wip/httpClients';
+import { authenticatedFetch } from '#auth';
+import { HttpError } from '../../types/http';
 
 /** Standard BFF list envelope: { items: T[] }. */
 export interface ListResponse<T> {
@@ -98,6 +89,27 @@ export const bff = {
   put: <T>(path: string, body?: unknown, headers?: Record<string, string>) => request<T>('PUT', path, body, headers),
   patch: <T>(path: string, body?: unknown, headers?: Record<string, string>) => request<T>('PATCH', path, body, headers),
   delete: <T>(path: string, body?: unknown, headers?: Record<string, string>) => request<T>('DELETE', path, body, headers),
+};
+
+// Observability client (window.API_CONFIG.observabilityUrl). In the cloud
+// deployment that URL points at the wso2cloud observability proxy, which logs
+// and metrics are queried from directly rather than through the BFF. Errors
+// match the wip clients' HttpError, since the proxy has no BFF envelope.
+async function obsPost<T>(path: string, body: unknown): Promise<T> {
+  const base = window.API_CONFIG?.observabilityUrl;
+  if (!base) throw new Error('Observability URL is not configured');
+  const res = await authenticatedFetch(`${base}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text().catch(() => '');
+  if (!res.ok) throw new HttpError(res.status, `HTTP ${res.status}: ${text || res.statusText}`);
+  return text ? (JSON.parse(text) as T) : (undefined as unknown as T);
+}
+
+export const obsClient = {
+  post: obsPost,
 };
 
 /** Build a "?k=v&k=v" string from a record, dropping undefined/null/empty values. */

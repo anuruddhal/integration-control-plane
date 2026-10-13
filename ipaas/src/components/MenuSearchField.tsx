@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { InputAdornment, ListSubheader, TextField } from '@wso2/oxygen-ui';
+import { InputAdornment, ListSubheader } from '@wso2/oxygen-ui';
+import TextField from './common/TextField';
 import { Search } from '@wso2/oxygen-ui-icons-react';
 import type { JSX } from 'react';
 

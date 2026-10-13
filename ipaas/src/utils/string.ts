@@ -53,3 +53,14 @@ export const generateUUID = (): string => crypto.randomUUID();
 export function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max)}…` : s;
 }
+
+/** Two letters for an avatar: first and last word of a name, or the first two of a single word (an email reads by its local part). */
+export function userInitials(name: string): string {
+  const words = name
+    .split('@')[0]
+    .split(/[\s._-]+/)
+    .filter(Boolean);
+  if (words.length === 0) return '';
+  const letters = words.length > 1 ? words[0][0] + words[words.length - 1][0] : words[0].slice(0, 2);
+  return letters.toUpperCase();
+}

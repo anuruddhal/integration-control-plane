@@ -33,9 +33,7 @@ import type {
   UpdateServiceRequest,
 } from '../../types/genaiServices';
 
-const ni = (name: string): never => {
-  throw new Error(`[cloud] genaiServices.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] genaiServices.${name}: not implemented`));
 
 // awaits: GenAI / third-party service list endpoints. Empty defaults keep the
 // read-only listing pages rendering (with an empty state) instead of throwing.

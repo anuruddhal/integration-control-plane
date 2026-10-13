@@ -27,6 +27,7 @@ declare module 'swagger-ui-react' {
     defaultModelsExpandDepth?: number;
     plugins?: unknown[];
     supportedSubmitMethods?: string[];
+    requestInterceptor?: (request: { url: string; headers: Record<string, string> }) => unknown;
     [key: string]: unknown;
   }
 

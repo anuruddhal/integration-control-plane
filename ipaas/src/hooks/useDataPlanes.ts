@@ -18,15 +18,9 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { listDataPlanes, listPdps } from '#api/dataPlanes';
-import { IS_CLOUD, IS_WIP } from '../features';
 import { useOrgUuid } from './useOrgUuid';
 
 const ROOT_KEY = 'dataPlanes';
-
-// cloud: GET /dataplanes is wired; the PDP list is an empty safe-default.
-export function isDataPlanesEnabled(): boolean {
-  return IS_WIP || IS_CLOUD;
-}
 
 /** All data planes for the org (Cloud + Private). */
 export function useDataPlanes() {
@@ -34,7 +28,7 @@ export function useDataPlanes() {
   return useQuery({
     queryKey: [ROOT_KEY, 'list', orgUuid],
     queryFn: () => listDataPlanes(),
-    enabled: isDataPlanesEnabled() && !!orgUuid,
+    enabled: !!orgUuid,
     retry: false,
   });
 }
@@ -48,7 +42,7 @@ export function usePdps(enabled = true) {
   return useQuery({
     queryKey: [ROOT_KEY, 'pdps', orgUuid],
     queryFn: () => listPdps(),
-    enabled: isDataPlanesEnabled() && enabled && !!orgUuid,
+    enabled: enabled && !!orgUuid,
     retry: false,
     refetchInterval: 30_000,
   });

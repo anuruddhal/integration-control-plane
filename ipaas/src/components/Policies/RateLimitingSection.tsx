@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Box, Collapse, FormControlLabel, MenuItem, Radio, RadioGroup, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Box, Collapse, FormControlLabel, MenuItem, Radio, RadioGroup, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import type { ReactNode } from 'react';
 import { TIME_UNITS } from '../../constants/policy';
 import type { RateLimitConfig, RateLimitLevel, RateLimitOperation, RateLimitRule, TimeUnit } from '../../types/policy';

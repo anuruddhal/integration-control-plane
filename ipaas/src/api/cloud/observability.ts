@@ -16,12 +16,14 @@
  * under the License.
  */
 
+import type { ComponentHttpMetricsPayload, ComponentUsageMetricsPayload, ProjectMetricsModel } from '../../types/observability';
+
 /**
  * Component / project observability metrics.
  *
  * The OpenChoreo BFF exposes no metrics surface — these live on Devant's obs
  * API (choreoobsapi) on the systemapis gateway. Until the BFF closes that gap,
- * the fetchers throw via ni() (per the src/api/AGENTS.md stub contract) so an
+ * the fetchers throw via ni() so an
  * unsupported metrics read can never be mistaken for "no data".
  *
  * awaits: choreoobsapi (component http/usage metrics, project metrics model)
@@ -35,10 +37,8 @@ export function metricsBreakSize(fromIso: string, toIso: string): string {
 }
 
 // TODO: implement using cloud APIs
-const ni = (name: string): never => {
-  throw new Error(`[cloud] observability.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] observability.${name}: not implemented`));
 
-export const fetchComponentHttpMetrics = (..._args: unknown[]): never => ni('fetchComponentHttpMetrics');
-export const fetchComponentUsageMetrics = (..._args: unknown[]): never => ni('fetchComponentUsageMetrics');
-export const fetchProjectMetricsModel = (..._args: unknown[]): never => ni('fetchProjectMetricsModel');
+export const fetchComponentHttpMetrics = (_releaseId: string, _fromIso: string, _toIso: string): Promise<ComponentHttpMetricsPayload | null> => ni('fetchComponentHttpMetrics');
+export const fetchComponentUsageMetrics = (_releaseId: string, _fromIso: string, _toIso: string): Promise<ComponentUsageMetricsPayload | null> => ni('fetchComponentUsageMetrics');
+export const fetchProjectMetricsModel = (_projectId: string, _environmentId: string, _fromIso: string, _toIso: string): Promise<ProjectMetricsModel | null> => ni('fetchProjectMetricsModel');

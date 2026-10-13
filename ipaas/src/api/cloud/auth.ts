@@ -16,42 +16,69 @@
  * under the License.
  */
 
-// TODO: implement using cloud APIs
-const ni = (name: string): never => {
-  throw new Error(`[cloud] auth.${name}: not implemented`);
-};
+import type {
+  UserPermissionsResponse,
+  User,
+  MessageResult,
+  ChangePasswordInput,
+  ForceChangePasswordInput,
+  ResetPasswordResult,
+  CreateUserInput,
+  UpdateUserInput,
+  UpdateUserGroupsInput,
+  PendingInvitation,
+  InviteUsersInput,
+  Role,
+  RoleDetail,
+  PermissionsResponse,
+  CreateRoleInput,
+  UpdateRoleInput,
+  RoleGroupMapping,
+  Group,
+  CreateGroupInput,
+  UpdateGroupInput,
+  GroupRoleMapping,
+  GroupUser,
+  AddRolesToGroupInput,
+  RemoveRoleFromGroupInput,
+  AddUsersToGroupInput,
+  RemoveUserFromGroupInput,
+} from '../../types/auth';
 
-export const fetchOrgPermissions = (..._args: unknown[]): never => ni('fetchOrgPermissions');
-export const fetchProjectPermissions = (..._args: unknown[]): never => ni('fetchProjectPermissions');
-export const fetchComponentPermissions = (..._args: unknown[]): never => ni('fetchComponentPermissions');
-export const fetchCurrentUser = (..._args: unknown[]): never => ni('fetchCurrentUser');
-export const fetchUsers = (..._args: unknown[]): never => ni('fetchUsers');
-export const changePassword = (..._args: unknown[]): never => ni('changePassword');
-export const forceChangePassword = (..._args: unknown[]): never => ni('forceChangePassword');
-export const resetPassword = (..._args: unknown[]): never => ni('resetPassword');
-export const revokeUserTokens = (..._args: unknown[]): never => ni('revokeUserTokens');
-export const unlockAccount = (..._args: unknown[]): never => ni('unlockAccount');
-export const createUser = (..._args: unknown[]): never => ni('createUser');
-export const updateUser = (..._args: unknown[]): never => ni('updateUser');
-export const updateUserGroups = (..._args: unknown[]): never => ni('updateUserGroups');
-export const deleteUser = (..._args: unknown[]): never => ni('deleteUser');
-export const fetchPendingInvitations = (..._args: unknown[]): never => ni('fetchPendingInvitations');
-export const inviteUsers = (..._args: unknown[]): never => ni('inviteUsers');
-export const deleteInvitation = (..._args: unknown[]): never => ni('deleteInvitation');
-export const fetchRoles = (..._args: unknown[]): never => ni('fetchRoles');
-export const fetchRoleDetail = (..._args: unknown[]): never => ni('fetchRoleDetail');
-export const fetchAllPermissions = (..._args: unknown[]): never => ni('fetchAllPermissions');
-export const createRole = (..._args: unknown[]): never => ni('createRole');
-export const updateRole = (..._args: unknown[]): never => ni('updateRole');
-export const deleteRole = (..._args: unknown[]): never => ni('deleteRole');
-export const fetchRoleGroups = (..._args: unknown[]): never => ni('fetchRoleGroups');
-export const fetchGroups = (..._args: unknown[]): never => ni('fetchGroups');
-export const createGroup = (..._args: unknown[]): never => ni('createGroup');
-export const updateGroup = (..._args: unknown[]): never => ni('updateGroup');
-export const deleteGroup = (..._args: unknown[]): never => ni('deleteGroup');
-export const fetchGroupRoles = (..._args: unknown[]): never => ni('fetchGroupRoles');
-export const fetchGroupUsers = (..._args: unknown[]): never => ni('fetchGroupUsers');
-export const addRolesToGroup = (..._args: unknown[]): never => ni('addRolesToGroup');
-export const removeRoleFromGroup = (..._args: unknown[]): never => ni('removeRoleFromGroup');
-export const addUsersToGroup = (..._args: unknown[]): never => ni('addUsersToGroup');
-export const removeUserFromGroup = (..._args: unknown[]): never => ni('removeUserFromGroup');
+// TODO: implement using cloud APIs
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] auth.${name}: not implemented`));
+
+export const fetchOrgPermissions = (_orgHandle: string, _userId: string): Promise<UserPermissionsResponse> => ni('fetchOrgPermissions');
+export const fetchProjectPermissions = (_orgHandle: string, _userId: string, _projectId: string): Promise<UserPermissionsResponse> => ni('fetchProjectPermissions');
+export const fetchComponentPermissions = (_orgHandle: string, _userId: string, _projectId: string, _componentId: string): Promise<UserPermissionsResponse> => ni('fetchComponentPermissions');
+export const fetchCurrentUser = (_orgHandler: string, _userId: string): Promise<User> => ni('fetchCurrentUser');
+export const fetchUsers = (_orgHandler: string): Promise<User[]> => ni('fetchUsers');
+export const changePassword = (_input: ChangePasswordInput): Promise<MessageResult> => ni('changePassword');
+export const forceChangePassword = (_input: ForceChangePasswordInput): Promise<MessageResult> => ni('forceChangePassword');
+export const resetPassword = (_orgHandler: string, _userId: string): Promise<ResetPasswordResult> => ni('resetPassword');
+export const revokeUserTokens = (_orgHandler: string, _userId: string): Promise<MessageResult> => ni('revokeUserTokens');
+export const unlockAccount = (_orgHandler: string, _userId: string): Promise<MessageResult> => ni('unlockAccount');
+export const createUser = (_orgHandler: string, _input: CreateUserInput): Promise<unknown> => ni('createUser');
+export const updateUser = (_orgHandler: string, _input: UpdateUserInput): Promise<unknown> => ni('updateUser');
+export const updateUserGroups = (_orgHandler: string, _input: UpdateUserGroupsInput): Promise<unknown> => ni('updateUserGroups');
+export const deleteUser = (_orgHandler: string, _userId: string): Promise<unknown> => ni('deleteUser');
+export const fetchPendingInvitations = (_orgHandler: string): Promise<PendingInvitation[]> => ni('fetchPendingInvitations');
+export const inviteUsers = (_orgHandler: string, _input: InviteUsersInput): Promise<unknown> => ni('inviteUsers');
+export const deleteInvitation = (_orgHandler: string, _invitationId: string): Promise<unknown> => ni('deleteInvitation');
+export const fetchRoles = (_orgHandler: string, _projectId?: string, _integrationId?: string): Promise<Role[]> => ni('fetchRoles');
+export const fetchRoleDetail = (_orgHandler: string, _roleId: string, _projectId?: string, _integrationId?: string): Promise<RoleDetail> => ni('fetchRoleDetail');
+export const fetchAllPermissions = (): Promise<PermissionsResponse> => ni('fetchAllPermissions');
+export const createRole = (_orgHandler: string, _input: CreateRoleInput): Promise<unknown> => ni('createRole');
+export const updateRole = (_orgHandler: string, _input: UpdateRoleInput): Promise<unknown> => ni('updateRole');
+export const deleteRole = (_orgHandler: string, _roleId: string): Promise<unknown> => ni('deleteRole');
+export const fetchRoleGroups = (_orgHandler: string, _roleId: string, _projectId?: string, _integrationId?: string): Promise<RoleGroupMapping[]> => ni('fetchRoleGroups');
+export const fetchGroups = (_orgHandler: string, _projectId?: string, _integrationId?: string): Promise<Group[]> => ni('fetchGroups');
+export const createGroup = (_orgHandler: string, _input: CreateGroupInput): Promise<unknown> => ni('createGroup');
+export const updateGroup = (_orgHandler: string, _input: UpdateGroupInput): Promise<unknown> => ni('updateGroup');
+export const deleteGroup = (_orgHandler: string, _groupId: string): Promise<unknown> => ni('deleteGroup');
+export const fetchGroupRoles = (_orgHandler: string, _groupId: string, _projectId?: string, _integrationId?: string): Promise<GroupRoleMapping[]> => ni('fetchGroupRoles');
+export const fetchGroupUsers = (_orgHandler: string, _groupId: string): Promise<GroupUser[]> => ni('fetchGroupUsers');
+export const addRolesToGroup = (_orgHandler: string, _input: AddRolesToGroupInput, _projectId?: string, _componentId?: string): Promise<unknown> => ni('addRolesToGroup');
+export const removeRoleFromGroup = (_orgHandler: string, _input: RemoveRoleFromGroupInput): Promise<unknown> => ni('removeRoleFromGroup');
+export const addUsersToGroup = (_orgHandler: string, _input: AddUsersToGroupInput): Promise<unknown> => ni('addUsersToGroup');
+export const removeUserFromGroup = (_orgHandler: string, _input: RemoveUserFromGroupInput): Promise<unknown> => ni('removeUserFromGroup');

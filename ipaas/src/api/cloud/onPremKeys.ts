@@ -18,11 +18,9 @@
 
 import type { OnPremKey, OnPremKeySubscription } from '../../types/onPremKey';
 
-// Intentionally a stub (the standard cloud-stub contract — see src/api/AGENTS.md).
+// Intentionally a stub: the BFF has no endpoints for this yet, so every call throws via ni().
 // `wip` is the reference implementation; real cloud wiring is deferred.
-const ni = (name: string): never => {
-  throw new Error(`[cloud] onPremKeys.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] onPremKeys.${name}: not implemented`));
 
 export const fetchOnPremKeys = (_orgHandle: string): Promise<OnPremKey[]> => ni('fetchOnPremKeys');
 export const fetchOnPremKeySubscription = (_orgHandle: string): Promise<OnPremKeySubscription> => ni('fetchOnPremKeySubscription');

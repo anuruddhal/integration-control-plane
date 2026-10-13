@@ -18,9 +18,7 @@
 
 import type { ClusterPod, Hpa, HpaMetric, HpaWriteData, HttpScaler, HttpScalerWriteData, PodMetrics, ScalingMethodToggle, ScalingPath, ScalingState } from '../../types/scaling';
 
-const ni = (name: string): never => {
-  throw new Error(`[cloud] scaling.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] scaling.${name}: not implemented`));
 
 export const getScalingState = (_orgUuid: string, _projectId: string, _componentId: string, _releaseId: string): Promise<ScalingState> => ni('getScalingState');
 export const getHttpScaler = (_orgUuid: string, _projectId: string, _componentId: string, _releaseId: string): Promise<HttpScaler | null> => ni('getHttpScaler');

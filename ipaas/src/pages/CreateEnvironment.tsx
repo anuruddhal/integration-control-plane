@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, PageContent, Select, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, FormHelperText, MenuItem, PageContent, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from '../components/common/TextField';
 import { ArrowLeft } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useMemo, useState, type JSX } from 'react';
 import { useAppNavigate } from '../hooks/useAppNavigate';
@@ -28,6 +29,7 @@ import { IS_CLOUD } from '../features';
 import BusyFields from '../components/common/BusyFields';
 import { buildEnvironmentVhost, EnvironmentValidationError } from '../utils/environment';
 import { resourceUrl, type OrgScope } from '../nav';
+import { CRITICAL_ENVIRONMENT_HELP, CRITICAL_ENVIRONMENT_LABEL } from '../constants/environment';
 
 export default function CreateEnvironment(scope: OrgScope): JSX.Element {
   const navigate = useAppNavigate();
@@ -44,7 +46,7 @@ export default function CreateEnvironment(scope: OrgScope): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [errorSeverity, setErrorSeverity] = useState<'error' | 'warning'>('error');
 
-  // Default the data plane to the first available once the list loads.
+  // Defaults to the first data plane; the picker appears only when there is more than one to choose from.
   useEffect(() => {
     if (dataPlanes.length) setDataplaneId((prev) => (prev && dataPlanes.some((d) => d.id === prev) ? prev : dataPlanes[0].id));
   }, [dataPlanes]);
@@ -89,7 +91,8 @@ export default function CreateEnvironment(scope: OrgScope): JSX.Element {
   // `isSuccess` keeps the control disabled through the deferred navigation:
   // the mutation settles before the route changes, which would otherwise re-enable
   // submit and allow a duplicate.
-  const canSubmit = !!name.trim() && (IS_CLOUD || !!dnsPrefix.trim()) && !!dataplaneId && !create.isPending && !create.isSuccess;
+  // Cloud falls back to the 'default' plane when none is listed; the devops API has no such default.
+  const canSubmit = !!name.trim() && (IS_CLOUD || (!!dnsPrefix.trim() && !!dataplaneId)) && !create.isPending && !create.isSuccess;
 
   return (
     <PageContent>
@@ -108,12 +111,8 @@ export default function CreateEnvironment(scope: OrgScope): JSX.Element {
       )}
 
       <BusyFields busy={create.isPending}>
-      <Stack gap={3} sx={{ maxWidth: 600, mb: 4 }}>
-        <TextField label="Name" required placeholder="e.g., staging" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
-        <Box>
-          <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.75 }}>
-            Data Plane
-          </Typography>
+        <Stack gap={3} sx={{ maxWidth: 600, mb: 4 }}>
+          <TextField label="Name" required value={name} onChange={(e) => setName(e.target.value)} fullWidth />
           {loadingDataPlanes ? (
             <CircularProgress size={20} />
           ) : dataPlanesError ? (
@@ -126,34 +125,32 @@ export default function CreateEnvironment(scope: OrgScope): JSX.Element {
               }>
               Failed to load data planes.
             </Alert>
-          ) : (
-            <Select fullWidth size="small" displayEmpty value={dataplaneId} onChange={(e) => setDataplaneId(String(e.target.value))}>
-              <MenuItem value="" disabled>
-                Select a data plane
-              </MenuItem>
+          ) : dataPlanes.length > 1 ? (
+            <TextField select label="Data Plane" required value={dataplaneId} onChange={(e) => setDataplaneId(e.target.value)} fullWidth>
               {dataPlanes.map((dp) => (
                 <MenuItem key={dp.id} value={dp.id}>
                   {dp.name}
                 </MenuItem>
               ))}
-            </Select>
+            </TextField>
+          ) : null}
+          {IS_CLOUD ? (
+            <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth multiline minRows={2} />
+          ) : (
+            <Box>
+              <TextField label="DNS Prefix" required value={dnsPrefix} onChange={(e) => setDnsPrefix(e.target.value)} fullWidth />
+              {vhostPreview && (
+                <Alert severity="info" sx={{ mt: 1.5 }}>
+                  DNS for the environment will be created as {vhostPreview}. URL customization will be enabled for the new environment after provisioning, which can take about 5 minutes.
+                </Alert>
+              )}
+            </Box>
           )}
-        </Box>
-        {IS_CLOUD ? (
-          <TextField label="Description" placeholder="What this environment is for" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth multiline minRows={2} />
-        ) : (
           <Box>
-            <TextField label="DNS Prefix" required placeholder="e.g., staging" value={dnsPrefix} onChange={(e) => setDnsPrefix(e.target.value)} fullWidth />
-            {vhostPreview && (
-              <Alert severity="info" sx={{ mt: 1.5 }}>
-                DNS for the environment will be created as {vhostPreview}. URL customization will be enabled for the new environment after provisioning, which can take about 5 minutes.
-              </Alert>
-            )}
+            <FormControlLabel control={<Checkbox checked={critical} onChange={(_, v) => setCritical(v)} />} label={CRITICAL_ENVIRONMENT_LABEL} />
+            <FormHelperText sx={{ mt: 0 }}>{CRITICAL_ENVIRONMENT_HELP}</FormHelperText>
           </Box>
-        )}
-        {/* Hidden on cloud: marking an environment critical does not take effect. */}
-        {!IS_CLOUD && <FormControlLabel control={<Checkbox checked={critical} onChange={(_, v) => setCritical(v)} />} label="Mark as Critical Environment" />}
-      </Stack>
+        </Stack>
       </BusyFields>
 
       <Stack direction="row" gap={2}>

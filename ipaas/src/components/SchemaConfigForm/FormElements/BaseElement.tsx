@@ -17,7 +17,8 @@
  */
 
 import { useEffect, useMemo, useState, type Dispatch, type MouseEvent, type SetStateAction } from 'react';
-import { Box, Button, Chip, IconButton, InputAdornment, MenuItem, Popover, Stack, Switch, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
+import { Box, Button, Chip, IconButton, InputAdornment, MenuItem, Popover, Stack, Switch, Tooltip, Typography } from '@wso2/oxygen-ui';
+import TextField from '../../common/TextField';
 import { Eye, EyeOff, Link2, Link2Off, Lock, Pencil, Unlock } from '@wso2/oxygen-ui-icons-react';
 import type { BaseType, JSONSchema } from '../../../types/schema';
 import { type LinkingInfo, isNumberType, typeDisplayName } from '../schemaUtils';
@@ -357,7 +358,6 @@ export function BaseElement({
               onChange={(e) => handleSecretChange(e.target.value)}
               error={!isValidSecret && isEdited}
               helperText={secretError}
-              placeholder="Enter a value"
               inputProps={{ 'aria-required': Boolean(isRequired) }}
               InputProps={{
                 endAdornment: (
@@ -408,7 +408,6 @@ export function BaseElement({
               type={showContent ? 'text' : 'password'}
               value={String(valueMap.get(jsonPath) ?? '')}
               onChange={(e) => handleChange(e.target.value)}
-              placeholder="Enter a value"
               error={isEdited && !linked && validationMap.get(jsonPath) === false}
               helperText={isEdited && !linked && validationMap.get(jsonPath) === false ? error : undefined}
               inputProps={{ 'aria-required': Boolean(isRequired) }}

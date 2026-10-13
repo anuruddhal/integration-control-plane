@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { TextField, InputAdornment } from '@wso2/oxygen-ui';
+import { InputAdornment } from '@wso2/oxygen-ui';
+import TextField from './common/TextField';
 import { Search } from '@wso2/oxygen-ui-icons-react';
 
 type SearchFieldProps = {

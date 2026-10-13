@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, Button, Checkbox, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, MenuItem, Select as MuiSelect, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, Button, Checkbox, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, MenuItem, Select as MuiSelect, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { ChevronDown, ChevronUp, Link, Trash2, X } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -224,17 +225,7 @@ function CertLinkForm({ availableCerts, onLink, onCancel }: CertLinkFormProps) {
       <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
         Link Certificate
       </Typography>
-      <TextField
-        size="small"
-        fullWidth
-        label="Mount Path"
-        placeholder="/certs"
-        value={mountPath}
-        onChange={(e) => setMountPath(e.target.value)}
-        error={!!mountPathError}
-        helperText={mountPathError || 'Directory where certificate files will be mounted'}
-        sx={{ mb: 1.5 }}
-      />
+      <TextField size="small" fullWidth label="Mount Path" value={mountPath} onChange={(e) => setMountPath(e.target.value)} error={!!mountPathError} helperText={mountPathError || 'Directory where certificate files will be mounted'} sx={{ mb: 1.5 }} />
       <MuiSelect size="small" fullWidth displayEmpty value={selectedGroupUuid} onChange={(e) => setSelectedGroupUuid(e.target.value as string)} sx={{ mb: 1.5 }}>
         <MenuItem value="" disabled>
           Select a Certificate

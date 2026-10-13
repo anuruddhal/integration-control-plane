@@ -92,7 +92,6 @@ Run the development server:
 ```bash
 pnpm dev          # WIP on https://localhost:3000 (HTTPS)
 pnpm dev:cloud    # Cloud variant
-pnpm dev:icp      # ICP variant
 ```
 
 ### Build
@@ -144,8 +143,7 @@ src/
   components/    # Shared and composite components
   hooks/         # Custom React hooks
   contexts/      # React context providers
-  api/           # API call modules (product-specific under api/wip/, api/cloud/, api/icp/)
-  product/       # Product-specific components (resolved via #product/ alias)
+  api/           # API call modules
   utils/         # Pure utility functions (each has a *.test.ts companion)
   types/         # TypeScript interfaces and types
   constants/     # App-wide constants

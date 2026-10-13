@@ -48,10 +48,11 @@ import {
   Popper,
   Stack,
   TablePagination,
-  TextField,
   Tooltip,
   Typography,
 } from '@wso2/oxygen-ui';
+import { CARD_TABLE_SX } from '../constants/styles';
+import TextField from '../components/common/TextField';
 import ProjectHomeSkeleton from '../components/ProjectHomeSkeleton';
 import { ChevronDown, ChevronUp, Cloud, ExternalLink, FileText, Filter, GitHub, GitBranch, Info, Link2, Pencil, Plus, PlugZap, RefreshCw, Search, Trash2 } from '@wso2/oxygen-ui-icons-react';
 import CreateIntegrationPanels from '../components/CreateIntegrationPanels';
@@ -75,7 +76,7 @@ import NotFound from '../components/NotFound';
 import { formatDistanceToNow } from '../utils/time';
 import { resourceUrl, broaden, newComponentUrl, type ProjectScope } from '../nav';
 import { useOrgUuid } from '../hooks/useOrgUuid';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '#auth';
 import { componentOverviewUrl } from '../paths';
 import { Permissions } from '../constants/permissions';
 import { isSupportedIntegration, getDisplayLabel, getNonIntegrationPlatform } from '../constants/integrations';
@@ -442,7 +443,7 @@ function IntegrationsTable({
         <>
           {filteredIntegrations.length > 0 && (
             <ListingTable.Container disablePaper>
-              <ListingTable variant="card" density="compact" sx={{ '& .MuiTableBody-root .MuiTableCell-root': { py: 2 } }}>
+              <ListingTable variant="card" density="compact" sx={CARD_TABLE_SX}>
                 <ListingTable.Head>
                   <ListingTable.Row>
                     <ListingTable.Cell>Name</ListingTable.Cell>
@@ -559,7 +560,7 @@ function IntegrationsTable({
                 Non Integrations
               </Typography>
               <ListingTable.Container disablePaper>
-                <ListingTable variant="card" density="compact" sx={{ '& .MuiTableBody-root .MuiTableCell-root': { py: 2 } }}>
+                <ListingTable variant="card" density="compact" sx={CARD_TABLE_SX}>
                   <ListingTable.Head>
                     <ListingTable.Row>
                       <ListingTable.Cell>Name</ListingTable.Cell>
@@ -707,8 +708,7 @@ export default function Project(scope: ProjectScope): JSX.Element {
   const isEmpty = justProvisionedDefaultProject || (isComponentsSuccess ? components.length === 0 : cachedIsEmpty);
   const isWorkspace = project.type === 'MONO_REPO';
   // The editor clones the project repo, so only an integration that builds from it can open.
-  const openInCloudComponent =
-    components.find((c) => isSupportedIntegration(c.displayType, c.componentSubType, c.buildpackType) && !isExternalRepoIntegration(c, project.gitOrganization, project.repository)) ?? null;
+  const openInCloudComponent = components.find((c) => isSupportedIntegration(c.displayType, c.componentSubType, c.buildpackType) && !isExternalRepoIntegration(c, project.gitOrganization, project.repository)) ?? null;
   const projectRepoUrl = buildProjectRepoUrl(project.gitProvider, project.gitOrganization, project.repository, project.branch);
 
   const externalComponents = components.filter((c) => isExternalRepoIntegration(c, project.gitOrganization, project.repository));

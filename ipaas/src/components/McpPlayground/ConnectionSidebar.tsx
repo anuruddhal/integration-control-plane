@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Box, Button, CircularProgress, IconButton, InputAdornment, MenuItem, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
+import { Box, Button, CircularProgress, IconButton, InputAdornment, MenuItem, Stack, Tooltip, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { Copy, Eye, EyeOff, Plug, RefreshCw } from '@wso2/oxygen-ui-icons-react';
 import { useState, type JSX } from 'react';
 import type { McpConnectionStatus, McpSwitcher } from '../../types/mcp';

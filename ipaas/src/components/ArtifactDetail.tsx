@@ -389,7 +389,7 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
 const drawerSx = { '& .MuiDrawer-paper': { width: '60%', maxWidth: 700, minWidth: 400, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' } };
 const headerSx = { px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' };
 
-export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifact | null; onClose: () => void }) {
+export function ArtifactDetail({ selected, onClose, orgHandler, projectHandler, componentHandler }: { selected: SelectedArtifact | null; onClose: () => void; orgHandler: string; projectHandler: string; componentHandler: string }) {
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const artifactKey = selected ? `${selected.artifactType}-${selected.artifact.name}` : '';
   useEffect(() => {
@@ -433,7 +433,7 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
       case 'Parameters':
         return <InboundEndpointParameters {...tabProps} />;
       case 'Executions':
-        return <AutomationExecutions {...tabProps} />;
+        return <AutomationExecutions {...tabProps} orgHandler={orgHandler} projectHandler={projectHandler} componentHandler={componentHandler} />;
       default:
         return null;
     }

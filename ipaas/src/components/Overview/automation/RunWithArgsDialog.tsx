@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, Button, CircularProgress, Drawer, IconButton, Link, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, Button, CircularProgress, Drawer, IconButton, Link, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from '../../common/TextField';
 import { Plus, Trash2, X } from '@wso2/oxygen-ui-icons-react';
 import { useState } from 'react';
 import { useTriggerComponent } from '../../../hooks/useExecutions';

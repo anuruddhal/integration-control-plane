@@ -23,8 +23,8 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "#api/*": ["./src/api/wip/*"],
-      "#product/*": ["./src/product/wip/*"]
+      "#api/*": ["./src/api/cloud/*"],
+      "#auth": ["./src/auth/cloud/index.ts"]
     }
   },
   "include": ["src"]

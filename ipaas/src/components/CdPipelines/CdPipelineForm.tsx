@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Button, CircularProgress, FormControlLabel, PageContent, PageTitle, Stack, Switch, TextField } from '@wso2/oxygen-ui';
+import { Alert, Button, CircularProgress, FormControlLabel, PageContent, PageTitle, Stack, Switch } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { IS_CLOUD } from '../../features';
 import BusyFields from '../common/BusyFields';
 import { ArrowLeft } from '@wso2/oxygen-ui-icons-react';
@@ -100,26 +101,18 @@ export default function CdPipelineForm({ orgHandler, envTemplates, existingPipel
 
       <Stack gap={3} sx={{ maxWidth: 640, mt: 1 }}>
         <BusyFields busy={saving}>
-          <Stack direction="row" alignItems="center" gap={2}>
-            <TextField
-              label="Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onBlur={() => setNameTouched(true)}
-              fullWidth
-              required
-              placeholder="e.g. US Production Pipeline"
-              error={showNameError}
-              helperText={showNameError ? nameError : ' '}
-              sx={{ flex: 1, ...REQUIRED_SX }}
-            />
-            {/* Hidden on cloud: the flag is accepted by the form but never persisted upstream. */}
-            {!IS_CLOUD && <FormControlLabel control={<Switch checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />} label="Mark as default" sx={{ flexShrink: 0, whiteSpace: 'nowrap', mr: 0 }} />}
+          {/* BusyFields is one child of the outer Stack, so its fields need their own gap. */}
+          <Stack gap={3}>
+            <Stack direction="row" alignItems="center" gap={2}>
+              <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setNameTouched(true)} fullWidth required error={showNameError} helperText={showNameError ? nameError : ' '} sx={{ flex: 1, ...REQUIRED_SX }} />
+              {/* Hidden on cloud: the flag is accepted by the form but never persisted upstream. */}
+              {!IS_CLOUD && <FormControlLabel control={<Switch checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />} label="Mark as default" sx={{ flexShrink: 0, whiteSpace: 'nowrap', mr: 0 }} />}
+            </Stack>
+
+            <PromotionChainBuilder envTemplates={envTemplates} value={chain} onChange={setChain} disabled={saving} />
+
+            {error && <Alert severity="error">{error}</Alert>}
           </Stack>
-
-          <PromotionChainBuilder envTemplates={envTemplates} value={chain} onChange={setChain} disabled={saving} />
-
-          {error && <Alert severity="error">{error}</Alert>}
         </BusyFields>
 
         <Stack direction="row" gap={1} sx={{ mt: 2 }}>

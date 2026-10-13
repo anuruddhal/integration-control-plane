@@ -18,9 +18,7 @@
 
 import type { CreateMcpApiInput, CreatedMcpApi, McpFeatureOperation, McpProxyMetadata } from '../../types/mcpProxy';
 
-const ni = (name: string): never => {
-  throw new Error(`[cloud] mcpProxy.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] mcpProxy.${name}: not implemented`));
 
 export const generateMcpFeatures = (_items: McpProxyMetadata[]): Promise<McpFeatureOperation[]> => ni('generateMcpFeatures');
 export const createMcpApi = (_input: CreateMcpApiInput): Promise<CreatedMcpApi> => ni('createMcpApi');

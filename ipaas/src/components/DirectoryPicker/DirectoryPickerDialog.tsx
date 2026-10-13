@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, TextField, Tooltip, Typography, TreeView } from '@wso2/oxygen-ui';
+import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, Tooltip, Typography, TreeView } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { Folder, RefreshCw, Search } from '@wso2/oxygen-ui-icons-react';
 import { useCallback, useEffect, useState, type JSX } from 'react';
 import type { RepoTreeNode } from '../../types/repository';

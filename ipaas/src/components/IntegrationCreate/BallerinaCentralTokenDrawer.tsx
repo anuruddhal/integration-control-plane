@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, Button, Card, CircularProgress, Drawer, IconButton, InputAdornment, Link, Skeleton, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, Button, Card, CircularProgress, Drawer, IconButton, InputAdornment, Link, Skeleton, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { ArrowUpRight, CheckCircle2, Lock, X } from '@wso2/oxygen-ui-icons-react';
 import { useState, type JSX } from 'react';
 import { BALLERINA_CENTRAL_TOKEN_INSTRUCTIONS, BALLERINA_CENTRAL_TOKEN_PANEL_COPY as PANEL_COPY } from '../../constants/packageRegistries';
@@ -111,9 +112,7 @@ export default function BallerinaCentralTokenDrawer({ open, onClose, tokenInput,
                 </Stack>
               </Card>
 
-              <Alert severity="info">
-                You can update this anytime from Settings &gt; Package Registries in your organization's home view.
-              </Alert>
+              <Alert severity="info">You can update this anytime from Settings &gt; Package Registries in your organization's home view.</Alert>
             </Stack>
           ) : (
             <Stack gap={2}>
@@ -131,12 +130,7 @@ export default function BallerinaCentralTokenDrawer({ open, onClose, tokenInput,
                       </Typography>
                     ))}
                   </Stack>
-                  <Link
-                    href={BALLERINA_CENTRAL_TOKEN_INSTRUCTIONS.linkUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    underline="hover"
-                    sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontWeight: 600, width: 'fit-content' }}>
+                  <Link href={BALLERINA_CENTRAL_TOKEN_INSTRUCTIONS.linkUrl} target="_blank" rel="noopener noreferrer" underline="hover" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontWeight: 600, width: 'fit-content' }}>
                     {BALLERINA_CENTRAL_TOKEN_INSTRUCTIONS.linkLabel} <ArrowUpRight size={16} />
                   </Link>
                 </Stack>

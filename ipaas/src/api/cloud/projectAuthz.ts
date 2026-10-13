@@ -18,10 +18,8 @@
 
 import type { AuthzRole, CreateAuthzRoleInput, UpdateAuthzRoleInput } from '../../types/projectAuthz';
 
-// Intentionally a stub (the standard cloud-stub contract — see src/api/AGENTS.md).
-const ni = (name: string): never => {
-  throw new Error(`[cloud] projectAuthz.${name}: not implemented`);
-};
+// Intentionally a stub: the BFF has no endpoints for this yet, so every call throws via ni().
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] projectAuthz.${name}: not implemented`));
 
 export const fetchAuthzRoles = (_projectId: string): Promise<AuthzRole[]> => ni('fetchAuthzRoles');
 export const createAuthzRole = (_projectId: string, _input: CreateAuthzRoleInput): Promise<AuthzRole> => ni('createAuthzRole');

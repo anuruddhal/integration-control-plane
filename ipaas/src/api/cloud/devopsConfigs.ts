@@ -345,7 +345,7 @@ export const mountConfig = async (_orgUuid: string, projectId: string, component
 
 // The hook only updates a mount for file-mount edits (mount path is editable);
 // env-var edits update the group via updateConfigMapData/updateSecret instead.
-export const updateConfigMount = async (_orgUuid: string, projectId: string, path: ConfigMountPath, data: Record<string, unknown>): Promise<DevopsConfigMount> => {
+export const updateConfigMount = async (_orgUuid: string, projectId: string, path: ConfigMountPath, data: ConfigMountWriteData): Promise<DevopsConfigMount> => {
   const fileName = path.mountId;
   const env = path.containerId;
   const mountPath = (data.mount_path as string) ?? '';

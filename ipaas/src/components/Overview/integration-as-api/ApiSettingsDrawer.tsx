@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, Button, CircularProgress, Divider, Drawer, IconButton, MenuItem, Select, Stack, TextField, Tooltip, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, Button, CircularProgress, Divider, Drawer, IconButton, MenuItem, Select, Stack, Tooltip, Typography } from '@wso2/oxygen-ui';
+import TextField from '../../common/TextField';
 import { X } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { useEndpointPolicies, useSetEndpointPolicies } from '../../../hooks/useConsumers';

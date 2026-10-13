@@ -27,12 +27,12 @@ test.describe('cloud login @smoke', () => {
     await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible({ timeout: 60_000 });
   });
 
-  test('/login hands off to the Thunder sign-in page', async ({ page }) => {
+  test('TC_IP_AUTH_001 /login hands off to the Thunder sign-in page', async ({ page }) => {
     await expect(page).toHaveURL(/\/gate\/signin/);
     await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
   });
 
-  test('shows Google and GitHub as the only sign-in options', async ({ page }) => {
+  test('TC_IP_AUTH_002 shows Google and GitHub as the only sign-in options', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible();
 
@@ -40,7 +40,7 @@ test.describe('cloud login @smoke', () => {
     await expect(page.locator('input')).toHaveCount(0);
   });
 
-  test('shows Terms of Service and Privacy Policy links', async ({ page }) => {
+  test('TC_IP_AUTH_003 shows Terms of Service and Privacy Policy links', async ({ page }) => {
     const terms = page.getByRole('link', { name: 'Terms of Service' });
     const privacy = page.getByRole('link', { name: 'Privacy Policy' });
 
@@ -50,7 +50,7 @@ test.describe('cloud login @smoke', () => {
     await expect(privacy).toHaveAttribute('href', 'https://wso2.com/privacy-policy/');
   });
 
-  test('GitHub option hands off to a GitHub OAuth app that can identify the user', async ({ page }) => {
+  test('TC_IP_AUTH_004 GitHub option hands off to a GitHub OAuth app that can identify the user', async ({ page }) => {
     await page.getByRole('button', { name: 'Continue with GitHub' }).click();
     await page.waitForURL(/github\.com/, { timeout: 60_000, waitUntil: 'domcontentloaded' });
 

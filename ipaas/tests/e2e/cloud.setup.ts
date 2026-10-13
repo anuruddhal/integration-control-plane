@@ -23,6 +23,7 @@ import { fileURLToPath } from 'url';
 import { waitForOTP } from './helpers/gmail.js';
 import { projectNameFor } from './helpers/journey-project.js';
 import { fillSecret, readSecret } from './helpers/secrets.js';
+import { parkSessionStorage } from './helpers/session-storage.js';
 import { msUntilNextWindow, totpCode } from './helpers/totp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -226,6 +227,8 @@ setup('authenticate cloud', async ({ page }) => {
 
   console.log(`Signed in. Landed on ${url}`);
 
+  // The SDK's session is in sessionStorage, which storageState does not save on its own.
+  await parkSessionStorage(page);
   await page.context().storageState({ path: AUTH_FILE });
 
   // Named here, where a run begins exactly once: the journey's workers read it back, so a restarted worker keeps the name.

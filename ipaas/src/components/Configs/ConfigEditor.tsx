@@ -16,7 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, IconButton, Paper, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, IconButton, Paper, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from '../common/TextField';
 import { ArrowLeft, Trash2, Upload } from '@wso2/oxygen-ui-icons-react';
 import BusyFields from '../common/BusyFields';
 import { useEffect, useRef, useState, type JSX } from 'react';
@@ -240,7 +241,6 @@ export default function ConfigEditor({ ctx, existing, onBack, onSaved, onError }
           <Stack gap={3} sx={{ mt: 2 }}>
             <TextField
               label="File Mount path"
-              placeholder="/app/configs/config.json"
               value={mountPath}
               onChange={(e) => setMountPath(e.target.value)}
               fullWidth
@@ -271,8 +271,7 @@ export default function ConfigEditor({ ctx, existing, onBack, onSaved, onError }
               multiline
               minRows={8}
               required
-              helperText=" "
-              placeholder={isEdit && isSecret ? 'Re-enter the secret file content' : 'Upload a file or type the content here'}
+              helperText={isEdit && isSecret ? 'Secret content is never shown. Enter the full content again to replace it.' : ' '}
               sx={{ '& textarea': { fontFamily: 'monospace', fontSize: '0.8125rem' } }}
             />
           </Stack>

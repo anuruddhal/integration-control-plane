@@ -143,16 +143,16 @@ card, and waiting out two real builds would double the suite's runtime for no ex
 **Settings**
 
 - the organization settings page exists
-- it offers Org Details and Package Registries
+- it offers Package Registries, and no longer Org Details
 - it offers no section that belongs only to the WIP build
-- the Package Registries and Org Details pages each render
+- the Package Registries page renders
 - the project settings page exists
 
 **Top nav and footer**
 
 - signing out redirects to the login page
 - the project picker opens a project's home
-- the footer shows Terms of Use, Privacy Policy and Support in that order
+- the footer shows Documentation, Support, Terms of Use and Privacy Policy in that order
 - footer links open in a new tab, and the WSO2 copyright notice is shown
 
 Specs that create anything create it themselves and delete it in teardown, so a run leaves the
@@ -178,8 +178,17 @@ change mid-run and the later groups would look for a project nobody created.
 Group **08b** then sweeps what other runs left behind: any dated `IPAAS-E2E` project older
 than **two hours** is emptied and deleted. Two hours is deliberately longer than the suite's own
 worst case — the in-cluster Job is capped at two hours — so a slow run never has its project deleted
-from under it. A project this scheme cannot date, including a hand-made `IPAAS-E2E`, is left alone:
-nothing here knows whose it is.
+from under it. A project this scheme cannot date is left alone: nothing here knows whose it is.
+
+The one exception is a project named exactly `IPAAS-E2E`, with no date or suffix. That is the
+fixture name the suite used before runs took dated names, so it is the suite's own leftover, and
+08b can never collect it because it cannot be dated. Group **00** sweeps it at the start of a run:
+it empties the project from its overview, returning there if Delete Project is still disabled, then
+deletes it. Every lookup matches the name exactly, so a dated `IPAAS-E2E-…` project is never
+touched, and a run pointed at `IPAAS-E2E` through `E2E_PROJECT` skips the sweep rather than delete
+its own project. Like 08b, it is housekeeping: a sweep that cannot finish is skipped with the
+reason annotated, not failed. It runs in its own tab under a deadline shorter than the test's
+timeout, so a stuck leftover is abandoned and skipped rather than timing the test out.
 
 08b is housekeeping, not a product assertion. Each project is swept on its own, so one that cannot
 be deleted does not cost the rest their turn, and a project already mid-deletion is left to finish.
@@ -237,6 +246,19 @@ Enrolling TOTP stops the emails, so set the secret only once the account actuall
 **Cloud, token mode.** `E2E_TOKEN_MODE` swaps `setup-cloud` for `setup-cloud-token`, which
 rebuilds the session from a platform-issued token instead of signing in, so no GitHub credentials
 are needed. It writes the same two files, and the specs cannot tell the difference.
+
+It rebuilds the session by writing the Thunder SDK's own entries — the session record
+`session_data-instance_0-<client_id>` in sessionStorage and the `thunderid-session-active` flag in
+localStorage — so the console under test is the unmodified production build. Those keys are the
+SDK's internal format, checked against the version `package.json` pins: `helpers/token.test.ts`
+fails when that pin changes, and the keys must be re-read off a real sign-in before the guard is
+bumped (`SDK_STORAGE_VERSION` in `helpers/token.ts`).
+
+**Cloud sessions live in sessionStorage**, which Playwright's `storageState` does not save. Both
+cloud setups park the console tab's sessionStorage in the `e2e:session-storage` localStorage entry,
+and `newConsoleContext` (`helpers/session-storage.ts`) copies it back into every tab before the
+console loads. Open cloud contexts with `newConsoleContext`, not `browser.newContext`: a plain
+context starts signed out.
 
 The token comes from `E2E_TOKEN_URL` (wso2cloud's `monitoring-token-provider`) with
 `E2E_TOKEN_AUTH` sent as `X-Auth-Token`. `E2E_TOKEN_TLS_INSECURE` is needed for that hop: the

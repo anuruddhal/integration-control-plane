@@ -21,9 +21,8 @@ import { Clock, Network, RefreshCw } from '@wso2/oxygen-ui-icons-react';
 import { useMemo, useState, type JSX } from 'react';
 import EmptyListing from '../components/EmptyListing';
 import PdpProgressDrawer from '../components/DataPlanes/PdpProgressDrawer';
-import ComingSoon from './ComingSoon';
 import { displayPdpProgress, pdpStatusChip } from '../constants/dataPlanes';
-import { isDataPlanesEnabled, useDataPlanes, usePdps } from '../hooks/useDataPlanes';
+import { useDataPlanes, usePdps } from '../hooks/useDataPlanes';
 import { formatDateTime, formatDistanceToNow } from '../utils/time';
 import type { Cluster, PdpManagerPdp } from '../types/dataPlanes';
 import type { OrgScope } from '../nav';
@@ -88,10 +87,6 @@ export default function OrgDataPlanes(_scope: OrgScope): JSX.Element {
     refetch();
     refetchPdps();
   };
-
-  if (!isDataPlanesEnabled()) {
-    return <ComingSoon title="Coming Soon" description="Data Planes management is currently under development." />;
-  }
 
   return (
     <PageContent>

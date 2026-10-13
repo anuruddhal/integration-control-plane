@@ -22,9 +22,7 @@
 import type { Certificate, CreateCertificateInput } from '../../types/certificates';
 import type { ConfigGroup, ConfigGroupUsage } from '../../types/configGroups';
 
-const ni = (name: string): never => {
-  throw new Error(`[cloud] certificates.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] certificates.${name}: not implemented`));
 
 // awaits: certificate groups list endpoint. Empty default keeps the read-only
 // listing page rendering (with an empty state) instead of throwing on cloud.

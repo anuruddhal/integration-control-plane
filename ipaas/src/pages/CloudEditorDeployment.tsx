@@ -21,8 +21,8 @@ import { useLocation } from 'react-router';
 import { Alert, Box, Button, Typography } from '@wso2/oxygen-ui';
 import { useCreateCodeServer, useEditorKeepAlive, useEditorReady, useGetOrCreateSampleRegistry } from '../hooks/useCloudEditor';
 import { useComponentPods } from '../hooks/useRuntime';
-import { CLOUD_EDITOR_POLL_MS, CLOUD_EDITOR_READY_TIMEOUT_MS, CLOUD_EDITOR_SLOW_NOTICE_MS, CLOUD_EDITOR_STEPS, CLOUD_EDITOR_TIMEOUT_MESSAGE, CLOUD_EDITOR_TIMEOUT_MS } from '../constants/cloudEditor';
-import { displayableEditorUrl, highestPodPhase } from '../utils/cloudEditor';
+import { CLOUD_EDITOR_POLL_MS, CLOUD_EDITOR_STEPS, CLOUD_EDITOR_TIMEOUT_MESSAGE, CLOUD_EDITOR_TIMEOUT_MS } from '../constants/cloudEditor';
+import { highestPodPhase } from '../utils/cloudEditor';
 import DeploymentWheel from '../components/CloudEditor/DeploymentWheel';
 import type { ChoreoSampleImage, CloudEditorStepKey, CodeServerInstance, DeploymentParams } from '../types/cloudEditor';
 
@@ -47,8 +47,6 @@ export default function CloudEditorDeployment(): JSX.Element {
   const [stepKey, setStepKey] = useState<CloudEditorStepKey>('initializing');
   const [error, setError] = useState<string | null>(null);
   const [instance, setInstance] = useState<CodeServerInstance | null>(null);
-  const [slowNotice, setSlowNotice] = useState(false);
-  const [waitStalled, setWaitStalled] = useState(false);
   const hasRun = useRef(false);
   const hasRedirected = useRef(false);
   const getOrCreateRegistryMutation = useGetOrCreateSampleRegistry();
@@ -193,25 +191,6 @@ export default function CloudEditorDeployment(): JSX.Element {
 
   // Keep the scale-to-zero timer off the editor for the whole wait.
   useEditorKeepAlive(instance?.url, isPolling || awaitingReady);
-
-  // A cold create waits on a multi-minute image pull, which reads as a hang.
-  // Timed from mount: `instance` arriving mid-wait must not restart the clock.
-  useEffect(() => {
-    const id = window.setTimeout(() => setSlowNotice(true), CLOUD_EDITOR_SLOW_NOTICE_MS);
-    return () => clearTimeout(id);
-  }, []);
-
-  // The readiness wait has no natural end, so bound it. Non-fatal on purpose: the
-  // address is still correct, so the page keeps showing it instead of replacing
-  // everything with an error screen.
-  useEffect(() => {
-    if (!awaitingReady) return undefined;
-    const id = window.setTimeout(() => setWaitStalled(true), CLOUD_EDITOR_READY_TIMEOUT_MS);
-    return () => clearTimeout(id);
-  }, [awaitingReady]);
-
-  // A poll that keeps failing after its retries is the same dead end.
-  const stalled = waitStalled || (awaitingReady && readyQuery.isError);
 
   // Give up if the pod never becomes ready.
   useEffect(() => {

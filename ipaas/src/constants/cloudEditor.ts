@@ -40,16 +40,6 @@ export const CLOUD_EDITOR_POLL_MS = 3_000;
 export const CLOUD_EDITOR_TIMEOUT_MS = 3 * 60 * 1000;
 
 /**
- * How long the page waits for a known-address editor to start serving before
- * saying so. Generous: a cold start pulls a ~1 GB image. Non-fatal — the address
- * stays on screen when it elapses.
- */
-export const CLOUD_EDITOR_READY_TIMEOUT_MS = 15 * 60 * 1000;
-
-/** Delay before the first-launch "this can take a few minutes" notice (ms). */
-export const CLOUD_EDITOR_SLOW_NOTICE_MS = 45_000;
-
-/**
  * Message of the error thrown when the cloud poll budget expires. Shared so
  * CloudEditorDeployment can branch on it without a bare literal across the #api seam.
  */

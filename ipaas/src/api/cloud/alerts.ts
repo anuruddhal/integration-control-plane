@@ -16,14 +16,16 @@
  * under the License.
  */
 
-// TODO: implement using cloud APIs
-const ni = (name: string): never => {
-  throw new Error(`[cloud] alerts.${name}: not implemented`);
-};
+import type { AlertRuleCountUsage, AlertRule, AlertHistoryResponse } from '../../types/alerts';
+import type { AlertComponentType } from '../../constants/alerts';
 
-export const getAlertRulesCount = (..._args: unknown[]): never => ni('getAlertRulesCount');
-export const getAlertRules = (..._args: unknown[]): never => ni('getAlertRules');
-export const createAlertRule = (..._args: unknown[]): never => ni('createAlertRule');
-export const updateAlertRule = (..._args: unknown[]): never => ni('updateAlertRule');
-export const deleteAlertRule = (..._args: unknown[]): never => ni('deleteAlertRule');
-export const getAlertHistory = (..._args: unknown[]): never => ni('getAlertHistory');
+// TODO: implement using cloud APIs
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] alerts.${name}: not implemented`));
+
+export const getAlertRulesCount = (_baseUrl: string, _componentId: string, _environmentId: string, _componentType: AlertComponentType): Promise<AlertRuleCountUsage> => ni('getAlertRulesCount');
+export const getAlertRules = (_baseUrl: string, _componentId: string, _environmentId: string, _componentType: AlertComponentType): Promise<AlertRule[]> => ni('getAlertRules');
+export const createAlertRule = (_baseUrl: string, _alertRule: AlertRule): Promise<void> => ni('createAlertRule');
+export const updateAlertRule = (_baseUrl: string, _alertRule: AlertRule): Promise<void> => ni('updateAlertRule');
+export const deleteAlertRule = (_baseUrl: string, _alertRule: AlertRule): Promise<void> => ni('deleteAlertRule');
+export const getAlertHistory = (_baseUrl: string, _componentId: string, _environmentId: string, _startTime: string, _endTime: string, _limit?: number, _versionIdList?: string[], _alertTypes?: string[], _searchPhrase?: string): Promise<AlertHistoryResponse> =>
+  ni('getAlertHistory');

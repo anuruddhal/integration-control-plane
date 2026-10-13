@@ -16,11 +16,11 @@
  * under the License.
  */
 
-// TODO: implement using cloud APIs
-const ni = (name: string): never => {
-  throw new Error(`[cloud] marketplace.${name}: not implemented`);
-};
+import type { ThrottlingPolicy, ApiDocument, RuleAdherenceResponse } from '../../types/marketplace';
 
-export const fetchThrottlingPolicies = (..._args: unknown[]): never => ni('fetchThrottlingPolicies');
-export const fetchApiDocuments = (..._args: unknown[]): never => ni('fetchApiDocuments');
-export const fetchRuleAdherence = (..._args: unknown[]): never => ni('fetchRuleAdherence');
+// TODO: implement using cloud APIs
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] marketplace.${name}: not implemented`));
+
+export const fetchThrottlingPolicies = (): Promise<ThrottlingPolicy[]> => ni('fetchThrottlingPolicies');
+export const fetchApiDocuments = (_apimId: string): Promise<ApiDocument[]> => ni('fetchApiDocuments');
+export const fetchRuleAdherence = (_projectId: string, _componentId: string, _apimId: string): Promise<RuleAdherenceResponse | null> => ni('fetchRuleAdherence');

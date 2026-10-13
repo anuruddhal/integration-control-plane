@@ -16,8 +16,8 @@
  * under the License.
  */
 
-import { Alert, Box, CircularProgress, Stack, type JSX } from '@wso2/oxygen-ui';
-import { useMemo } from 'react';
+import { Alert, Box, CircularProgress, Stack } from '@wso2/oxygen-ui';
+import { useMemo, type JSX } from 'react';
 import TailscaleComponentInfo from './TailscaleComponentInfo';
 import TailscaleEnvCard from './TailscaleEnvCard';
 import type { ComponentDetail } from '../../../types/component';

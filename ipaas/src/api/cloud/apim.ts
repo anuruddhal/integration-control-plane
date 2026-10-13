@@ -28,7 +28,9 @@
  */
 
 import { parse as parseYaml } from 'yaml';
-import type { ApimApiInfo, GeneratedTestKey, DeploySettingsV2Payload, LifecycleState, LifecycleHistory } from '../../types/apim';
+import type { ApimApiInfo, GeneratedTestKey, DeploySettingsV2Payload, LifecycleState, LifecycleHistory, MarketplaceService } from '../../types/apim';
+import type { EnvEndpoint } from '../../types/component';
+import type { ApiDocument } from '../../types/marketplace';
 
 export async function fetchApimApi(_apimId: string): Promise<ApimApiInfo | null> {
   return null;
@@ -62,30 +64,27 @@ export async function changeLifecycleState(_apimId: string, _action: string): Pr
   throw new Error('Lifecycle management is not supported in this build.');
 }
 
-// Not wired to a cloud backend yet — per the src/api/AGENTS.md stub contract
-// these throw via ni() so callers can never mistake an unsupported read or
-// save for a successful one.
+// Not wired to a cloud backend yet. These throw via ni() so callers can never
+// mistake an unsupported read or save for a successful one.
 // TODO: implement using cloud APIs
-const ni = (name: string): never => {
-  throw new Error(`[cloud] apim.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] apim.${name}: not implemented`));
 
-export const fetchApimOverview = (..._args: unknown[]): never => ni('fetchApimOverview');
-export const saveApimOverview = (..._args: unknown[]): never => ni('saveApimOverview');
-export const fetchApimThumbnail = (..._args: unknown[]): never => ni('fetchApimThumbnail');
-export const saveApimThumbnail = (..._args: unknown[]): never => ni('saveApimThumbnail');
-export const fetchMarketplaceService = (..._args: unknown[]): never => ni('fetchMarketplaceService');
-export const saveMarketplaceService = (..._args: unknown[]): never => ni('saveMarketplaceService');
+export const fetchApimOverview = (_apimId: string): Promise<string> => ni('fetchApimOverview');
+export const saveApimOverview = (_apimId: string, _content: string): Promise<void> => ni('saveApimOverview');
+export const fetchApimThumbnail = (_apimId: string): Promise<string | null> => ni('fetchApimThumbnail');
+export const saveApimThumbnail = (_apimId: string, _file: File): Promise<void> => ni('saveApimThumbnail');
+export const fetchMarketplaceService = (_componentId: string, _version: string, _endpoint: EnvEndpoint): Promise<MarketplaceService | null> => ni('fetchMarketplaceService');
+export const saveMarketplaceService = (_serviceId: string, _service: MarketplaceService): Promise<void> => ni('saveMarketplaceService');
 
 // API documentation lives in APIM's publisher store, which OpenChoreo has no
 // equivalent for. The consumers are gated on IS_DEVANT and never reach these in
 // cloud builds; they throw rather than fake a document so an unsupported call
 // can never look successful.
-export const fetchApimDocuments = (..._args: unknown[]): never => ni('fetchApimDocuments');
-export const fetchApimDocumentContent = (..._args: unknown[]): never => ni('fetchApimDocumentContent');
-export const createApimDocument = (..._args: unknown[]): never => ni('createApimDocument');
-export const updateApimDocument = (..._args: unknown[]): never => ni('updateApimDocument');
-export const deleteApimDocument = (..._args: unknown[]): never => ni('deleteApimDocument');
+export const fetchApimDocuments = (_apimId: string): Promise<ApiDocument[]> => ni('fetchApimDocuments');
+export const fetchApimDocumentContent = (_apimId: string, _docId: string): Promise<string> => ni('fetchApimDocumentContent');
+export const createApimDocument = (_apimId: string, _doc: Omit<ApiDocument, 'documentId'>, _content: string): Promise<ApiDocument> => ni('createApimDocument');
+export const updateApimDocument = (_apimId: string, _docId: string, _doc: ApiDocument, _content?: string): Promise<ApiDocument> => ni('updateApimDocument');
+export const deleteApimDocument = (_apimId: string, _docId: string): Promise<void> => ni('deleteApimDocument');
 
 // schemaContent is the endpoint's base64-encoded OpenAPI (YAML or JSON), carried
 // via the endpoint's apimRevisionId field by cloud fetchEnvEndpoints.

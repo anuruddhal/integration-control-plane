@@ -46,7 +46,7 @@ export async function waitForBuildToSettle(page: Page): Promise<string> {
   throw new Error(`Build did not reach a terminal state within ${BUILD_TIMEOUT_MS / 60_000} minutes; last status: ${await buildStatus(page).textContent()}`);
 }
 
-/** Reseeding writes through page.evaluate, so it only reaches the console's own localStorage. */
+/** Reseeding writes through page.evaluate, so it only reaches the console's own storage. */
 async function reseedFromConsoleOrigin(page: Page, returnTo: string): Promise<void> {
   await page.goto('/config.json', { waitUntil: 'domcontentloaded' });
   await reseedSessionToken(page);

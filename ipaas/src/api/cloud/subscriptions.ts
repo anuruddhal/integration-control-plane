@@ -20,9 +20,7 @@
 // mirror Contracts.SubscriptionsApi so _check.ts catches any drift.
 import type { ComponentLimits, SubscriptionList } from '../../types/subscription';
 
-const ni = (name: string): never => {
-  throw new Error(`[cloud] subscriptions.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] subscriptions.${name}: not implemented`));
 
 export const getSubscriptions = (_orgUuid: string): Promise<SubscriptionList> => ni('getSubscriptions');
 export const getComponentLimits = (_orgUuid: string): Promise<ComponentLimits> => ni('getComponentLimits');

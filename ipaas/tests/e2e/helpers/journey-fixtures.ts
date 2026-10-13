@@ -36,12 +36,12 @@ export const NO_SCHEDULE = 'This automation doesn’t have an active schedule. A
 /** Order matters: this is the order AppLayout renders them in. Hrefs from paths.ts. */
 export const FOOTER_LINKS = [
   ['Documentation', 'https://wso2.com/integration-platform/docs/'],
+  ['Support', 'https://discord.com/invite/wso2'],
   ['Terms of Use', 'https://wso2.com/integration-platform/terms-of-use'],
   ['Privacy Policy', 'https://wso2.com/privacy-policy'],
-  ['Support', 'https://discord.com/invite/wso2'],
 ] as const;
 
-export const CLOUD_SECTIONS = ['Org Details', 'Package Registries'] as const;
+export const CLOUD_SECTIONS = ['Package Registries'] as const;
 export const WIP_ONLY_SECTIONS = ['Access Control', 'Egress Control', 'Workflows', 'Credentials', 'On-Prem Keys', 'Application Security'] as const;
 
 /** Deleting an integration is asynchronous: the row greys out, then goes. Observed at ~3 minutes on DEV. */

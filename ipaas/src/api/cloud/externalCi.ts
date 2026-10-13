@@ -18,10 +18,8 @@
 
 import type { ExternalCiToken } from '../../types/externalCi';
 
-// Intentionally a stub (the standard icp-stub contract — see src/api/AGENTS.md).
-const ni = (name: string): never => {
-  throw new Error(`[cloud] externalCi.${name}: not implemented`);
-};
+// Intentionally a stub: the BFF has no endpoints for this yet, so every call throws via ni().
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] externalCi.${name}: not implemented`));
 
 export const getExternalCiTokens = (_orgUuid: string, _projectId: string, _componentId: string): Promise<ExternalCiToken[]> => ni('getExternalCiTokens');
 export const createExternalCiToken = (_orgUuid: string, _projectId: string, _componentId: string, _tokenName: string): Promise<string> => ni('createExternalCiToken');

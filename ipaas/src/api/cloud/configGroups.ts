@@ -21,9 +21,7 @@
 // until the BFF exposes them. Signatures mirror Contracts.ConfigGroupsApi.
 import type { ConfigGroup, ConfigGroupNameAvailability, ConfigGroupUsage, CreateConfigGroupRequest, EditConfigGroupRequest } from '../../types/configGroups';
 
-const ni = (name: string): never => {
-  throw new Error(`[cloud] configGroups.${name}: not implemented`);
-};
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] configGroups.${name}: not implemented`));
 
 // awaits: config groups list endpoint. Empty default keeps the read-only listing
 // page rendering (with an empty state) instead of throwing on cloud.

@@ -17,7 +17,8 @@
  */
 
 import React, { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { Box, Button, Chip, IconButton, Paper, Popover, Stack, TextField, Typography } from '@wso2/oxygen-ui';
+import { Box, Button, Chip, IconButton, Paper, Popover, Stack, Typography } from '@wso2/oxygen-ui';
+import TextField from '../../common/TextField';
 import { Edit2, Plus, Trash2 } from '@wso2/oxygen-ui-icons-react';
 import type { BaseType, JSONSchema } from '../../../types/schema';
 import { type LinkingInfo, extractAllMapKeySet, extractMapKey, extractUniqueMapKeySet, generateArrayJsonPath, isBaseType } from '../schemaUtils';

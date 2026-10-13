@@ -16,18 +16,17 @@
  * under the License.
  */
 
-// TODO: implement using cloud APIs
-const ni = (name: string): never => {
-  throw new Error(`[cloud] artifacts.${name}: not implemented`);
-};
+import type { ArtifactType, Artifact, ArtifactParam, ArtifactStatusInput, ListenerStateInput } from '../../types/artifact';
 
-export const fetchArtifactTypes = (..._args: unknown[]): never => ni('fetchArtifactTypes');
-export const fetchArtifacts = (..._args: unknown[]): never => ni('fetchArtifacts');
-export const fetchArtifactSource = (..._args: unknown[]): never => ni('fetchArtifactSource');
-export const fetchLocalEntryValue = (..._args: unknown[]): never => ni('fetchLocalEntryValue');
-export const fetchArtifactParams = (..._args: unknown[]): never => ni('fetchArtifactParams');
-export const fetchArtifactWsdl = (..._args: unknown[]): never => ni('fetchArtifactWsdl');
-export const updateArtifactStatus = (..._args: unknown[]): never => ni('updateArtifactStatus');
-export const updateListenerState = (..._args: unknown[]): never => ni('updateListenerState');
-/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-export const ARTIFACT_QUERY_MAP: any = {};
+// TODO: implement using cloud APIs
+const ni = (name: string): Promise<never> => Promise.reject(new Error(`[cloud] artifacts.${name}: not implemented`));
+
+export const fetchArtifactTypes = (_componentId: string, _envId: string): Promise<ArtifactType[]> => ni('fetchArtifactTypes');
+export const fetchArtifacts = (_artifactType: string, _envId: string, _componentId: string): Promise<Artifact[]> => ni('fetchArtifacts');
+export const fetchArtifactSource = (_envId: string, _componentId: string, _artifactType: string, _artifactName: string): Promise<string> => ni('fetchArtifactSource');
+export const fetchLocalEntryValue = (_componentId: string, _entryName: string, _envId: string): Promise<string> => ni('fetchLocalEntryValue');
+export const fetchArtifactParams = (_componentId: string, _artifactType: string, _artifactName: string, _envId: string, _runtimeId?: string): Promise<ArtifactParam[]> => ni('fetchArtifactParams');
+export const fetchArtifactWsdl = (_componentId: string, _artifactType: string, _artifactName: string, _envId: string, _runtimeId?: string): Promise<string> => ni('fetchArtifactWsdl');
+export const updateArtifactStatus = (_input: ArtifactStatusInput): Promise<{ status: string; message: string }> => ni('updateArtifactStatus');
+export const updateListenerState = (_input: ListenerStateInput): Promise<{ success: boolean; message: string; commandIds: string[] }> => ni('updateListenerState');
+export const ARTIFACT_QUERY_MAP: Partial<Record<string, { queryName: string; field: string; fields: string; gqlFields: string }>> = {};
