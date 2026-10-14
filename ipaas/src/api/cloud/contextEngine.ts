@@ -52,7 +52,6 @@ export const getContextEngine = (_engineId: string): Promise<ContextEngineDetail
 export const createContextEngine = (_input: CreateContextEngineInput): Promise<CreateContextEngineResult> => ni('createContextEngine');
 export const deleteContextEngine = (_engineId: string): Promise<ContextJobHandle | null> => ni('deleteContextEngine');
 export const updateContextModels = (_input: UpdateContextModelsInput): Promise<ContextEngineModels> => ni('updateContextModels');
-export const rebuildContextEngine = (_engineId: string): Promise<ContextJobHandle> => ni('rebuildContextEngine');
 export const getContextEngineProgress = (_engineId: string): Promise<ContextEngineProgress> => ni('getContextEngineProgress');
 export const ingestContextFile = (_input: IngestFileInput): Promise<ContextJobHandle> => ni('ingestContextFile');
 export const sendContextRecordEvent = (_input: RecordEventInput): Promise<ContextJobHandle> => ni('sendContextRecordEvent');

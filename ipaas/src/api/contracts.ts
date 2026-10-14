@@ -797,7 +797,6 @@ export interface ContextEngineApi {
   createContextEngine(input: CreateContextEngineInput): Promise<CreateContextEngineResult>;
   deleteContextEngine(engineId: string): Promise<ContextJobHandle | null>;
   updateContextModels(input: UpdateContextModelsInput): Promise<ContextEngineModels>;
-  rebuildContextEngine(engineId: string): Promise<ContextJobHandle>;
   getContextEngineProgress(engineId: string): Promise<ContextEngineProgress>;
   ingestContextFile(input: IngestFileInput): Promise<ContextJobHandle>;
   sendContextRecordEvent(input: RecordEventInput): Promise<ContextJobHandle>;
