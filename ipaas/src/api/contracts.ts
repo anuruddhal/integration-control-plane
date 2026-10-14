@@ -122,7 +122,6 @@ import type { ConfigGroup, ConfigGroupNameAvailability, ConfigGroupUsage, Create
 import type {
   ContextEngine,
   ContextEngineDetail,
-  ContextEngineExposure,
   ContextEngineProgress,
   ContextRecordStatus,
   ContextSource,
@@ -796,7 +795,6 @@ export interface ContextEngineApi {
   createContextEngine(input: CreateContextEngineInput): Promise<CreateContextEngineResult>;
   deleteContextEngine(engineId: string): Promise<ContextJobHandle | null>;
   updateContextModels(input: UpdateContextModelsInput): Promise<ContextEngineModels>;
-  updateContextEngineExposure(engineId: string, exposure: ContextEngineExposure): Promise<ContextEngineExposure>;
   rebuildContextEngine(engineId: string): Promise<ContextJobHandle>;
   getContextEngineProgress(engineId: string): Promise<ContextEngineProgress>;
   ingestContextFile(input: IngestFileInput): Promise<ContextJobHandle>;
