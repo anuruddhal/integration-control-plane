@@ -356,3 +356,29 @@ function testDeleteRuntimeNoAccess() returns error? {
     json[] errors = check response.errors.ensureType();
     test:assertTrue(errors.length() > 0, "Should have at least one error");
 }
+
+// =============================================================================
+// createOrgSecret authorization: an unbound (auto-provisioning) secret requires
+// project management, so a Developer cannot mint one and indirectly create
+// projects/integrations via heartbeat onboarding.
+// =============================================================================
+
+@test:Config {
+    groups: ["runtime-graphql", "org-secret-authz"]
+}
+function testDeveloperCannotCreateUnboundOrgSecret() returns error? {
+    string mutation = string `
+        mutation {
+            createOrgSecret(environmentId: "${DEV_ENV_ID}")
+        }
+    `;
+
+    json response = check executeGraphQL(mutation, orgDevToken);
+
+    test:assertTrue(response.errors is json, "Developer must be denied an unbound org secret");
+    json[] errors = check response.errors.ensureType();
+    test:assertTrue(errors.length() > 0, "Should have at least one error");
+    string message = (check errors[0].message).toString();
+    test:assertTrue(message.includes("project management"),
+            string `Error should mention the missing project management permission, got: ${message}`);
+}

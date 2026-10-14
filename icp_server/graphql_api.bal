@@ -3383,6 +3383,14 @@ service /graphql on graphqlListener {
             return secret;
         }
 
+        // An unbound secret auto-provisions a project + integration on its first heartbeat
+        // (see runtime_service.bal), so minting one is an admin operation. Gate it on project
+        // management, not just environment access, so a non-admin cannot indirectly create
+        // projects/integrations by onboarding a runtime.
+        if !check auth:hasPermission(userContext.userId, auth:PERMISSION_PROJECT_MANAGE, auth:buildScopeFromContext()) {
+            return error("Access denied: creating an auto-provisioning (unbound) org secret requires project management permission");
+        }
+
         string secret = check storage:createOrgSecret(environmentId, userContext.userId);
         log:printInfo(string `Org secret created for environment=${environmentId}`, userId = userContext.userId);
         storage:logAuditEvent(storage:AUDIT_ORG_SECRET_CREATE, userId = userContext.userId,
