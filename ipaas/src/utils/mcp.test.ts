@@ -30,6 +30,7 @@ import {
   isMcpForbiddenError,
   isMcpUnauthorizedError,
   isSimpleObjectSchema,
+  copyableToolResult,
   repeatsStructuredContent,
 } from './mcp';
 import type { McpTool } from '../types/mcp';
@@ -123,6 +124,17 @@ describe('repeatsStructuredContent', () => {
     expect(repeatsStructuredContent({ type: 'text', text: '{"state": "completed", "evidence": []}' }, structured)).toBe(true);
     expect(repeatsStructuredContent({ type: 'text', text: 'access_denied: not available' }, structured)).toBe(false);
     expect(repeatsStructuredContent({ type: 'text', text: '{"state": "completed"}' }, undefined)).toBe(false);
+  });
+});
+
+describe('copyableToolResult', () => {
+  it('copies exactly what the result shows', () => {
+    const structured = { state: 'completed' };
+    const note = { type: 'text', text: 'Results are truncated.' } as const;
+    expect(copyableToolResult(structured, [])).toEqual(structured);
+    expect(copyableToolResult(undefined, [note])).toEqual([note]);
+    // Blocks a server adds beyond the structured result are not dropped from the copy.
+    expect(copyableToolResult(structured, [note])).toEqual({ structuredContent: structured, content: [note] });
   });
 });
 
