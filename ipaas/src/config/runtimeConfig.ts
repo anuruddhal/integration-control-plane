@@ -70,6 +70,7 @@ interface RuntimeConfig {
   CONTEXT_ENGINE_API_URL?: string;
   /** Local-development only: a static engine token when the engine cannot verify platform tokens yet. */
   CONTEXT_ENGINE_API_TOKEN?: string;
+  CONTEXT_ENGINE_NAME?: string;
   ENABLE_CONTEXT_ENGINE_FEATURE?: string | boolean;
 }
 
@@ -161,6 +162,8 @@ export interface ApiConfig {
   contextEngineApiUrl: string;
   /** Dev-only static bearer token for the engine; unset sends the platform token. */
   contextEngineApiToken?: string;
+  /** The name shown for the engine at `contextEngineApiUrl`; the engine itself has none, the control plane owns it. */
+  contextEngineName?: string;
   /** Gates the org-level Context Engines feature. */
   enableContextEngineFeature?: boolean;
 }
@@ -295,6 +298,7 @@ export async function loadConfig(): Promise<void> {
       internalMarketplaceUrl: `${choreoBase}/marketplace/0.1.0`,
       contextEngineApiUrl: config.CONTEXT_ENGINE_API_URL ? trim(config.CONTEXT_ENGINE_API_URL) : DEFAULT_CONFIG.contextEngineApiUrl,
       contextEngineApiToken: config.CONTEXT_ENGINE_API_TOKEN?.trim() || undefined,
+      contextEngineName: config.CONTEXT_ENGINE_NAME?.trim() || undefined,
       enableContextEngineFeature: config.ENABLE_CONTEXT_ENGINE_FEATURE === 'true' || config.ENABLE_CONTEXT_ENGINE_FEATURE === true,
     };
 

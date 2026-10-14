@@ -46,6 +46,7 @@ const ni = (name: string): never => {
   throw new Error(`[cloud] contextEngine.${name}: not implemented`);
 };
 
+export const supportsContextEngineProvisioning = false;
 export const listContextEngines = (): Promise<ContextEngine[]> => ni('listContextEngines');
 export const getContextEngine = (_engineId: string): Promise<ContextEngineDetail> => ni('getContextEngine');
 export const createContextEngine = (_input: CreateContextEngineInput): Promise<CreateContextEngineResult> => ni('createContextEngine');
