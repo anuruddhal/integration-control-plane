@@ -18,15 +18,14 @@
 
 import { Alert, Box, /* Button, */ Chip, /* CircularProgress, */ Grid, Link, Stack, Tooltip, Typography } from '@wso2/oxygen-ui';
 import { EyeOff, Info, KeyRound, Lock /* , Play, RefreshCw */ } from '@wso2/oxygen-ui-icons-react';
-import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
-import { useAddContextSource, useAskedFlag, useContextEngineProgress, useContextPermissions, useEngineGraphStatus, useInvalidateContextEngine, useRebuildContextEngine, useUploadAudience } from '../../../hooks/useContextEngine';
+import { useState, type JSX, type ReactNode } from 'react';
+import { CONTEXT_ENGINE_PROVISIONING, useAddContextSource, useAskedFlag, useContextEngineProgress, useContextPermissions, useUploadAudience } from '../../../hooks/useContextEngine';
 import { rememberedSourceRules, rememberSourceRules, startUploads } from '../../../hooks/contextUploads';
-import { CONTEXT_JOB_TERMINAL_STATES, EVERYONE_VISIBILITY, LLM_PROVIDERS, STORAGE_BACKENDS } from '../../../constants/contextEngine';
+import { EVERYONE_VISIBILITY, LLM_PROVIDERS, STORAGE_BACKENDS } from '../../../constants/contextEngine';
 import { EMBEDDING_PROVIDERS } from '../../../constants/ragIngestion';
 import { checkStagedFile, connectorFor, engineMessage, getStartedSteps, modelKeysLabel, sourceAsConfig, summarizeEngineProgress, visibilityTags, withSourceVisibilityRules } from '../../../utils/contextEngine';
 import { dropStagedFile, getStagedFile } from '../../../utils/stagedFiles';
 import { HttpError } from '../../../types/http';
-// import GraphStatusChip from '../GraphStatusChip';
 import GetStartedChecklist from './GetStartedChecklist';
 import OwnerAccessButton from './OwnerAccessButton';
 import SourcesProgressCard from './SourcesProgressCard';
@@ -94,28 +93,12 @@ function ModelRow({ label, provider, model, locked = false }: { label: string; p
   );
 }
 
-/** Who can see the models: the configuration route needs source or space management rights. */
-const canSeeModels = (actions: string[] | undefined): boolean => !actions || actions.includes('space.manage') || actions.includes('source.manage');
+/** Who can see the models: the engine shows them to anyone with a grant on it. */
+const canSeeModels = (actions: string[] | undefined): boolean => !actions || actions.length > 0;
 
 const SOURCES_CARD_ID = 'context-engine-sources';
 
-interface EnrichFailure {
-  message: string;
-  /** The engine refused this user; they may be able to grant themselves the creator's access. */
-  forbidden?: boolean;
-}
-
-function enrichFailure(e: unknown): EnrichFailure {
-  if (e instanceof HttpError) {
-    if (e.status === 403) return { message: 'Enriching needs the context.enrich permission on this engine.', forbidden: true };
-    if (e.status === 503) return { message: "The engine is running without its knowledge backend, so it can't enrich yet. Start it in provider mode with model keys." };
-    if (e.status === 409) return { message: 'This enrichment request is already bound to another one. Try again.' };
-    if (e.status === 404 || e.status === 405) return { message: 'Enrichment is not available on this engine yet — the route has not been enabled.' };
-  }
-  return { message: "Couldn't start enrichment. Please try again." };
-}
-
-/** Overview — first-run checklist, source progress, enrichment, access, models, storage and exposure, each linking to its tab. */
+/** Overview — first-run checklist, source progress, access, models, storage and exposure, each linking to its tab. */
 export default function OverviewTab({ engine, orgHandle, /* roleNames, */ onGoTab, openFilesSourceId, readOnly = false }: OverviewTabProps): JSX.Element {
   const [filesSource, setFilesSource] = useState<ContextSource | null>(() => engine.sources.find((s) => s.id === openFilesSourceId && s.type === 'upload') ?? null);
   const [filesOpen, setFilesOpen] = useState(!!openFilesSourceId);
@@ -123,12 +106,8 @@ export default function OverviewTab({ engine, orgHandle, /* roleNames, */ onGoTa
     setFilesSource(source);
     setFilesOpen(true);
   };
-  const rebuild = useRebuildContextEngine(engine.id);
-  const invalidate = useInvalidateContextEngine(engine.id);
   const { asked } = useAskedFlag(engine.id);
-  const { graph, job, remember } = useEngineGraphStatus(engine.id, engine.graph, rebuild.isPending);
   const progress = useContextEngineProgress(engine.id);
-  const [enrichError, setEnrichError] = useState<EnrichFailure | null>(null);
   // Adding a source reuses the wizard's drawer; the session key remounts it fresh each time.
   const [addSession, setAddSession] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
@@ -136,7 +115,8 @@ export default function OverviewTab({ engine, orgHandle, /* roleNames, */ onGoTa
   const [sourceNotice, setSourceNotice] = useState<{ severity: 'warning' | 'error'; message: string; forbidden?: boolean; retry?: () => void } | null>(null);
   const addSource = useAddContextSource(engine.id);
   const permissions = useContextPermissions(engine.id);
-  const canEditModels = !readOnly && !!permissions.data?.includes('space.manage');
+  // Models come from the engine's environment; changing them is provisioning, the control plane's.
+  const canEditModels = CONTEXT_ENGINE_PROVISIONING && !readOnly && !!permissions.data?.includes('engine.manage');
   const [modelsOpen, setModelsOpen] = useState(false);
   const [modelsSession, setModelsSession] = useState(0);
   const openModels = () => {
@@ -175,16 +155,6 @@ export default function OverviewTab({ engine, orgHandle, /* roleNames, */ onGoTa
       },
     });
   };
-  // const building = graph.state === 'building';
-
-  // When a job we are watching ends, the engine may report new state — refetch the engine once.
-  const jobState = job?.state;
-  const lastJobState = useRef(jobState);
-  useEffect(() => {
-    const was = lastJobState.current;
-    lastJobState.current = jobState;
-    if (was && !CONTEXT_JOB_TERMINAL_STATES.has(was) && jobState && CONTEXT_JOB_TERMINAL_STATES.has(jobState)) invalidate();
-  }, [jobState, invalidate]);
 
   const progressSummary = progress.data?.available
     ? summarizeEngineProgress(
@@ -196,16 +166,8 @@ export default function OverviewTab({ engine, orgHandle, /* roleNames, */ onGoTa
   const uploadSources = engine.sources.filter((s) => s.type === 'upload');
   const uploadFirst = uploadSources.length > 0 && uploadSources.length === engine.sources.length && (!progressSummary || (progressSummary.processed === 0 && progressSummary.active === 0));
   // 'Grant access' step hidden along with the Access tab: roles can't be granted from the UI, so it would never complete.
-  const steps = getStartedSteps({ ...engine, graph }, asked, progressSummary, uploadFirst).filter((s) => s.id !== 'grant');
+  const steps = getStartedSteps(engine, asked, progressSummary, uploadFirst).filter((s) => s.id !== 'grant');
   const allDone = steps.every((s) => s.state === 'done');
-
-  const startEnrichment = () => {
-    setEnrichError(null);
-    rebuild.mutate(undefined, {
-      onSuccess: (handle) => remember(handle.jobId),
-      onError: (e) => setEnrichError(enrichFailure(e)),
-    });
-  };
 
   const onChecklistAction = (id: GetStartedStepId) => {
     if (id === 'index' && uploadFirst) openFiles(uploadSources[0]);
@@ -230,20 +192,12 @@ export default function OverviewTab({ engine, orgHandle, /* roleNames, */ onGoTa
         </Alert>
       )}
 
-      {enrichError && (
-        <Alert severity="warning" variant="outlined" onClose={() => setEnrichError(null)} action={enrichError.forbidden ? <OwnerAccessButton engineId={engine.id} onGranted={startEnrichment} /> : undefined} sx={{ mb: 2 }}>
-          {enrichError.message}
-        </Alert>
-      )}
-
       <Grid container spacing={2}>
-        {/* Full width while the Context graph card is hidden; was md: 7 beside it. */}
         <Grid size={{ xs: 12 }}>
           <SourcesProgressCard
             id={SOURCES_CARD_ID}
             engineId={engine.id}
             sources={engine.sources}
-            graph={graph}
             onManageFiles={readOnly ? undefined : openFiles}
             onAddSource={
               readOnly
@@ -256,37 +210,6 @@ export default function OverviewTab({ engine, orgHandle, /* roleNames, */ onGoTa
             onEditSource={readOnly ? undefined : setEditSource}
           />
         </Grid>
-
-        {/* 'Context graph' (Enrich) card hidden for now.
-        <Grid size={{ xs: 12, md: 5 }}>
-          <Card
-            title="Context graph"
-            action={
-              <Button size="small" variant="outlined" startIcon={building ? <CircularProgress size={14} color="inherit" /> : graph.state === 'built' ? <RefreshCw size={14} /> : <Play size={14} />} disabled={building || readOnly} onClick={startEnrichment}>
-                {building ? 'Enriching…' : graph.state === 'built' ? 'Enrich again' : 'Enrich'}
-              </Button>
-            }>
-            <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.5 }}>
-              <GraphStatusChip graph={graph} />
-              {job && (
-                <Typography variant="caption" sx={mutedSx}>
-                  Job {job.id} · attempt {job.attemptCount}
-                </Typography>
-              )}
-            </Stack>
-            <Typography variant="body2" sx={mutedSx}>
-              {graph.state === 'built'
-                ? 'Enrichment derived more connections from the indexed items. Run it again after large changes; queries keep working while it runs.'
-                : `Indexing already builds the graph and makes items searchable. Enrichment is an optional pass that derives more connections from ${engine.sources.length} source${engine.sources.length === 1 ? '' : 's'} with the engine's language model.`}
-            </Typography>
-            {job?.error && (
-              <Alert severity="error" variant="outlined" sx={{ mt: 1.5 }}>
-                {job.error.message}
-              </Alert>
-            )}
-          </Card>
-        </Grid>
-        */}
 
         {/* 'Who can query' card hidden for now, along with the Access tab.
         <Grid size={{ xs: 12, md: 4 }}>
@@ -326,6 +249,11 @@ export default function OverviewTab({ engine, orgHandle, /* roleNames, */ onGoTa
               <>
                 <ModelRow label="Embedding" provider={engine.models.embedding ? providerName('embedding', engine.models.embedding.provider) : 'Engine default'} model={engine.models.embedding?.model} locked={!!engine.models.embeddingLocked} />
                 <ModelRow label="Language model" provider={engine.models.llm ? providerName('llm', engine.models.llm.provider) : 'Engine default'} model={engine.models.llm?.model} />
+                <ModelRow
+                  label="Answer model"
+                  provider={!engine.exposure.answers ? 'Answers off' : engine.models.answer ? providerName('llm', engine.models.answer.provider) : 'Engine default'}
+                  model={engine.exposure.answers ? engine.models.answer?.model : undefined}
+                />
                 {modelKeysLabel(engine.models) ? (
                   <Stack direction="row" alignItems="center" gap={0.75} sx={{ ...mutedSx, mt: 1.25 }}>
                     <KeyRound size={14} aria-hidden />
@@ -344,7 +272,7 @@ export default function OverviewTab({ engine, orgHandle, /* roleNames, */ onGoTa
             ) : (
               <Stack direction="row" gap={1} sx={mutedSx}>
                 <EyeOff size={16} aria-hidden style={{ marginTop: 2, flexShrink: 0 }} />
-                <Typography variant="body2">Only people who manage this engine&apos;s sources or settings can see its models.</Typography>
+                <Typography variant="body2">Only people with access to the whole engine can see its models; access to a single source isn&apos;t enough.</Typography>
               </Stack>
             )}
           </Card>

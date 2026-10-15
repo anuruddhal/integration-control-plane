@@ -20,7 +20,7 @@ import { Alert, Box, Button, CircularProgress, IconButton, ListingTable, PageCon
 import { Play, Plus, RotateCcw, Trash2 } from '@wso2/oxygen-ui-icons-react';
 import { useMemo, useState, type JSX, type MouseEvent } from 'react';
 import { useAppNavigate } from '../hooks/useAppNavigate';
-import { isContextEngineEnabled, useContextEngines, useDeleteContextEngine, useDeletionFailed } from '../hooks/useContextEngine';
+import { CONTEXT_ENGINE_PROVISIONING, isContextEngineEnabled, useContextEngines, useDeleteContextEngine, useDeletionFailed } from '../hooks/useContextEngine';
 import { contextEngineUrl, newContextEngineUrl } from '../paths';
 import { HttpError } from '../types/http';
 import ComingSoon from './ComingSoon';
@@ -28,7 +28,6 @@ import DeleteEngineDialog from '../components/ContextEngine/DeleteEngineDialog';
 import DeletionStatus from '../components/ContextEngine/DeletionStatus';
 import SearchField from '../components/SearchField';
 import ExposurePills from '../components/ContextEngine/ExposurePills';
-import { EngineGraphChip } from '../components/ContextEngine/GraphStatusChip';
 import SourceMark from '../components/ContextEngine/SourceMark';
 import { listMarksSx, listProgressTextSx } from '../components/ContextEngine/styles';
 import { engineMessage, progressListingText } from '../utils/contextEngine';
@@ -112,9 +111,9 @@ export default function OrgContextEngines(scope: OrgScope): JSX.Element {
   const startDelete = (engine: ContextEngine, fromDialog: boolean) => {
     setDeleteError(null);
     remove.mutate(engine.id, {
-      onSuccess: () => {
+      onSuccess: (handle) => {
         setToDelete(null);
-        setAlert({ type: 'info', message: `“${engine.name}” is being deleted. It leaves this list once the engine finishes.` });
+        setAlert({ type: 'info', message: handle ? `“${engine.name}” is being deleted. It leaves this list once the engine finishes.` : `“${engine.name}” was deleted.` });
       },
       onError: (e) => (fromDialog ? setDeleteError(deletionError(e, engine.name)) : setAlert({ type: 'error', message: deletionError(e, engine.name) })),
     });
@@ -131,9 +130,11 @@ export default function OrgContextEngines(scope: OrgScope): JSX.Element {
         {!!engines?.length && (
           <Stack direction="row" alignItems="center" gap={1.5}>
             <SearchField value={search} onChange={setSearch} placeholder="Search engines..." sx={{ minWidth: 220 }} />
-            <Button variant="contained" startIcon={<Plus size={20} />} onClick={goCreate} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-              Create
-            </Button>
+            {CONTEXT_ENGINE_PROVISIONING && (
+              <Button variant="contained" startIcon={<Plus size={20} />} onClick={goCreate} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+                Create
+              </Button>
+            )}
           </Stack>
         )}
       </Stack>
@@ -169,7 +170,6 @@ export default function OrgContextEngines(scope: OrgScope): JSX.Element {
                 <ListingTable.Cell>Sources</ListingTable.Cell>
                 <ListingTable.Cell>Who can query</ListingTable.Cell>
                 <ListingTable.Cell>Exposure</ListingTable.Cell>
-                <ListingTable.Cell>Enrichment</ListingTable.Cell>
                 <ListingTable.Cell>State</ListingTable.Cell>
                 <ListingTable.Cell align="right">Actions</ListingTable.Cell>
               </ListingTable.Row>
@@ -230,7 +230,6 @@ export default function OrgContextEngines(scope: OrgScope): JSX.Element {
                       <Typography variant="body2">{e.summary ? (e.summary.roleCount === 0 ? 'Only you' : `${e.summary.roleCount} role${e.summary.roleCount === 1 ? '' : 's'}`) : '—'}</Typography>
                     </ListingTable.Cell>
                     <ListingTable.Cell>{e.summary ? <ExposurePills exposure={e.summary.exposure} /> : '—'}</ListingTable.Cell>
-                    <ListingTable.Cell>{e.summary ? <EngineGraphChip engineId={e.id} reported={e.summary.graph} /> : '—'}</ListingTable.Cell>
                     <ListingTable.Cell>
                       <DeletionStatus engineId={e.id} state={e.state} />
                     </ListingTable.Cell>
@@ -252,6 +251,7 @@ export default function OrgContextEngines(scope: OrgScope): JSX.Element {
           isPending={remove.isPending}
           error={deleteError}
           onConfirm={() => startDelete(toDelete, true)}
+          forgetOnly={!CONTEXT_ENGINE_PROVISIONING}
           onClose={() => {
             if (remove.isPending) return;
             setToDelete(null);

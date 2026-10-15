@@ -24,7 +24,6 @@ import {
   EVERYONE_VISIBILITY,
   OWNER_GRANT_PREFIX,
   defaultStorage,
-  GRAPH_STATE_LABEL,
   isConnectorEnabled,
   LLM_PROVIDERS,
   MCP_CLIENTS,
@@ -50,8 +49,6 @@ import type {
   ContextEngineProgressSummary,
   ContextEngineStorage,
   ContextGrant,
-  ContextGraphStatus,
-  ContextJob,
   ContextRecordStatus,
   ContextSource,
   ContextSourceConfig,
@@ -248,11 +245,12 @@ export function effectiveLlm(form: Pick<ContextEngineForm, 'embedding' | 'llm' |
 }
 
 /** Why the Models step cannot proceed, or null. */
-export function modelsStepBlocker(form: Pick<ContextEngineForm, 'embedding' | 'llm' | 'shareApiKey'>): string | null {
+export function modelsStepBlocker(form: Pick<ContextEngineForm, 'embedding' | 'llm' | 'shareApiKey' | 'answersEnabled' | 'answerLlm'>): string | null {
   if (!form.embedding) return 'Choose an embedding model';
   if (!isEmbeddingValid(form.embedding)) return 'Complete the embedding model';
   if (!form.llm) return 'Choose a language model';
   if (!isLlmValid(effectiveLlm(form))) return 'Complete the language model';
+  if (form.answersEnabled && form.answerLlm && !isLlmValid(form.answerLlm)) return 'Complete the answer model';
   return null;
 }
 
@@ -280,12 +278,14 @@ export function isFormComplete(form: ContextEngineForm): boolean {
 export function toCreateInput(form: ContextEngineForm): CreateContextEngineInput {
   const llm = effectiveLlm(form);
   if (!form.embedding || !isLlmValid(llm)) throw new Error('Model configuration is incomplete.');
-  return { name: form.name.trim(), description: form.description.trim(), sources: form.sources, roles: form.roles, embedding: form.embedding, llm, storage: form.storage };
+  if (form.answersEnabled && form.answerLlm && !isLlmValid(form.answerLlm)) throw new Error('Answer model configuration is incomplete.');
+  const answers = { enabled: form.answersEnabled, model: form.answersEnabled ? form.answerLlm : null };
+  return { name: form.name.trim(), description: form.description.trim(), sources: form.sources, roles: form.roles, embedding: form.embedding, llm, answers, storage: form.storage };
 }
 
 /** Whether the wizard holds anything worth keeping. */
 export function isFormDirty(form: ContextEngineForm): boolean {
-  return form.sources.length > 0 || form.roles.length > 0 || form.embedding !== null || form.llm !== null || !isStorageAllManaged(form.storage) || form.name.trim() !== '' || form.description.trim() !== '';
+  return form.sources.length > 0 || form.roles.length > 0 || form.embedding !== null || form.llm !== null || !form.answersEnabled || form.answerLlm !== null || !isStorageAllManaged(form.storage) || form.name.trim() !== '' || form.description.trim() !== '';
 }
 
 // ── Drafts ──────────────────────────────────────────────────────────────────
@@ -301,7 +301,7 @@ export function toDraft(form: ContextEngineForm, savedAt: string): ContextEngine
   return {
     v: 1,
     savedAt,
-    form: { ...form, sources, storage, embedding: form.embedding ? { ...form.embedding, apiKey: '' } : null, llm: form.llm ? { ...form.llm, apiKey: '' } : null },
+    form: { ...form, sources, storage, embedding: form.embedding ? { ...form.embedding, apiKey: '' } : null, llm: form.llm ? { ...form.llm, apiKey: '' } : null, answerLlm: form.answerLlm ? { ...form.answerLlm, apiKey: '' } : null },
   };
 }
 
@@ -356,6 +356,9 @@ export function fromDraft(raw: string | null): ContextEngineDraft | null {
         embedding: sanitizeModel(f.embedding, EMBEDDING_PROVIDERS),
         llm: sanitizeModel(f.llm, LLM_PROVIDERS),
         shareApiKey: !!f.shareApiKey,
+        // Drafts saved before the answers switch existed offered answers with the language model.
+        answersEnabled: f.answersEnabled !== false,
+        answerLlm: sanitizeModel(f.answerLlm, LLM_PROVIDERS),
         storage: sanitizeStorage(f.storage),
         name: f.name,
         description: typeof f.description === 'string' ? f.description : '',
@@ -930,57 +933,16 @@ export function deliveryIdentity(recordId: string, version: string): string {
   return `${recordId.length}:${recordId}:${version}`;
 }
 
-// ── Graph status and first-run guidance ─────────────────────────────────────
-
-/** Human enrichment status, e.g. "Not enriched", "Enriching · 2 of 3 sources", "Enriched 12 min ago". */
-export function graphStatusText(graph: ContextGraphStatus): string {
-  switch (graph.state) {
-    case 'building':
-      return graph.progress ? `${GRAPH_STATE_LABEL.building} · ${graph.progress.done} of ${graph.progress.total} sources` : GRAPH_STATE_LABEL.building;
-    case 'built':
-      if (!graph.builtAt) return GRAPH_STATE_LABEL.built;
-      {
-        const rel = formatDistanceToNow(graph.builtAt);
-        return rel ? `${GRAPH_STATE_LABEL.built} ${rel.charAt(0).toLowerCase()}${rel.slice(1)}` : GRAPH_STATE_LABEL.built;
-      }
-    default:
-      return GRAPH_STATE_LABEL[graph.state];
-  }
-}
-
-/** Not enriched is neutral: indexing already makes sources searchable, enrichment is optional. */
-export function graphStatusTone(graph: ContextGraphStatus): 'success' | 'default' | 'info' | 'error' {
-  switch (graph.state) {
-    case 'built':
-      return 'success';
-    case 'building':
-      return 'info';
-    case 'failed':
-      return 'error';
-    default:
-      return 'default';
-  }
-}
-
-/**
- * Enrichment status to show: what the engine reports, unless it reports nothing
- * and we know of a job started from this browser. A job still running always wins.
- */
-export function resolveGraphStatus(reported: ContextGraphStatus, job: ContextJob | undefined, starting = false): ContextGraphStatus {
-  if (starting) return { state: 'building' };
-  if (job && job.state !== 'succeeded' && job.state !== 'failed') return { state: 'building', jobId: job.id };
-  if (reported.state !== 'not_built' || !job) return reported;
-  return job.state === 'succeeded' ? { state: 'built', builtAt: job.createdAt, jobId: job.id } : { state: 'failed', jobId: job.id };
-}
+// ── First-run guidance ──────────────────────────────────────────────────────
 
 /**
  * The four first-run steps with their state; the first unfinished one is current.
  * Indexing happens as connectors deliver, so the first step completes from
- * source progress. Engines without progress fall back to a finished enrichment.
+ * source progress.
  */
 export function getStartedSteps(engine: ContextEngineDetail, asked: boolean, progress: ContextEngineProgressSummary | null = null, uploadFirst = false): GetStartedStep[] {
   const done: Record<GetStartedStep['id'], boolean> = {
-    index: progress ? progress.processed > 0 && progress.active === 0 : engine.graph.state === 'built',
+    index: !!progress && progress.processed > 0 && progress.active === 0,
     ask: asked,
     publish: engine.exposure.api || engine.exposure.mcp,
     grant: engine.queryRoles.length > 0,

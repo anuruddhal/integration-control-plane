@@ -22,7 +22,7 @@ import { useMemo, useRef, useState, type JSX } from 'react';
 import { useLocation, useParams } from 'react-router';
 import { useAppNavigate } from '../hooks/useAppNavigate';
 import { useRoles } from '../hooks/useAuth';
-import { isContextEngineEnabled, useContextEngine, useDeleteContextEngine, useDeletionJob } from '../hooks/useContextEngine';
+import { CONTEXT_ENGINE_PROVISIONING, isContextEngineEnabled, useContextEngine, useDeleteContextEngine, useDeletionJob } from '../hooks/useContextEngine';
 import { deletionFailureText, engineMessage } from '../utils/contextEngine';
 import { contextEngineUrl, contextEnginesUrl } from '../paths';
 import { HttpError } from '../types/http';
@@ -30,7 +30,6 @@ import ComingSoon from './ComingSoon';
 import NotFound from '../components/NotFound';
 import DeleteEngineDialog from '../components/ContextEngine/DeleteEngineDialog';
 import EngineStateChip from '../components/ContextEngine/EngineStateChip';
-import { EngineGraphChip } from '../components/ContextEngine/GraphStatusChip';
 import OverviewTab from '../components/ContextEngine/detail/OverviewTab';
 import PlaygroundTab from '../components/ContextEngine/detail/PlaygroundTab';
 import ApiTab from '../components/ContextEngine/detail/ApiTab';
@@ -124,7 +123,8 @@ export default function ContextEngineDetail(scope: OrgScope): JSX.Element {
   const onDelete = () => {
     setDeleteError(null);
     remove.mutate(engine.id, {
-      onSuccess: () => setConfirmDelete(false),
+      // Without a deletion job the engine is gone from this console at once.
+      onSuccess: (handle) => (handle ? setConfirmDelete(false) : navigate(base)),
       onError: (e) =>
         setDeleteError(
           e instanceof HttpError && e.status === 403
@@ -148,7 +148,6 @@ export default function ContextEngineDetail(scope: OrgScope): JSX.Element {
               {engine.name}
             </Typography>
             <EngineStateChip state={engine.state} />
-            <EngineGraphChip engineId={engine.id} reported={engine.graph} />
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {engine.description || 'No description'}
@@ -224,6 +223,7 @@ export default function ContextEngineDetail(scope: OrgScope): JSX.Element {
           isPending={remove.isPending}
           error={deleteError}
           onConfirm={onDelete}
+          forgetOnly={!CONTEXT_ENGINE_PROVISIONING}
           onClose={() => {
             if (remove.isPending) return;
             setConfirmDelete(false);

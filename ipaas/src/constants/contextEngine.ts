@@ -18,7 +18,6 @@
 
 import type {
   ContextEngineStorage,
-  ContextGraphState,
   ContextSourceConfig,
   FileVisibility,
   LlmConfig,
@@ -568,7 +567,20 @@ export function blankLlm(provider: LlmProvider): LlmConfig {
 
 // ── Engine limits and access model ──────────────────────────────────────────
 
-/** Mirrors the engine's `CreateContextSpace` schema limits. */
+/**
+ * Each context engine runs as its own instance, and the console shows the one at its configured
+ * URL under this id. It is also the engine's root grant resource, so grants and permissions on the
+ * engine use it as is.
+ */
+export const CONTEXT_ENGINE_ID = 'engine';
+
+/** Shown for an engine set up from another browser, whose name this browser never saw. */
+export const DEFAULT_CONTEXT_ENGINE_NAME = 'Context engine';
+
+/** localStorage key of the running engine's name and description, which the engine itself does not hold. */
+export const CONTEXT_ENGINE_LOCAL_KEY = 'contextEngine:local';
+
+/** Limits for an engine's name and description, which the control plane provisions. */
 export const CONTEXT_ENGINE_NAME_MAX = 120;
 export const CONTEXT_ENGINE_DESCRIPTION_MAX = 1000;
 /** Shown under the description field: people browsing engines and AI agents connected over MCP both read it. */
@@ -577,14 +589,12 @@ export const CONTEXT_ENGINE_DESCRIPTION_HINT = 'Tells people and AI agents what 
 /** Engine actions a querying role receives — read context, open evidence, see the trace. */
 export const CONTEXT_QUERY_ACTIONS = ['context.read', 'evidence.read', 'trace.read'] as const;
 
-/** What the creator of an engine gets on it: query it, start enrichments, upload files and manage its sources. The engine grants creators nothing by itself. */
-export const CONTEXT_OWNER_ACTIONS = ['context.read', 'evidence.read', 'trace.read', 'context.enrich', 'ingest.write', 'source.manage'] as const;
+/** What the creator of an engine gets on it: query it, upload files and manage its sources. The engine grants creators nothing by itself. */
+export const CONTEXT_OWNER_ACTIONS = ['context.read', 'evidence.read', 'trace.read', 'ingest.write', 'source.manage'] as const;
 
 /** The creator's grant is keyed `owner-<principalId>`. */
 export const OWNER_GRANT_PREFIX = 'owner-';
 
-/** The engine answers in prose with checked citations since its M5 answer release. */
-export const ANSWER_MODE_AVAILABLE = true;
 
 /** Grants created for an org role are keyed `role-<handle>` so they can be told apart from ad-hoc grants. */
 export const ROLE_GRANT_PREFIX = 'role-';
@@ -616,15 +626,7 @@ export const RECOMMENDED_MODELS: { embedding: { provider: EmbeddingProvider; mod
   llm: { provider: 'openai', model: 'gpt-4.1' },
 };
 
-// ── Graph status ────────────────────────────────────────────────────────────
-
-/** Indexing already builds the graph; enrichment is the optional pass that derives more from it. */
-export const GRAPH_STATE_LABEL: Record<ContextGraphState, string> = {
-  not_built: 'Not enriched',
-  building: 'Enriching',
-  built: 'Enriched',
-  failed: 'Enrichment failed',
-};
+// ── Source progress ─────────────────────────────────────────────────────────
 
 /** Chip text for a source's place in the pipeline. */
 export const SOURCE_PROGRESS_LABEL: Record<SourceProgressStatus, string> = {
@@ -665,8 +667,6 @@ export const CONTEXT_ENGINE_DRAFT_KEY_PREFIX = 'contextEngine:draft:';
 /** Local-storage key prefix marking that the user has asked an engine something, suffixed by engine id. */
 export const CONTEXT_ENGINE_ASKED_KEY_PREFIX = 'contextEngine:asked:';
 
-/** localStorage key of the last enrichment job started from this browser, per engine. The engine has no route that reports enrichment state yet. */
-export const CONTEXT_ENGINE_ENRICHMENT_KEY_PREFIX = 'contextEngine:enrichment:';
 
 /** localStorage key of the files this browser uploaded to a source, until the engine can list a source's records. */
 export const CONTEXT_ENGINE_FILES_KEY_PREFIX = 'contextEngine:files:';
