@@ -790,7 +790,10 @@ export interface ConfigGroupsApi {
 
 // Context Engines (Context Engine service). wip-only for now; cloud/icp stubs throw.
 export interface ContextEngineApi {
-  /** Whether this build can create, delete and reconfigure engines; that is provisioning, the control plane's. */
+  /**
+   * Whether this build provisions engines, choosing their models and storage and deleting them; that is
+   * the control plane's. Without it, creating an engine sets up the one running engine.
+   */
   supportsContextEngineProvisioning: boolean;
   listContextEngines(): Promise<ContextEngine[]>;
   getContextEngine(engineId: string): Promise<ContextEngineDetail>;
