@@ -141,6 +141,9 @@ import type {
   CreateContextEngineInput,
   CreateContextEngineResult,
   PutContextGrantInput,
+  ContextQueryTrace,
+  ContextGraph,
+  ContextEntityView,
 } from '../types/contextEngine';
 import type { Certificate, CreateCertificateInput } from '../types/certificates';
 import type {
@@ -809,6 +812,9 @@ export interface ContextEngineApi {
   getContextJob(jobId: string): Promise<ContextJob>;
   queryContextEngine(input: ContextQueryInput): Promise<ContextQueryResult>;
   getContextQuery(queryId: string): Promise<ContextQueryResult>;
+  getContextQueryTrace(queryId: string): Promise<ContextQueryTrace | null>;
+  getContextGraph(engineId: string, limit: number): Promise<ContextGraph | null>;
+  getContextEntity(engineId: string, name: string, limit?: number): Promise<ContextEntityView>;
   getContextEvidence(evidenceId: string): Promise<ContextEvidence>;
   getContextPermissions(resourceId: string): Promise<string[]>;
   listContextGrants(engineId: string): Promise<ContextGrant[]>;

@@ -40,6 +40,9 @@ import type {
   ContextEngineModels,
   ContextEvidence,
   UpdateContextModelsInput,
+  ContextQueryTrace,
+  ContextGraph,
+  ContextEntityView,
 } from '../../types/contextEngine';
 
 const ni = (name: string): never => {
@@ -61,6 +64,9 @@ export const updateContextSource = (_input: UpdateContextSourceInput): Promise<C
 export const getContextJob = (_jobId: string): Promise<ContextJob> => ni('getContextJob');
 export const queryContextEngine = (_input: ContextQueryInput): Promise<ContextQueryResult> => ni('queryContextEngine');
 export const getContextQuery = (_queryId: string): Promise<ContextQueryResult> => ni('getContextQuery');
+export const getContextQueryTrace = (_queryId: string): Promise<ContextQueryTrace | null> => ni('getContextQueryTrace');
+export const getContextGraph = (_engineId: string, _limit: number): Promise<ContextGraph | null> => ni('getContextGraph');
+export const getContextEntity = (_engineId: string, _name: string, _limit?: number): Promise<ContextEntityView> => ni('getContextEntity');
 export const getContextEvidence = (_evidenceId: string): Promise<ContextEvidence> => ni('getContextEvidence');
 export const getContextPermissions = (_resourceId: string): Promise<string[]> => ni('getContextPermissions');
 export const listContextGrants = (_engineId: string): Promise<ContextGrant[]> => ni('listContextGrants');
