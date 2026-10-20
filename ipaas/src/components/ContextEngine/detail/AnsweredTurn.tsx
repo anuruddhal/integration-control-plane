@@ -47,7 +47,7 @@ interface AnsweredTurnProps {
 export default function AnsweredTurn({ answer, evidence, sources, facts = [], hrefFor, onOpen, onShowDerivation }: AnsweredTurnProps): JSX.Element {
   const [active, setActive] = useState<CitationFocus | null>(null);
   const [pinned, setPinned] = useState<CitationFocus | null>(null);
-  const cited = citedNumbers(answer);
+  const cited = citedNumbers(answer, evidence.length);
 
   useEffect(() => {
     if (!pinned) return;
